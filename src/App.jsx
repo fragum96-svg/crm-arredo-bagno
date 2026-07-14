@@ -1,1741 +1,2489 @@
-<!DOCTYPE html>
-<html lang="it">
-<head>
-<meta charset="UTF-8">
-<title>CRM Arredo Bagno</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<style>
-:root{
-  --blue:#2D7DD2;
-  --blue-dark:#1F5FA8;
-  --blue-light:#EAF4FD;
-  --blue-lighter:#F5FAFE;
-  --ink:#1B2733;
-  --grey:#6B7A87;
-  --border:#E1E8EE;
-  --white:#FFFFFF;
-  --danger:#D64545;
-  --ok:#2E9E5B;
-}
-*{box-sizing:border-box;}
-html,body{margin:0;padding:0;height:100%;}
-body{
-  font-family:Arial, Helvetica, sans-serif;
-  background:var(--white);
-  color:var(--ink);
-  font-size:14px;
-}
-button, input, select, textarea{font-family:Arial, Helvetica, sans-serif;font-size:14px;}
+import { useState, useEffect } from "react";
+import {
+  Users,
+  Building2,
+  CalendarDays,
+  FileText,
+  LogOut,
+  Menu as MenuIcon,
+  LayoutDashboard,
+  ShieldCheck,
+  Printer,
+} from "lucide-react";
 
-/* Topbar */
-#topbar{
-  height:56px;
-  background:var(--white);
-  border-bottom:1px solid var(--border);
-  display:flex;
-  align-items:center;
-  gap:14px;
-  padding:0 16px;
-  position:sticky;
-  top:0;
-  z-index:50;
-}
-#hamburger{
-  width:40px;height:40px;border:1px solid var(--border);border-radius:8px;
-  background:var(--white);cursor:pointer;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:4px;
-}
-#hamburger span{width:18px;height:2px;background:var(--blue);border-radius:2px;}
-#brand{font-weight:bold;color:var(--blue-dark);font-size:17px;letter-spacing:.2px;}
-#brand small{display:block;font-weight:normal;color:var(--grey);font-size:11px;}
+// ============================================================
+// CONFIGURAZIONE SUPABASE
+// ============================================================
+const SUPABASE_URL = "https://hifwdbjkerlfjbgwhpxc.supabase.co";
+const SUPABASE_ANON_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpZndkYmprZXJsZmpiZ3docHhjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5OTEzMTYsImV4cCI6MjA5OTU2NzMxNn0.wAPiUA4YU9ofHJgDrtFBHAFLzEuOAnAwMdX4Elk3Bsc";
 
-/* Dropdown nav menu */
-#navDropdown{
-  position:fixed;top:56px;left:0;
-  background:var(--white);
-  border-right:1px solid var(--border);
-  border-bottom:1px solid var(--border);
-  box-shadow:2px 6px 18px rgba(30,60,90,0.08);
-  width:270px;
-  max-height:calc(100vh - 56px);
-  overflow-y:auto;
-  transform:translateX(-110%);
-  transition:transform .18s ease;
-  z-index:49;
-  padding:8px;
+const COLORS = {
+  primary: "#0b7bc4",
+  primaryDark: "#075985",
+  bg: "#f7fafc",
+  card: "#ffffff",
+  border: "#e2edf5",
+  text: "#233242",
+  muted: "#7c8b98",
+  danger: "#c0392b",
+  success: "#1a7a3c",
+};
+
+function makeSupabaseClient(url, key) {
+  const authHeaders = (token) => ({
+    "Content-Type": "application/json",
+    apikey: key,
+    Authorization: `Bearer ${token || key}`,
+  });
+
+  return {
+    auth: {
+      async signInWithPassword({ email, password }) {
+        const res = await fetch(`${url}/auth/v1/token?grant_type=password`, {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify({ email, password }),
+        });
+        const data = await res.json();
+        if (!res.ok) return { data: null, error: data };
+        return { data, error: null };
+      },
+      async signUp({ email, password }) {
+        const res = await fetch(`${url}/auth/v1/signup`, {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify({ email, password }),
+        });
+        const data = await res.json();
+        if (!res.ok) return { data: null, error: data };
+        return { data, error: null };
+      },
+    },
+  };
 }
-#navDropdown.open{transform:translateX(0);}
-.nav-item{
-  display:flex;align-items:center;gap:10px;
-  padding:11px 14px;border-radius:8px;cursor:pointer;color:var(--ink);
-}
-.nav-item:hover{background:var(--blue-lighter);}
-.nav-item.active{background:var(--blue-light);color:var(--blue-dark);font-weight:bold;}
-.nav-icon{width:20px;text-align:center;color:var(--blue);}
-#navOverlay{
-  position:fixed;inset:0;background:rgba(20,40,60,0.15);z-index:48;
-  display:none;
-}
-#navOverlay.open{display:block;}
 
-/* Layout */
-#app{padding:22px 26px;max-width:1180px;margin:0 auto;}
-h1.page-title{font-size:20px;color:var(--blue-dark);margin:0 0 4px 0;}
-p.page-sub{color:var(--grey);margin:0 0 20px 0;}
+// ============================================================
+// SCHERMATA DI LOGIN
+// ============================================================
+function LoginScreen({ onLogin }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-.card{
-  background:var(--white);border:1px solid var(--border);border-radius:12px;
-  padding:18px;margin-bottom:16px;
-}
-.card h3{margin:0 0 12px 0;font-size:15px;color:var(--blue-dark);}
-.row{display:flex;gap:12px;flex-wrap:wrap;}
-.col{flex:1;min-width:180px;}
-label{display:block;font-size:12px;color:var(--grey);margin-bottom:4px;font-weight:bold;}
-input[type=text], input[type=date], input[type=number], input[type=email], input[type=tel], select, textarea{
-  width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;
-  background:var(--white);color:var(--ink);margin-bottom:12px;
-}
-textarea{resize:vertical;min-height:60px;}
-input:focus, select:focus, textarea:focus{outline:2px solid var(--blue);border-color:var(--blue);}
+  const configured = !SUPABASE_URL.includes("TUO-PROGETTO");
 
-.btn{
-  background:var(--blue);color:white;border:none;border-radius:8px;
-  padding:9px 16px;cursor:pointer;font-weight:bold;
-}
-.btn:hover{background:var(--blue-dark);}
-.btn.secondary{background:var(--white);color:var(--blue-dark);border:1px solid var(--blue);}
-.btn.secondary:hover{background:var(--blue-lighter);}
-.btn.danger{background:var(--white);color:var(--danger);border:1px solid var(--danger);}
-.btn.danger:hover{background:#FDECEC;}
-.btn.small{padding:5px 10px;font-size:12px;}
+  const submit = async () => {
+    setError("");
+    if (!configured) {
+      setError(
+        "Configurazione Supabase mancante: inserisci URL e anon key nel codice prima di poter accedere."
+      );
+      return;
+    }
+    setLoading(true);
+    try {
+      const client = makeSupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      const { data, error } = await client.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) {
+        setError(
+          error.error_description || error.msg || "Email o password non corrette."
+        );
+        return;
+      }
+      onLogin(data);
+    } catch (err) {
+      setError("Errore di connessione a Supabase: " + (err.message || err));
+    } finally {
+      setLoading(false);
+    }
+  };
 
-table{width:100%;border-collapse:collapse;font-size:13px;}
-th{background:var(--blue-light);color:var(--blue-dark);text-align:left;padding:8px;border-bottom:2px solid var(--blue);}
-td{padding:7px 8px;border-bottom:1px solid var(--border);}
-tr:hover td{background:var(--blue-lighter);}
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: `linear-gradient(135deg, ${COLORS.bg} 0%, #e8f3fa 100%)`,
+        fontFamily: "Arial, sans-serif",
+      }}
+    >
+      <div
+        style={{
+          width: 360,
+          padding: 36,
+          background: COLORS.card,
+          border: `1px solid ${COLORS.border}`,
+          borderRadius: 16,
+          boxShadow: "0 12px 40px rgba(11,123,196,0.12)",
+        }}
+      >
+        <div
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 12,
+            background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.primaryDark})`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            marginBottom: 14,
+          }}
+        >
+          <ShieldCheck size={22} color="#fff" />
+        </div>
+        <h1
+          style={{
+            fontSize: 21,
+            fontWeight: 700,
+            color: COLORS.text,
+            marginBottom: 4,
+          }}
+        >
+          CRM Arredo Bagno
+        </h1>
+        <p style={{ fontSize: 13, color: COLORS.muted, marginBottom: 24 }}>
+          Accedi con le credenziali che ti sono state fornite
+        </p>
 
-.pill{
-  display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:bold;
-  background:var(--blue-light);color:var(--blue-dark);
-}
-.list-item{
-  display:flex;justify-content:space-between;align-items:center;
-  padding:12px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;cursor:pointer;
-}
-.list-item:hover{border-color:var(--blue);background:var(--blue-lighter);}
-.tabs{display:flex;gap:6px;border-bottom:1px solid var(--border);margin-bottom:16px;flex-wrap:wrap;}
-.tab{padding:8px 14px;cursor:pointer;border-radius:8px 8px 0 0;color:var(--grey);font-weight:bold;}
-.tab.active{color:var(--blue-dark);background:var(--blue-light);}
-.empty-state{text-align:center;padding:40px 20px;color:var(--grey);}
-.empty-state .big{font-size:32px;margin-bottom:8px;}
-.toast{
-  position:fixed;bottom:20px;right:20px;background:var(--ink);color:white;
-  padding:12px 18px;border-radius:8px;font-size:13px;z-index:200;opacity:0;
-  transition:opacity .25s ease;pointer-events:none;
-}
-.toast.show{opacity:1;}
-.grid-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;}
-.stat-card{background:var(--blue-light);border-radius:12px;padding:16px;}
-.stat-card .num{font-size:24px;font-weight:bold;color:var(--blue-dark);}
-.stat-card .lbl{font-size:12px;color:var(--grey);}
-.quote-line-row{border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:10px;background:var(--blue-lighter);}
-.close-x{cursor:pointer;color:var(--grey);font-size:18px;line-height:1;}
-.close-x:hover{color:var(--danger);}
-#map{height:480px;border-radius:12px;border:1px solid var(--border);}
-.chk-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
-.chk-row input{width:auto;margin:0;}
-.section-divider{border:none;border-top:1px solid var(--border);margin:16px 0;}
-.small-note{font-size:11px;color:var(--grey);}
-@media(max-width:640px){
-  #app{padding:14px;}
-  #navDropdown{width:88vw;}
-}
-</style>
-</head>
-<body>
+        {!configured && (
+          <div
+            style={{
+              background: "#fff4e5",
+              color: "#9a5b00",
+              fontSize: 12,
+              padding: 10,
+              borderRadius: 8,
+              marginBottom: 16,
+            }}
+          >
+            Supabase non ancora configurato. Sostituisci SUPABASE_URL e
+            SUPABASE_ANON_KEY nel codice.
+          </div>
+        )}
 
-<div id="topbar">
-  <div id="hamburger" onclick="toggleNav()"><span></span><span></span><span></span></div>
-  <div id="brand">CRM Arredo Bagno<small>Gestione agente plurimandatario</small></div>
-</div>
+        <label style={{ fontSize: 13, color: "#333", display: "block", marginBottom: 6 }}>
+          Email
+        </label>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          style={{
+            width: "100%",
+            padding: "10px 12px",
+            marginBottom: 16,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: 10,
+            fontSize: 14,
+            boxSizing: "border-box",
+          }}
+        />
 
-<div id="navOverlay" onclick="closeNav()"></div>
-<div id="navDropdown"></div>
+        <label style={{ fontSize: 13, color: "#333", display: "block", marginBottom: 6 }}>
+          Password
+        </label>
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          style={{
+            width: "100%",
+            padding: "10px 12px",
+            marginBottom: 16,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: 10,
+            fontSize: 14,
+            boxSizing: "border-box",
+          }}
+        />
 
-<div id="app"></div>
+        {error && (
+          <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 12 }}>
+            {error}
+          </div>
+        )}
 
-<div class="toast" id="toast"></div>
+        <button
+          onClick={submit}
+          disabled={loading}
+          style={{
+            width: "100%",
+            padding: "12px 0",
+            background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.primaryDark})`,
+            color: "#fff",
+            border: "none",
+            borderRadius: 10,
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: "pointer",
+            boxShadow: "0 6px 16px rgba(11,123,196,0.25)",
+          }}
+        >
+          {loading ? "Accesso in corso..." : "Accedi"}
+        </button>
 
-<div id="confirmOverlay" style="display:none;position:fixed;inset:0;background:rgba(20,40,60,0.45);z-index:310;align-items:center;justify-content:center;padding:20px;">
-  <div style="background:#fff;border-radius:12px;width:100%;max-width:420px;padding:22px;">
-    <p id="confirmMessage" style="margin:0 0 18px 0;color:#1B2733;font-size:14px;"></p>
-    <div style="display:flex;gap:10px;justify-content:flex-end;">
-      <button class="btn secondary" onclick="cancelConfirm()">Annulla</button>
-      <button class="btn danger" id="confirmOkBtn" onclick="acceptConfirm()">Conferma</button>
-    </div>
-  </div>
-</div>
-
-<div id="pdfPreviewOverlay" style="display:none;position:fixed;inset:0;background:rgba(20,40,60,0.45);z-index:300;align-items:center;justify-content:center;padding:20px;">
-  <div style="background:#fff;border-radius:12px;width:100%;max-width:900px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;">
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid #E1E8EE;">
-      <strong id="pdfPreviewTitle" style="color:#1F5FA8;">Anteprima PDF</strong>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <a id="pdfOpenTabLink" href="#" target="_blank" rel="noopener" class="btn secondary small" style="text-decoration:none;">Apri in nuova scheda</a>
-        <a id="pdfDownloadLink" href="#" class="btn small" style="text-decoration:none;">Scarica PDF</a>
-        <span class="close-x" onclick="closePdfPreview()" title="Chiudi">&times;</span>
+        <p style={{ fontSize: 11, color: "#9aa7b2", marginTop: 18, textAlign: "center" }}>
+          Non hai un account? Le credenziali vengono create e distribuite
+          dall'amministratore.
+        </p>
       </div>
     </div>
-    <iframe id="pdfPreviewFrame" style="flex:1;border:none;width:100%;min-height:70vh;"></iframe>
-  </div>
-</div>
-
-<script>
-/* ===================== STATO & STORAGE ===================== */
-const state = { companies: [], clients: [], groups: [], quotes: [] };
-let currentPage = 'dashboard';
-let currentParams = {};
-let calendarCursor = new Date();
-
-/* ===================== CONFERMA PERSONALIZZATA ===================== */
-/* Il confirm() nativo del browser viene bloccato in questo ambiente,
-   quindi usiamo un modale interno per le azioni distruttive. */
-let _pendingConfirmAction = null;
-function showConfirm(message, onConfirm){
-  _pendingConfirmAction = onConfirm;
-  document.getElementById('confirmMessage').textContent = message;
-  document.getElementById('confirmOverlay').style.display = 'flex';
-}
-function acceptConfirm(){
-  const action = _pendingConfirmAction;
-  document.getElementById('confirmOverlay').style.display = 'none';
-  _pendingConfirmAction = null;
-  if(typeof action === 'function') action();
-}
-function cancelConfirm(){
-  document.getElementById('confirmOverlay').style.display = 'none';
-  _pendingConfirmAction = null;
+  );
 }
 
-function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+// ============================================================
+// PANNELLO ADMIN — creazione utenti + elenco utenti creati
+// ============================================================
+function AdminPanel({ session }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [msg, setMsg] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
 
-async function loadKey(key, fallback){
-  try{
-    const r = await window.storage.get(key, false);
-    return r ? JSON.parse(r.value) : fallback;
-  }catch(e){ return fallback; }
-}
-async function saveKey(key, value){
-  try{ await window.storage.set(key, JSON.stringify(value), false); }
-  catch(e){ console.error('storage error', key, e); toast('Errore di salvataggio dati'); }
-}
-async function saveCompanies(){ await saveKey('companies-list', state.companies); }
-async function saveClients(){ await saveKey('clients-list', state.clients); }
-async function saveGroups(){ await saveKey('groups-list', state.groups); }
-async function saveQuotes(){ await saveKey('quotes-list', state.quotes); }
+  const loadUsers = async () => {
+    setLoadingUsers(true);
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/profiles?select=email,role,created_at&order=created_at.desc`,
+        {
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        }
+      );
+      const data = await res.json();
+      if (res.ok) setUsers(data);
+    } catch (e) {
+      // silenzioso
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
 
-async function loadAll(){
-  state.companies = await loadKey('companies-list', []);
-  state.clients   = await loadKey('clients-list', []);
-  state.groups    = await loadKey('groups-list', []);
-  state.quotes    = await loadKey('quotes-list', []);
+  useEffect(() => {
+    loadUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const createUser = async () => {
+    setMsg(null);
+    setLoading(true);
+    try {
+      const tempClient = makeSupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      const { data, error } = await tempClient.auth.signUp({ email, password });
+      if (error) {
+        setMsg({
+          type: "error",
+          text: error.error_description || error.msg || "Errore nella creazione dell'utente.",
+        });
+        return;
+      }
+      setMsg({
+        type: "success",
+        text: `Utente creato: ${email}. Comunicagli le credenziali.`,
+      });
+      setEmail("");
+      setPassword("");
+      loadUsers();
+    } catch (err) {
+      setMsg({ type: "error", text: "Errore di connessione: " + (err.message || err) });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ fontFamily: "Arial, sans-serif" }}>
+      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16 }}>Pannello Admin</h2>
+
+      <div
+        style={{
+          maxWidth: 420,
+          padding: 24,
+          background: COLORS.card,
+          border: `1px solid ${COLORS.border}`,
+          borderRadius: 14,
+          boxShadow: "0 4px 16px rgba(20,40,60,0.05)",
+          marginBottom: 24,
+        }}
+      >
+        <h3 style={{ fontSize: 15, color: COLORS.primary, marginBottom: 4 }}>
+          Crea nuovo utente
+        </h3>
+        <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 16 }}>
+          Genera le credenziali da consegnare al collaboratore. Nessuna
+          registrazione pubblica è possibile.
+        </p>
+        <input
+          type="email"
+          placeholder="Email utente"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          style={{
+            width: "100%",
+            padding: "10px 12px",
+            marginBottom: 10,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: 8,
+            fontSize: 14,
+            boxSizing: "border-box",
+          }}
+        />
+        <input
+          type="text"
+          placeholder="Password provvisoria"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          style={{
+            width: "100%",
+            padding: "10px 12px",
+            marginBottom: 10,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: 8,
+            fontSize: 14,
+            boxSizing: "border-box",
+          }}
+        />
+        <button
+          onClick={createUser}
+          disabled={loading}
+          style={{
+            padding: "10px 18px",
+            background: COLORS.primary,
+            color: "#fff",
+            border: "none",
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          {loading ? "Creazione..." : "Crea utente"}
+        </button>
+        {msg && (
+          <div
+            style={{
+              marginTop: 12,
+              fontSize: 12,
+              color: msg.type === "error" ? COLORS.danger : COLORS.success,
+            }}
+          >
+            {msg.text}
+          </div>
+        )}
+      </div>
+
+      <div
+        style={{
+          maxWidth: 500,
+          padding: 24,
+          background: COLORS.card,
+          border: `1px solid ${COLORS.border}`,
+          borderRadius: 14,
+          boxShadow: "0 4px 16px rgba(20,40,60,0.05)",
+        }}
+      >
+        <h3 style={{ fontSize: 15, color: COLORS.primary, marginBottom: 4 }}>
+          Utenti creati
+        </h3>
+        <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 16 }}>
+          Per eliminare o disattivare un utente, vai su Supabase → Authentication
+          → Users (per sicurezza questa operazione non è disponibile da qui).
+        </p>
+        {loadingUsers ? (
+          <p style={{ fontSize: 12, color: COLORS.muted }}>Caricamento...</p>
+        ) : users.length === 0 ? (
+          <p style={{ fontSize: 12, color: COLORS.muted }}>Nessun utente ancora.</p>
+        ) : (
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <thead>
+              <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
+                <th style={{ padding: "6px 4px" }}>Email</th>
+                <th style={{ padding: "6px 4px" }}>Ruolo</th>
+                <th style={{ padding: "6px 4px" }}>Creato il</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u, i) => (
+                <tr key={i} style={{ borderBottom: "1px solid #f0f5f9" }}>
+                  <td style={{ padding: "6px 4px" }}>{u.email}</td>
+                  <td style={{ padding: "6px 4px" }}>{u.role}</td>
+                  <td style={{ padding: "6px 4px" }}>
+                    {u.created_at ? new Date(u.created_at).toLocaleDateString("it-IT") : "-"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
 }
 
-/* ===================== HELPERS ===================== */
-function toast(msg){
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  clearTimeout(window._toastTimer);
-  window._toastTimer = setTimeout(()=>t.classList.remove('show'), 2400);
-}
-function euro(n){
-  n = Number(n)||0;
-  return n.toLocaleString('it-IT', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' €';
-}
-function fmtDate(d){
-  if(!d) return '-';
-  const dt = new Date(d);
-  return dt.toLocaleDateString('it-IT');
-}
-function companyName(id){ const c = state.companies.find(x=>x.id===id); return c ? c.name : '—'; }
-function clientName(id){ const c = state.clients.find(x=>x.id===id); return c ? c.name : '—'; }
-function escapeHtml(s){
-  return (s==null?'':String(s)).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+// ============================================================
+// DASHBOARD — riepilogo generale
+// ============================================================
+function Dashboard({ session, goTo }) {
+  const [counts, setCounts] = useState({ clienti: 0, aziende: 0, visiteMese: 0, preventivi: 0 });
+  const [loading, setLoading] = useState(true);
+
+  const headers = () => ({
+    "Content-Type": "application/json",
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${session.access_token}`,
+  });
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const inizioMese = new Date();
+        inizioMese.setDate(1);
+        const inizioMeseStr = inizioMese.toISOString().slice(0, 10);
+
+        const [rClienti, rAziende, rVisite, rPreventivi] = await Promise.all([
+          fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id`, { headers: headers() }),
+          fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?select=id`, { headers: headers() }),
+          fetch(`${SUPABASE_URL}/rest/v1/visite?select=id&data_visita=gte.${inizioMeseStr}`, {
+            headers: headers(),
+          }),
+          fetch(`${SUPABASE_URL}/rest/v1/preventivi?select=id`, { headers: headers() }),
+        ]);
+        const [dClienti, dAziende, dVisite, dPreventivi] = await Promise.all([
+          rClienti.json(),
+          rAziende.json(),
+          rVisite.json(),
+          rPreventivi.json(),
+        ]);
+        setCounts({
+          clienti: Array.isArray(dClienti) ? dClienti.length : 0,
+          aziende: Array.isArray(dAziende) ? dAziende.length : 0,
+          visiteMese: Array.isArray(dVisite) ? dVisite.length : 0,
+          preventivi: Array.isArray(dPreventivi) ? dPreventivi.length : 0,
+        });
+      } catch (e) {
+        // in caso di errore lasciamo i contatori a 0
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [session]);
+
+  const cards = [
+    { key: "clienti", label: "Clienti", value: counts.clienti, icon: Users, color: "#0b7bc4" },
+    { key: "aziende", label: "Aziende mandanti", value: counts.aziende, icon: Building2, color: "#0e9488" },
+    { key: "visite", label: "Visite questo mese", value: counts.visiteMese, icon: CalendarDays, color: "#c77d0b" },
+    { key: "preventivi", label: "Preventivi totali", value: counts.preventivi, icon: FileText, color: "#7c4dbd" },
+  ];
+
+  return (
+    <div style={{ fontFamily: "Arial, sans-serif" }}>
+      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 4 }}>Dashboard</h2>
+      <p style={{ color: COLORS.muted, fontSize: 13, marginBottom: 20 }}>
+        Riepilogo generale della tua attività
+      </p>
+
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+        {cards.map((c) => {
+          const Icon = c.icon;
+          return (
+            <div
+              key={c.key}
+              onClick={() => goTo(c.key)}
+              style={{
+                flex: "1 1 200px",
+                minWidth: 180,
+                background: COLORS.card,
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: 14,
+                padding: 20,
+                cursor: "pointer",
+                boxShadow: "0 4px 14px rgba(20,40,60,0.05)",
+                transition: "transform 0.15s ease",
+              }}
+            >
+              <div
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 10,
+                  background: `${c.color}18`,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: 12,
+                }}
+              >
+                <Icon size={20} color={c.color} />
+              </div>
+              <div style={{ fontSize: 26, fontWeight: 700, color: COLORS.text }}>
+                {loading ? "…" : c.value}
+              </div>
+              <div style={{ fontSize: 13, color: COLORS.muted, marginTop: 2 }}>{c.label}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
-/* ===================== NAV ===================== */
-const NAV_ITEMS = [
-  {id:'dashboard', label:'Dashboard', icon:'&#127968;'},
-  {id:'clienti', label:'Clienti', icon:'&#128100;'},
-  {id:'aziende', label:'Aziende mandanti', icon:'&#127970;'},
-  {id:'gruppi', label:'Gruppi di acquisto', icon:'&#128101;'},
-  {id:'calendario', label:'Calendario visite', icon:'&#128197;'},
-  {id:'preventivi', label:'Preventivi e offerte', icon:'&#128196;'},
-  {id:'mappa', label:'Mappa clienti', icon:'&#128506;'},
-  {id:'fatturato', label:'Fatturato', icon:'&#128176;'},
+// ============================================================
+// AZIENDE MANDANTI — elenco, aggiunta, modifica, eliminazione
+// ============================================================
+function AziendeMandanti({ session }) {
+  const [list, setList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const emptyForm = {
+    nome: "",
+    sconto1: "",
+    sconto2: "",
+    imballo_percentuale: "",
+    trasporto: "",
+    resi: "",
+    note: "",
+  };
+  const [form, setForm] = useState(emptyForm);
+  const [editingId, setEditingId] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const headers = () => ({
+    "Content-Type": "application/json",
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${session.access_token}`,
+  });
+
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/aziende_mandanti?select=*&order=nome.asc`,
+        { headers: headers() }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Errore nel caricamento");
+      setList(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const resetForm = () => {
+    setForm(emptyForm);
+    setEditingId(null);
+  };
+
+  const save = async () => {
+    if (!form.nome.trim()) {
+      setError("Il nome azienda è obbligatorio.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const body = {
+        nome: form.nome,
+        sconto1: form.sconto1 !== "" ? Number(form.sconto1) : null,
+        sconto2: form.sconto2 !== "" ? Number(form.sconto2) : null,
+        imballo_percentuale:
+          form.imballo_percentuale !== "" ? Number(form.imballo_percentuale) : null,
+        trasporto: form.trasporto || null,
+        resi: form.resi || null,
+        note: form.note || null,
+      };
+      let res;
+      if (editingId) {
+        res = await fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?id=eq.${editingId}`, {
+          method: "PATCH",
+          headers: { ...headers(), Prefer: "return=representation" },
+          body: JSON.stringify(body),
+        });
+      } else {
+        res = await fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti`, {
+          method: "POST",
+          headers: { ...headers(), Prefer: "return=representation" },
+          body: JSON.stringify(body),
+        });
+      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Errore nel salvataggio");
+      resetForm();
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const edit = (azienda) => {
+    setEditingId(azienda.id);
+    setForm({
+      nome: azienda.nome || "",
+      sconto1: azienda.sconto1 ?? "",
+      sconto2: azienda.sconto2 ?? "",
+      imballo_percentuale: azienda.imballo_percentuale ?? "",
+      trasporto: azienda.trasporto || "",
+      resi: azienda.resi || "",
+      note: azienda.note || "",
+    });
+  };
+
+  const remove = async (id) => {
+    if (!window.confirm("Eliminare questa azienda?")) return;
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?id=eq.${id}`, {
+        method: "DELETE",
+        headers: headers(),
+      });
+      if (!res.ok) throw new Error("Errore nell'eliminazione");
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const inputStyle = {
+    width: "100%",
+    padding: "8px 10px",
+    marginBottom: 10,
+    border: `1px solid ${COLORS.border}`,
+    borderRadius: 8,
+    fontSize: 13,
+    boxSizing: "border-box",
+  };
+
+  return (
+    <div style={{ fontFamily: "Arial, sans-serif" }}>
+      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16 }}>
+        Aziende mandanti
+      </h2>
+
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+        <div
+          style={{
+            flex: "1 1 280px",
+            background: COLORS.card,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: 14,
+            boxShadow: "0 4px 14px rgba(20,40,60,0.05)",
+            padding: 20,
+            maxWidth: 340,
+          }}
+        >
+          <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>
+            {editingId ? "Modifica azienda" : "Nuova azienda"}
+          </h3>
+          <input
+            placeholder="Nome azienda *"
+            value={form.nome}
+            onChange={(e) => setForm({ ...form, nome: e.target.value })}
+            style={inputStyle}
+          />
+          <input
+            placeholder="Sconto 1 (%)"
+            value={form.sconto1}
+            onChange={(e) => setForm({ ...form, sconto1: e.target.value })}
+            style={inputStyle}
+          />
+          <input
+            placeholder="Sconto 2 (%)"
+            value={form.sconto2}
+            onChange={(e) => setForm({ ...form, sconto2: e.target.value })}
+            style={inputStyle}
+          />
+          <input
+            placeholder="Imballo (%)"
+            value={form.imballo_percentuale}
+            onChange={(e) => setForm({ ...form, imballo_percentuale: e.target.value })}
+            style={inputStyle}
+          />
+          <input
+            placeholder="Trasporto (policy)"
+            value={form.trasporto}
+            onChange={(e) => setForm({ ...form, trasporto: e.target.value })}
+            style={inputStyle}
+          />
+          <input
+            placeholder="Resi (policy)"
+            value={form.resi}
+            onChange={(e) => setForm({ ...form, resi: e.target.value })}
+            style={inputStyle}
+          />
+          <textarea
+            placeholder="Note"
+            value={form.note}
+            onChange={(e) => setForm({ ...form, note: e.target.value })}
+            style={{ ...inputStyle, minHeight: 60 }}
+          />
+
+          {error && (
+            <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 10 }}>
+              {error}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={save}
+              disabled={saving}
+              style={{
+                padding: "9px 16px",
+                background: COLORS.primary,
+                color: "#fff",
+                border: "none",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              {saving ? "Salvataggio..." : editingId ? "Salva modifiche" : "Aggiungi azienda"}
+            </button>
+            {editingId && (
+              <button
+                onClick={resetForm}
+                style={{
+                  padding: "9px 16px",
+                  background: "#fff",
+                  color: COLORS.primary,
+                  border: `1px solid ${COLORS.border}`,
+                  borderRadius: 8,
+                  fontSize: 13,
+                  cursor: "pointer",
+                }}
+              >
+                Annulla
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div style={{ flex: "2 1 400px" }}>
+          {loading ? (
+            <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
+          ) : list.length === 0 ? (
+            <p style={{ color: COLORS.muted, fontSize: 13 }}>
+              Nessuna azienda ancora inserita.
+            </p>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
+                  <th style={{ padding: "8px 6px" }}>Nome</th>
+                  <th style={{ padding: "8px 6px" }}>Sc. 1</th>
+                  <th style={{ padding: "8px 6px" }}>Sc. 2</th>
+                  <th style={{ padding: "8px 6px" }}>Imballo</th>
+                  <th style={{ padding: "8px 6px" }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((a) => (
+                  <tr key={a.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
+                    <td style={{ padding: "8px 6px", fontWeight: 600 }}>{a.nome}</td>
+                    <td style={{ padding: "8px 6px" }}>
+                      {a.sconto1 != null ? `${a.sconto1}%` : "-"}
+                    </td>
+                    <td style={{ padding: "8px 6px" }}>
+                      {a.sconto2 != null ? `${a.sconto2}%` : "-"}
+                    </td>
+                    <td style={{ padding: "8px 6px" }}>
+                      {a.imballo_percentuale != null ? `${a.imballo_percentuale}%` : "-"}
+                    </td>
+                    <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }}>
+                      <button
+                        onClick={() => edit(a)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: COLORS.primary,
+                          cursor: "pointer",
+                          fontSize: 12,
+                          marginRight: 10,
+                        }}
+                      >
+                        Modifica
+                      </button>
+                      <button
+                        onClick={() => remove(a.id)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: COLORS.danger,
+                          cursor: "pointer",
+                          fontSize: 12,
+                        }}
+                      >
+                        Elimina
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// ANAGRAFICA CLIENTI — elenco, aggiunta, modifica, eliminazione
+// ============================================================
+const CLASSIFICAZIONI = [
+  "Architetto",
+  "Contractor",
+  "Showroom",
+  "Rivenditore termoidraulica",
+  "Professionista",
+  "Impresa",
+  "Privato",
 ];
 
-function toggleNav(){
-  document.getElementById('navDropdown').classList.toggle('open');
-  document.getElementById('navOverlay').classList.toggle('open');
-}
-function closeNav(){
-  document.getElementById('navDropdown').classList.remove('open');
-  document.getElementById('navOverlay').classList.remove('open');
-}
-function renderNav(){
-  const el = document.getElementById('navDropdown');
-  el.innerHTML = NAV_ITEMS.map(it => `
-    <div class="nav-item ${currentPage===it.id?'active':''}" onclick="navigate('${it.id}')">
-      <span class="nav-icon">${it.icon}</span><span>${it.label}</span>
-    </div>
-  `).join('');
-}
+function ClientiAnagrafica({ session }) {
+  const [list, setList] = useState([]);
+  const [aziendeOptions, setAziendeOptions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const emptyForm = {
+    ragione_sociale: "",
+    indirizzo: "",
+    telefono: "",
+    email: "",
+    classificazione: "",
+    aziende_collaborate: [],
+    condizioni_per_azienda: {},
+    competitor: "",
+    note: "",
+  };
+  const [form, setForm] = useState(emptyForm);
+  const [editingId, setEditingId] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [filtroClassificazione, setFiltroClassificazione] = useState("");
 
-function navigate(page, params){
-  currentPage = page;
-  currentParams = params || {};
-  renderNav();
-  renderPage();
-  closeNav();
-  window.scrollTo(0,0);
-}
-
-function renderPage(){
-  const app = document.getElementById('app');
-  switch(currentPage){
-    case 'dashboard': app.innerHTML = renderDashboard(); break;
-    case 'clienti': renderClientiPage(); break;
-    case 'aziende': renderAziendePage(); break;
-    case 'gruppi': renderGruppiPage(); break;
-    case 'calendario': renderCalendarioPage(); break;
-    case 'preventivi': renderPreventiviPage(); break;
-    case 'mappa': renderMappaPage(); break;
-    case 'fatturato': renderFatturatoPage(); break;
-    default: app.innerHTML = '<p>Sezione non trovata.</p>';
-  }
-}
-
-/* ===================== DASHBOARD ===================== */
-function renderDashboard(){
-  const totVisiteMese = state.clients.reduce((acc,c)=>{
-    const now = new Date();
-    return acc + (c.visits||[]).filter(v=>{
-      const d = new Date(v.date);
-      return d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear();
-    }).length;
-  },0);
-  const totFatturato = state.quotes.filter(q=>q.status==='accettato')
-    .reduce((acc,q)=>acc+quoteNetTotal(q),0);
-  const preventiviAperti = state.quotes.filter(q=>q.status!=='accettato').length;
-
-  return `
-    <h1 class="page-title">Dashboard</h1>
-    <p class="page-sub">Panoramica generale della tua attività commerciale.</p>
-    <div class="grid-cards">
-      <div class="stat-card"><div class="num">${state.clients.length}</div><div class="lbl">Clienti totali</div></div>
-      <div class="stat-card"><div class="num">${state.companies.length}</div><div class="lbl">Aziende mandanti</div></div>
-      <div class="stat-card"><div class="num">${totVisiteMese}</div><div class="lbl">Visite questo mese</div></div>
-      <div class="stat-card"><div class="num">${preventiviAperti}</div><div class="lbl">Preventivi/offerte aperti</div></div>
-      <div class="stat-card"><div class="num">${euro(totFatturato)}</div><div class="lbl">Fatturato totale (ordini)</div></div>
-    </div>
-    <div class="card" style="margin-top:18px;">
-      <h3>Accesso rapido</h3>
-      <div class="row">
-        <button class="btn" onclick="navigate('clienti',{action:'new'})">+ Nuovo cliente</button>
-        <button class="btn secondary" onclick="navigate('preventivi',{action:'new'})">+ Nuovo preventivo/offerta</button>
-        <button class="btn secondary" onclick="navigate('calendario')">Registra una visita</button>
-        <button class="btn secondary" onclick="navigate('aziende',{action:'new'})">+ Nuova azienda mandante</button>
-      </div>
-    </div>
-  `;
-}
-
-/* ===================== INIT ===================== */
-async function init(){
-  renderNav();
-  document.getElementById('app').innerHTML = '<p class="page-sub">Caricamento dati…</p>';
-  await loadAll();
-  navigate('dashboard');
-}
-init();
-
-/* ===================== AZIENDE MANDANTI ===================== */
-function renderAziendePage(){
-  const app = document.getElementById('app');
-  if(currentParams.action==='new' || currentParams.editId){
-    return renderAziendaForm();
-  }
-  if(currentParams.viewId){
-    return renderAziendaDetail(currentParams.viewId);
-  }
-  app.innerHTML = `
-    <h1 class="page-title">Aziende mandanti</h1>
-    <p class="page-sub">Tutte le aziende che rappresenti, con condizioni commerciali e listini.</p>
-    <div class="row" style="margin-bottom:16px;">
-      <button class="btn" onclick="navigate('aziende',{action:'new'})">+ Nuova azienda mandante</button>
-    </div>
-    ${state.companies.length===0 ? emptyState('Nessuna azienda mandante inserita', 'Aggiungi la prima azienda per iniziare a gestire listini e condizioni.') : ''}
-    <div>
-      ${state.companies.map(c => `
-        <div class="list-item" onclick="navigate('aziende',{viewId:'${c.id}'})">
-          <div>
-            <strong>${escapeHtml(c.name)}</strong><br>
-            <span class="small-note">Sconto1: ${c.sconto1||0}% · Sconto2: ${c.sconto2||0}% · Imballo: ${c.imballo||0}% · Articoli a listino: ${(c.priceList||[]).length}</span>
-          </div>
-          <span class="pill">${(c.priceList||[]).length} articoli</span>
-        </div>
-      `).join('')}
-    </div>
-  `;
-}
-
-function emptyState(title, sub){
-  return `<div class="card empty-state"><div class="big">&#128193;</div><strong>${title}</strong><p class="small-note">${sub}</p></div>`;
-}
-
-function renderAziendaForm(){
-  const app = document.getElementById('app');
-  const editing = currentParams.editId ? state.companies.find(c=>c.id===currentParams.editId) : null;
-  const c = editing || {id:uid(), name:'', sconto1:0, sconto2:0, transport:'', resi:'', imballo:0, politiche:'', priceList:[]};
-  app.innerHTML = `
-    <h1 class="page-title">${editing?'Modifica azienda mandante':'Nuova azienda mandante'}</h1>
-    <div class="card">
-      <div class="row">
-        <div class="col"><label>Nome azienda</label><input id="f-name" type="text" value="${escapeHtml(c.name)}" placeholder="Es. Quadro Design"></div>
-      </div>
-      <div class="row">
-        <div class="col"><label>Sconto 1 (%)</label><input id="f-s1" type="number" step="0.01" value="${c.sconto1}"></div>
-        <div class="col"><label>Sconto 2 (%)</label><input id="f-s2" type="number" step="0.01" value="${c.sconto2}"></div>
-        <div class="col"><label>Imballo predefinito (%)</label><input id="f-imb" type="number" step="0.01" value="${c.imballo}"></div>
-      </div>
-      <div class="row">
-        <div class="col"><label>Trasporti</label><input id="f-trasp" type="text" value="${escapeHtml(c.transport)}" placeholder="Es. franco destino sopra 1.500€"></div>
-        <div class="col"><label>Resi</label><input id="f-resi" type="text" value="${escapeHtml(c.resi)}" placeholder="Es. resi accettati entro 30gg"></div>
-      </div>
-      <label>Politiche commerciali / condizioni dedicate</label>
-      <textarea id="f-pol" placeholder="Note su condizioni dedicate, accordi particolari...">${escapeHtml(c.politiche)}</textarea>
-      <div class="row">
-        <button class="btn" onclick="saveAzienda('${c.id}')">Salva azienda</button>
-        <button class="btn secondary" onclick="navigate('aziende')">Annulla</button>
-      </div>
-    </div>
-  `;
-}
-
-function saveAzienda(id){
-  const name = document.getElementById('f-name').value.trim();
-  if(!name){ toast("Inserisci il nome dell'azienda"); return; }
-  let c = state.companies.find(x=>x.id===id);
-  const isNew = !c;
-  if(!c){ c = {id, priceList:[]}; state.companies.push(c); }
-  c.name = name;
-  c.sconto1 = parseFloat(document.getElementById('f-s1').value)||0;
-  c.sconto2 = parseFloat(document.getElementById('f-s2').value)||0;
-  c.imballo = parseFloat(document.getElementById('f-imb').value)||0;
-  c.transport = document.getElementById('f-trasp').value.trim();
-  c.resi = document.getElementById('f-resi').value.trim();
-  c.politiche = document.getElementById('f-pol').value.trim();
-  if(!c.priceList) c.priceList = [];
-  saveCompanies();
-  toast(isNew?'Azienda creata':'Azienda aggiornata');
-  navigate('aziende',{viewId:c.id});
-}
-
-function deleteAzienda(id){
-  showConfirm('Eliminare questa azienda mandante? Questa azione non può essere annullata.', () => {
-    state.companies = state.companies.filter(c=>c.id!==id);
-    saveCompanies();
-    toast('Azienda eliminata');
-    navigate('aziende');
+  const headers = () => ({
+    "Content-Type": "application/json",
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${session.access_token}`,
   });
-}
 
-function renderAziendaDetail(id){
-  const app = document.getElementById('app');
-  const c = state.companies.find(x=>x.id===id);
-  if(!c){ navigate('aziende'); return; }
-  app.innerHTML = `
-    <h1 class="page-title">${escapeHtml(c.name)}</h1>
-    <p class="page-sub">Condizioni commerciali e listino prezzi.</p>
-    <div class="row">
-      <button class="btn secondary" onclick="navigate('aziende',{editId:'${c.id}'})">Modifica dati</button>
-      <button class="btn danger" onclick="deleteAzienda('${c.id}')">Elimina azienda</button>
-      <button class="btn secondary" onclick="navigate('aziende')">&larr; Torna all'elenco</button>
-    </div>
-    <div class="card" style="margin-top:14px;">
-      <h3>Condizioni commerciali</h3>
-      <div class="grid-cards">
-        <div class="stat-card"><div class="num">${c.sconto1||0}%</div><div class="lbl">Sconto 1</div></div>
-        <div class="stat-card"><div class="num">${c.sconto2||0}%</div><div class="lbl">Sconto 2</div></div>
-        <div class="stat-card"><div class="num">${c.imballo||0}%</div><div class="lbl">Imballo predefinito</div></div>
-      </div>
-      <p><strong>Trasporti:</strong> ${escapeHtml(c.transport)||'—'}</p>
-      <p><strong>Resi:</strong> ${escapeHtml(c.resi)||'—'}</p>
-      <p><strong>Note/politiche:</strong> ${escapeHtml(c.politiche)||'—'}</p>
-    </div>
-    <div class="card">
-      <h3>Listino prezzi (${(c.priceList||[]).length} articoli)</h3>
-      <div class="row">
-        <div class="col">
-          <label>Importa listino da Excel (.xlsx/.xls/.csv)</label>
-          <input type="file" id="f-excel" accept=".xlsx,.xls,.csv" onchange="importListino('${c.id}', this)">
-          <p class="small-note">Colonne riconosciute: codice/articolo, descrizione, finitura, prezzo. L'importazione sostituisce il listino attuale.</p>
-        </div>
-      </div>
-      <details style="margin-bottom:14px;">
-        <summary style="cursor:pointer;color:var(--blue-dark);font-weight:bold;">+ Aggiungi articolo manualmente</summary>
-        <div class="row" style="margin-top:10px;">
-          <div class="col"><label>Codice</label><input id="m-code" type="text"></div>
-          <div class="col" style="flex:2;"><label>Descrizione</label><input id="m-desc" type="text"></div>
-          <div class="col"><label>Finitura</label><input id="m-fin" type="text"></div>
-          <div class="col"><label>Prezzo listino</label><input id="m-price" type="number" step="0.01"></div>
-        </div>
-        <button class="btn small" onclick="addManualArticle('${c.id}')">Aggiungi articolo</button>
-      </details>
-      ${(c.priceList||[]).length===0 ? '<p class="small-note">Nessun articolo caricato.</p>' : `
-      <div style="max-height:400px;overflow:auto;">
-      <table>
-        <thead><tr><th>Codice</th><th>Descrizione</th><th>Finitura</th><th>Prezzo</th><th></th></tr></thead>
-        <tbody>
-          ${c.priceList.map((a,idx)=>`
-            <tr>
-              <td>${escapeHtml(a.code)}</td>
-              <td>${escapeHtml(a.description)}</td>
-              <td>${escapeHtml(a.finish||'')}</td>
-              <td>${euro(a.price)}</td>
-              <td><span class="close-x" onclick="removeArticle('${c.id}',${idx})" title="Rimuovi">&times;</span></td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-      </div>`}
-    </div>
-  `;
-}
-
-function addManualArticle(companyId){
-  const c = state.companies.find(x=>x.id===companyId);
-  const code = document.getElementById('m-code').value.trim();
-  const desc = document.getElementById('m-desc').value.trim();
-  const fin = document.getElementById('m-fin').value.trim();
-  const price = parseFloat(document.getElementById('m-price').value)||0;
-  if(!code || !desc){ toast('Inserisci almeno codice e descrizione'); return; }
-  c.priceList.push({code, description:desc, finish:fin, price});
-  saveCompanies();
-  toast('Articolo aggiunto');
-  renderAziendaDetail(companyId);
-}
-
-function removeArticle(companyId, idx){
-  const c = state.companies.find(x=>x.id===companyId);
-  c.priceList.splice(idx,1);
-  saveCompanies();
-  renderAziendaDetail(companyId);
-}
-
-function importListino(companyId, input){
-  const file = input.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e){
-    try{
-      const data = new Uint8Array(e.target.result);
-      const wb = XLSX.read(data, {type:'array'});
-      const sheet = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
-      const findKey = (row, candidates) => {
-        const keys = Object.keys(row);
-        for(const k of keys){
-          const lk = k.toLowerCase().trim();
-          if(candidates.some(c=>lk.includes(c))) return k;
-        }
-        return null;
-      };
-      const priceList = rows.map(row=>{
-        const kCode = findKey(row, ['codice','articolo','cod.','sku']);
-        const kDesc = findKey(row, ['descrizione','desc']);
-        const kFin = findKey(row, ['finitura','colore']);
-        const kPrice = findKey(row, ['prezzo','listino','importo']);
-        return {
-          code: kCode ? String(row[kCode]).trim() : '',
-          description: kDesc ? String(row[kDesc]).trim() : '',
-          finish: kFin ? String(row[kFin]).trim() : '',
-          price: kPrice ? parseFloat(String(row[kPrice]).replace(',','.'))||0 : 0
-        };
-      }).filter(a=>a.code || a.description);
-      const c = state.companies.find(x=>x.id===companyId);
-      c.priceList = priceList;
-      saveCompanies();
-      toast(`Listino importato: ${priceList.length} articoli`);
-      renderAziendaDetail(companyId);
-    }catch(err){
-      console.error(err);
-      toast('Errore durante la lettura del file. Verifica il formato.');
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [resClienti, resAziende] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/clienti?select=*&order=ragione_sociale.asc`, {
+          headers: headers(),
+        }),
+        fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?select=id,nome&order=nome.asc`, {
+          headers: headers(),
+        }),
+      ]);
+      const dataClienti = await resClienti.json();
+      const dataAziende = await resAziende.json();
+      if (!resClienti.ok) throw new Error(dataClienti.message || "Errore nel caricamento clienti");
+      setList(dataClienti);
+      if (resAziende.ok) setAziendeOptions(dataAziende);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
   };
-  reader.readAsArrayBuffer(file);
-}
 
-/* ===================== CLIENTI ===================== */
-const CLASSIFICAZIONI = ['Architetto','Contractor','Showroom','Rivenditore di termoidraulica','Professionista','Impresa','Privato'];
-let clientDetailTab = 'anagrafica';
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-function renderClientiPage(){
-  const app = document.getElementById('app');
-  if(currentParams.action==='new' || currentParams.editId){ return renderClienteForm(); }
-  if(currentParams.viewId){ clientDetailTab = currentParams.tab || 'anagrafica'; return renderClienteDetail(currentParams.viewId); }
+  const resetForm = () => {
+    setForm(emptyForm);
+    setEditingId(null);
+  };
 
-  const filterClass = currentParams.filterClass || '';
-  const search = currentParams.search || '';
-  let list = state.clients.slice();
-  if(filterClass) list = list.filter(c=>c.classification===filterClass);
-  if(search) list = list.filter(c=>(c.name||'').toLowerCase().includes(search.toLowerCase()));
+  const toggleAzienda = (nome) => {
+    setForm((f) => {
+      const giaSelezionata = f.aziende_collaborate.includes(nome);
+      const nuoveAziende = giaSelezionata
+        ? f.aziende_collaborate.filter((n) => n !== nome)
+        : [...f.aziende_collaborate, nome];
+      const nuoveCondizioni = { ...f.condizioni_per_azienda };
+      if (giaSelezionata) delete nuoveCondizioni[nome];
+      return { ...f, aziende_collaborate: nuoveAziende, condizioni_per_azienda: nuoveCondizioni };
+    });
+  };
 
-  app.innerHTML = `
-    <h1 class="page-title">Clienti</h1>
-    <p class="page-sub">Anagrafica clienti, classificazione, visite e condizioni.</p>
-    <div class="row" style="margin-bottom:14px;">
-      <button class="btn" onclick="navigate('clienti',{action:'new'})">+ Nuovo cliente</button>
-      <div class="col"><input type="text" placeholder="Cerca cliente per nome..." value="${escapeHtml(search)}" oninput="filterClienti(this.value,'${filterClass}')" style="margin-bottom:0;"></div>
-      <div class="col">
-        <select onchange="filterClienti('${search}', this.value)" style="margin-bottom:0;">
-          <option value="">Tutte le classificazioni</option>
-          ${CLASSIFICAZIONI.map(c=>`<option value="${c}" ${filterClass===c?'selected':''}>${c}</option>`).join('')}
-        </select>
-      </div>
-    </div>
-    ${list.length===0 ? emptyState('Nessun cliente trovato', 'Aggiungi un nuovo cliente oppure modifica i filtri di ricerca.') : ''}
-    <div>
-      ${list.map(c => `
-        <div class="list-item" onclick="navigate('clienti',{viewId:'${c.id}'})">
-          <div>
-            <strong>${escapeHtml(c.name)}</strong> ${c.classification?`<span class="pill">${c.classification}</span>`:''}<br>
-            <span class="small-note">${escapeHtml(c.address||'Indirizzo non inserito')} · Visite: ${(c.visits||[]).length}</span>
-          </div>
-        </div>
-      `).join('')}
-    </div>
-  `;
-}
-function filterClienti(search, filterClass){ navigate('clienti',{search, filterClass}); }
+  const aggiornaCondizione = (nome, testo) => {
+    setForm((f) => ({
+      ...f,
+      condizioni_per_azienda: { ...f.condizioni_per_azienda, [nome]: testo },
+    }));
+  };
 
-function renderClienteForm(){
-  const app = document.getElementById('app');
-  const editing = currentParams.editId ? state.clients.find(c=>c.id===currentParams.editId) : null;
-  const c = editing || {id:uid(), name:'', address:'', phone:'', email:'', classification:'', groupId:'', companiesCollab:[], competitors:[], visits:[], notes:'', lat:null, lng:null};
-  app.innerHTML = `
-    <h1 class="page-title">${editing?'Modifica cliente':'Nuovo cliente'}</h1>
-    <div class="card">
-      <h3>Dati anagrafici</h3>
-      <div class="row">
-        <div class="col"><label>Nome / Ragione sociale</label><input id="f-name" type="text" value="${escapeHtml(c.name)}"></div>
-        <div class="col"><label>Classificazione</label>
-          <select id="f-class">
-            <option value="">— Seleziona —</option>
-            ${CLASSIFICAZIONI.map(cl=>`<option value="${cl}" ${c.classification===cl?'selected':''}>${cl}</option>`).join('')}
-          </select>
-        </div>
-      </div>
-      <div class="row">
-        <div class="col"><label>Telefono</label><input id="f-phone" type="tel" value="${escapeHtml(c.phone)}"></div>
-        <div class="col"><label>Email</label><input id="f-email" type="email" value="${escapeHtml(c.email)}"></div>
-      </div>
-      <label>Indirizzo completo</label>
-      <input id="f-address" type="text" value="${escapeHtml(c.address)}" placeholder="Via, numero civico, città, provincia">
-      <div class="row">
-        <div class="col">
-          <label>Appartiene a un gruppo?</label>
-          <select id="f-group">
-            <option value="">Nessun gruppo</option>
-            ${state.groups.map(g=>`<option value="${g.id}" ${c.groupId===g.id?'selected':''}>${escapeHtml(g.name)}</option>`).join('')}
-          </select>
-        </div>
-      </div>
-      <div class="row">
-        <button class="btn" onclick="saveCliente('${c.id}')">Salva cliente</button>
-        <button class="btn secondary" onclick="navigate('clienti')">Annulla</button>
-      </div>
-    </div>
-  `;
-}
-
-function saveCliente(id){
-  const name = document.getElementById('f-name').value.trim();
-  if(!name){ toast('Inserisci il nome del cliente'); return; }
-  let c = state.clients.find(x=>x.id===id);
-  const isNew = !c;
-  if(!c){ c = {id, companiesCollab:[], competitors:[], visits:[], revenueByCompany:{}}; state.clients.push(c); }
-  c.name = name;
-  c.classification = document.getElementById('f-class').value;
-  c.phone = document.getElementById('f-phone').value.trim();
-  c.email = document.getElementById('f-email').value.trim();
-  c.address = document.getElementById('f-address').value.trim();
-  c.groupId = document.getElementById('f-group').value;
-  if(!c.companiesCollab) c.companiesCollab=[];
-  if(!c.competitors) c.competitors=[];
-  if(!c.visits) c.visits=[];
-  if(!c.revenueByCompany) c.revenueByCompany={};
-  saveClients();
-  toast(isNew?'Cliente creato':'Cliente aggiornato');
-  navigate('clienti',{viewId:c.id});
-}
-
-function deleteCliente(id){
-  showConfirm('Eliminare questo cliente? Questa azione non può essere annullata.', () => {
-    state.clients = state.clients.filter(c=>c.id!==id);
-    saveClients();
-    toast('Cliente eliminato');
-    navigate('clienti');
-  });
-}
-
-function setClientTab(tab, clientId){ navigate('clienti', {viewId:clientId, tab}); }
-
-function renderClienteDetail(id){
-  const app = document.getElementById('app');
-  const c = state.clients.find(x=>x.id===id);
-  if(!c){ navigate('clienti'); return; }
-  const tab = clientDetailTab;
-  const tabs = [
-    {id:'anagrafica', label:'Anagrafica'},
-    {id:'commerciale', label:'Aziende & Competitor'},
-    {id:'visite', label:'Storico visite'},
-    {id:'fatturato', label:'Fatturato'},
-  ];
-  app.innerHTML = `
-    <h1 class="page-title">${escapeHtml(c.name)} ${c.classification?`<span class="pill">${c.classification}</span>`:''}</h1>
-    <p class="page-sub">${escapeHtml(c.address||'Indirizzo non inserito')}</p>
-    <div class="row">
-      <button class="btn secondary" onclick="navigate('clienti',{editId:'${c.id}'})">Modifica anagrafica</button>
-      <button class="btn danger" onclick="deleteCliente('${c.id}')">Elimina cliente</button>
-      <button class="btn secondary" onclick="navigate('clienti')">&larr; Torna all'elenco</button>
-    </div>
-    <div class="tabs" style="margin-top:16px;">
-      ${tabs.map(t=>`<div class="tab ${tab===t.id?'active':''}" onclick="setClientTab('${t.id}','${c.id}')">${t.label}</div>`).join('')}
-    </div>
-    <div id="tabContent"></div>
-  `;
-  const tc = document.getElementById('tabContent');
-  if(tab==='anagrafica') tc.innerHTML = renderClienteAnagraficaTab(c);
-  else if(tab==='commerciale') tc.innerHTML = renderClienteCommercialeTab(c);
-  else if(tab==='visite') tc.innerHTML = renderClienteVisiteTab(c);
-  else if(tab==='fatturato') tc.innerHTML = renderClienteFatturatoTab(c);
-}
-
-function renderClienteAnagraficaTab(c){
-  return `
-    <div class="card">
-      <h3>Recapiti</h3>
-      <p><strong>Telefono:</strong> ${escapeHtml(c.phone)||'—'}</p>
-      <p><strong>Email:</strong> ${escapeHtml(c.email)||'—'}</p>
-      <p><strong>Indirizzo:</strong> ${escapeHtml(c.address)||'—'}</p>
-      <p><strong>Gruppo di acquisto:</strong> ${c.groupId? escapeHtml((state.groups.find(g=>g.id===c.groupId)||{}).name||'—') : 'Nessuno'}</p>
-      <hr class="section-divider">
-      <h3>Geolocalizzazione</h3>
-      <p class="small-note">${c.lat && c.lng ? `Posizione registrata (${c.lat.toFixed(5)}, ${c.lng.toFixed(5)})` : 'Nessuna posizione registrata per la mappa clienti.'}</p>
-      <button class="btn small secondary" onclick="geolocateClient('${c.id}')">Geolocalizza indirizzo</button>
-      <hr class="section-divider">
-      <h3>Note generali</h3>
-      <textarea id="f-cnotes" onchange="updateClientNotes('${c.id}', this.value)">${escapeHtml(c.notes||'')}</textarea>
-    </div>
-  `;
-}
-
-function updateClientNotes(id, val){
-  const c = state.clients.find(x=>x.id===id);
-  c.notes = val;
-  saveClients();
-  toast('Note salvate');
-}
-
-async function geolocateClient(id){
-  const c = state.clients.find(x=>x.id===id);
-  if(!c.address){ toast('Inserisci prima un indirizzo completo in anagrafica'); return; }
-  toast('Ricerca posizione in corso...');
-  try{
-    const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(c.address);
-    const res = await fetch(url);
-    const data = await res.json();
-    if(data && data[0]){
-      c.lat = parseFloat(data[0].lat);
-      c.lng = parseFloat(data[0].lon);
-      saveClients();
-      toast('Posizione trovata e salvata');
-      renderClienteDetail(id);
-    }else{
-      toast('Indirizzo non trovato. Prova a renderlo più preciso.');
+  const save = async () => {
+    if (!form.ragione_sociale.trim()) {
+      setError("La ragione sociale è obbligatoria.");
+      return;
     }
-  }catch(e){
-    toast('Servizio di geolocalizzazione non raggiungibile al momento');
-  }
-}
+    setSaving(true);
+    setError("");
+    try {
+      const body = {
+        ragione_sociale: form.ragione_sociale,
+        indirizzo: form.indirizzo || null,
+        telefono: form.telefono || null,
+        email: form.email || null,
+        classificazione: form.classificazione || null,
+        aziende_collaborate: form.aziende_collaborate,
+        condizioni_per_azienda: form.condizioni_per_azienda,
+        competitor: form.competitor
+          ? form.competitor.split(",").map((s) => s.trim()).filter(Boolean)
+          : [],
+        note: form.note || null,
+      };
+      let res;
+      if (editingId) {
+        res = await fetch(`${SUPABASE_URL}/rest/v1/clienti?id=eq.${editingId}`, {
+          method: "PATCH",
+          headers: { ...headers(), Prefer: "return=representation" },
+          body: JSON.stringify(body),
+        });
+      } else {
+        res = await fetch(`${SUPABASE_URL}/rest/v1/clienti`, {
+          method: "POST",
+          headers: { ...headers(), Prefer: "return=representation" },
+          body: JSON.stringify(body),
+        });
+      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Errore nel salvataggio");
+      resetForm();
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
-function renderClienteCommercialeTab(c){
-  return `
-    <div class="card">
-      <h3>Aziende mandanti con cui collabora</h3>
-      ${state.companies.length===0 ? '<p class="small-note">Nessuna azienda mandante inserita ancora.</p>' : state.companies.map(comp=>`
-        <div class="chk-row">
-          <input type="checkbox" id="comp-${comp.id}" ${((c.companiesCollab||[]).includes(comp.id))?'checked':''} onchange="toggleClientCompany('${c.id}','${comp.id}', this.checked)">
-          <label style="margin:0;font-weight:normal;color:var(--ink);" for="comp-${comp.id}">${escapeHtml(comp.name)}</label>
-        </div>
-      `).join('')}
-      <hr class="section-divider">
-      <h3>Competitor con cui lavora</h3>
-      <div id="competitorsList">
-        ${(c.competitors||[]).map((comp,idx)=>`
-          <span class="pill" style="margin:2px;">${escapeHtml(comp)} <span class="close-x" style="font-size:13px;" onclick="removeCompetitor('${c.id}',${idx})">&times;</span></span>
-        `).join('')}
-      </div>
-      <div class="row" style="margin-top:10px;">
-        <div class="col"><input id="newCompetitor" type="text" placeholder="Nome competitor"></div>
-        <button class="btn small" onclick="addCompetitor('${c.id}')">Aggiungi</button>
-      </div>
-    </div>
-  `;
-}
+  const edit = (cliente) => {
+    setEditingId(cliente.id);
+    setForm({
+      ragione_sociale: cliente.ragione_sociale || "",
+      indirizzo: cliente.indirizzo || "",
+      telefono: cliente.telefono || "",
+      email: cliente.email || "",
+      classificazione: cliente.classificazione || "",
+      aziende_collaborate: cliente.aziende_collaborate || [],
+      condizioni_per_azienda: cliente.condizioni_per_azienda || {},
+      competitor: (cliente.competitor || []).join(", "),
+      note: cliente.note || "",
+    });
+  };
 
-function toggleClientCompany(clientId, companyId, checked){
-  const c = state.clients.find(x=>x.id===clientId);
-  if(!c.companiesCollab) c.companiesCollab=[];
-  if(checked && !c.companiesCollab.includes(companyId)) c.companiesCollab.push(companyId);
-  if(!checked) c.companiesCollab = c.companiesCollab.filter(id=>id!==companyId);
-  saveClients();
-}
-function addCompetitor(clientId){
-  const val = document.getElementById('newCompetitor').value.trim();
-  if(!val) return;
-  const c = state.clients.find(x=>x.id===clientId);
-  if(!c.competitors) c.competitors=[];
-  c.competitors.push(val);
-  saveClients();
-  renderClienteDetail(clientId);
-}
-function removeCompetitor(clientId, idx){
-  const c = state.clients.find(x=>x.id===clientId);
-  c.competitors.splice(idx,1);
-  saveClients();
-  renderClienteDetail(clientId);
-}
+  const remove = async (id) => {
+    if (!window.confirm("Eliminare questo cliente?")) return;
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/clienti?id=eq.${id}`, {
+        method: "DELETE",
+        headers: headers(),
+      });
+      if (!res.ok) throw new Error("Errore nell'eliminazione");
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
 
-function renderClienteVisiteTab(c){
-  const visits = (c.visits||[]).slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
-  return `
-    <div class="card">
-      <h3>Registra una nuova visita</h3>
-      <div class="row">
-        <div class="col"><label>Data visita</label><input id="v-date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
-      </div>
-      <label>Note (argomenti trattati, cataloghi/listini lasciati, attività da ricordare)</label>
-      <textarea id="v-note" placeholder="Es. Presentato nuovo listino Quadro Design, cliente interessato a doccia walk-in..."></textarea>
-      <button class="btn" onclick="addVisit('${c.id}')">Salva visita</button>
-    </div>
-    <div class="card">
-      <h3>Storico visite (${visits.length} totali)</h3>
-      ${visits.length===0 ? '<p class="small-note">Nessuna visita registrata.</p>' : visits.map(v=>`
-        <div class="list-item" style="cursor:default;">
-          <div>
-            <strong>${fmtDate(v.date)}</strong><br>
-            <span class="small-note">${escapeHtml(v.note||'')}</span>
+  const inputStyle = {
+    width: "100%",
+    padding: "8px 10px",
+    marginBottom: 10,
+    border: `1px solid ${COLORS.border}`,
+    borderRadius: 8,
+    fontSize: 13,
+    boxSizing: "border-box",
+  };
+
+  const filteredList = filtroClassificazione
+    ? list.filter((c) => c.classificazione === filtroClassificazione)
+    : list;
+
+  return (
+    <div style={{ fontFamily: "Arial, sans-serif" }}>
+      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16 }}>
+        Anagrafica clienti
+      </h2>
+
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+        <div
+          style={{
+            flex: "1 1 300px",
+            background: COLORS.card,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: 14,
+            boxShadow: "0 4px 14px rgba(20,40,60,0.05)",
+            padding: 20,
+            maxWidth: 380,
+          }}
+        >
+          <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>
+            {editingId ? "Modifica cliente" : "Nuovo cliente"}
+          </h3>
+          <input
+            placeholder="Ragione sociale *"
+            value={form.ragione_sociale}
+            onChange={(e) => setForm({ ...form, ragione_sociale: e.target.value })}
+            style={inputStyle}
+          />
+          <input
+            placeholder="Indirizzo"
+            value={form.indirizzo}
+            onChange={(e) => setForm({ ...form, indirizzo: e.target.value })}
+            style={inputStyle}
+          />
+          <input
+            placeholder="Telefono"
+            value={form.telefono}
+            onChange={(e) => setForm({ ...form, telefono: e.target.value })}
+            style={inputStyle}
+          />
+          <input
+            placeholder="Email"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            style={inputStyle}
+          />
+
+          <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 4 }}>
+            Classificazione
+          </label>
+          <select
+            value={form.classificazione}
+            onChange={(e) => setForm({ ...form, classificazione: e.target.value })}
+            style={inputStyle}
+          >
+            <option value="">-- seleziona --</option>
+            {CLASSIFICAZIONI.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+
+          <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 6 }}>
+            Aziende mandanti con cui collabora
+          </label>
+          <div
+            style={{
+              marginBottom: 10,
+              maxHeight: 220,
+              overflowY: "auto",
+              border: `1px solid ${COLORS.border}`,
+              borderRadius: 8,
+              padding: 8,
+            }}
+          >
+            {aziendeOptions.length === 0 && (
+              <span style={{ fontSize: 12, color: "#9aa7b2" }}>
+                Nessuna azienda mandante inserita ancora
+              </span>
+            )}
+            {aziendeOptions.map((a) => (
+              <div key={a.id} style={{ marginBottom: 8 }}>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontSize: 12,
+                    marginBottom: 4,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={form.aziende_collaborate.includes(a.nome)}
+                    onChange={() => toggleAzienda(a.nome)}
+                  />
+                  {a.nome}
+                </label>
+                {form.aziende_collaborate.includes(a.nome) && (
+                  <input
+                    placeholder={`Condizioni commerciali con ${a.nome}`}
+                    value={form.condizioni_per_azienda[a.nome] || ""}
+                    onChange={(e) => aggiornaCondizione(a.nome, e.target.value)}
+                    style={{
+                      ...inputStyle,
+                      marginBottom: 0,
+                      marginLeft: 22,
+                      width: "calc(100% - 22px)",
+                      fontSize: 11,
+                    }}
+                  />
+                )}
+              </div>
+            ))}
           </div>
-          <span class="close-x" onclick="removeVisit('${c.id}','${v.id}')" title="Elimina visita">&times;</span>
+
+          <input
+            placeholder="Competitor (separati da virgola)"
+            value={form.competitor}
+            onChange={(e) => setForm({ ...form, competitor: e.target.value })}
+            style={inputStyle}
+          />
+          <textarea
+            placeholder="Note"
+            value={form.note}
+            onChange={(e) => setForm({ ...form, note: e.target.value })}
+            style={{ ...inputStyle, minHeight: 60 }}
+          />
+
+          {error && (
+            <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 10 }}>
+              {error}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={save}
+              disabled={saving}
+              style={{
+                padding: "9px 16px",
+                background: COLORS.primary,
+                color: "#fff",
+                border: "none",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              {saving ? "Salvataggio..." : editingId ? "Salva modifiche" : "Aggiungi cliente"}
+            </button>
+            {editingId && (
+              <button
+                onClick={resetForm}
+                style={{
+                  padding: "9px 16px",
+                  background: "#fff",
+                  color: COLORS.primary,
+                  border: `1px solid ${COLORS.border}`,
+                  borderRadius: 8,
+                  fontSize: 13,
+                  cursor: "pointer",
+                }}
+              >
+                Annulla
+              </button>
+            )}
+          </div>
         </div>
-      `).join('')}
-    </div>
-  `;
-}
 
-function addVisit(clientId){
-  const date = document.getElementById('v-date').value;
-  const note = document.getElementById('v-note').value.trim();
-  if(!date){ toast('Seleziona una data'); return; }
-  const c = state.clients.find(x=>x.id===clientId);
-  if(!c.visits) c.visits=[];
-  c.visits.push({id:uid(), date, note});
-  saveClients();
-  toast('Visita registrata');
-  renderClienteDetail(clientId);
-}
-function removeVisit(clientId, visitId){
-  const c = state.clients.find(x=>x.id===clientId);
-  c.visits = c.visits.filter(v=>v.id!==visitId);
-  saveClients();
-  renderClienteDetail(clientId);
-}
+        <div style={{ flex: "2 1 420px" }}>
+          <div style={{ marginBottom: 12 }}>
+            <select
+              value={filtroClassificazione}
+              onChange={(e) => setFiltroClassificazione(e.target.value)}
+              style={{ ...inputStyle, maxWidth: 240, marginBottom: 0 }}
+            >
+              <option value="">Tutte le classificazioni</option>
+              {CLASSIFICAZIONI.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
 
-function renderClienteFatturatoTab(c){
-  const rev = c.revenueByCompany||{};
-  const companyIds = Object.keys(rev);
-  const total = companyIds.reduce((a,id)=>a+rev[id],0);
-  return `
-    <div class="card">
-      <h3>Fatturato per azienda rappresentata</h3>
-      ${companyIds.length===0 ? '<p class="small-note">Nessun ordine confermato ancora per questo cliente.</p>' : `
-      <table>
-        <thead><tr><th>Azienda</th><th>Fatturato</th></tr></thead>
-        <tbody>
-          ${companyIds.map(cid=>`<tr><td>${escapeHtml(companyName(cid))}</td><td>${euro(rev[cid])}</td></tr>`).join('')}
-        </tbody>
-      </table>`}
-      <h3 style="margin-top:14px;">Totale complessivo: ${euro(total)}</h3>
-    </div>
-  `;
-}
-
-/* ===================== GRUPPI DI ACQUISTO ===================== */
-function renderGruppiPage(){
-  const app = document.getElementById('app');
-  if(currentParams.action==='new' || currentParams.editId){ return renderGruppoForm(); }
-  if(currentParams.viewId){ return renderGruppoDetail(currentParams.viewId); }
-  app.innerHTML = `
-    <h1 class="page-title">Gruppi di acquisto</h1>
-    <p class="page-sub">Gestisci i gruppi di acquisto, i clienti associati e gli allegati commerciali.</p>
-    <div class="row" style="margin-bottom:16px;">
-      <button class="btn" onclick="navigate('gruppi',{action:'new'})">+ Nuovo gruppo</button>
-    </div>
-    ${state.groups.length===0 ? emptyState('Nessun gruppo creato', 'Crea un gruppo per raggruppare i clienti che ne fanno parte.') : ''}
-    <div>
-      ${state.groups.map(g=>{
-        const n = state.clients.filter(c=>c.groupId===g.id).length;
-        return `
-        <div class="list-item" onclick="navigate('gruppi',{viewId:'${g.id}'})">
-          <div><strong>${escapeHtml(g.name)}</strong><br><span class="small-note">${n} clienti · ${(g.attachments||[]).length} allegati</span></div>
-        </div>`;
-      }).join('')}
-    </div>
-  `;
-}
-
-function renderGruppoForm(){
-  const app = document.getElementById('app');
-  const editing = currentParams.editId ? state.groups.find(g=>g.id===currentParams.editId) : null;
-  const g = editing || {id:uid(), name:'', attachments:[]};
-  app.innerHTML = `
-    <h1 class="page-title">${editing?'Modifica gruppo':'Nuovo gruppo di acquisto'}</h1>
-    <div class="card">
-      <label>Nome gruppo</label>
-      <input id="f-gname" type="text" value="${escapeHtml(g.name)}" placeholder="Es. Gruppo Termoidraulica Nord">
-      <div class="row">
-        <button class="btn" onclick="saveGruppo('${g.id}')">Salva gruppo</button>
-        <button class="btn secondary" onclick="navigate('gruppi')">Annulla</button>
+          {loading ? (
+            <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
+          ) : filteredList.length === 0 ? (
+            <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun cliente trovato.</p>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
+                  <th style={{ padding: "8px 6px" }}>Ragione sociale</th>
+                  <th style={{ padding: "8px 6px" }}>Classificazione</th>
+                  <th style={{ padding: "8px 6px" }}>Telefono</th>
+                  <th style={{ padding: "8px 6px" }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredList.map((c) => (
+                  <tr key={c.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
+                    <td style={{ padding: "8px 6px", fontWeight: 600 }}>
+                      {c.ragione_sociale}
+                    </td>
+                    <td style={{ padding: "8px 6px" }}>{c.classificazione || "-"}</td>
+                    <td style={{ padding: "8px 6px" }}>{c.telefono || "-"}</td>
+                    <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }}>
+                      <button
+                        onClick={() => edit(c)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: COLORS.primary,
+                          cursor: "pointer",
+                          fontSize: 12,
+                          marginRight: 10,
+                        }}
+                      >
+                        Modifica
+                      </button>
+                      <button
+                        onClick={() => remove(c.id)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: COLORS.danger,
+                          cursor: "pointer",
+                          fontSize: 12,
+                        }}
+                      >
+                        Elimina
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
     </div>
-  `;
+  );
 }
 
-function saveGruppo(id){
-  const name = document.getElementById('f-gname').value.trim();
-  if(!name){ toast('Inserisci il nome del gruppo'); return; }
-  let g = state.groups.find(x=>x.id===id);
-  const isNew = !g;
-  if(!g){ g = {id, attachments:[]}; state.groups.push(g); }
-  g.name = name;
-  if(!g.attachments) g.attachments=[];
-  saveGroups();
-  toast(isNew?'Gruppo creato':'Gruppo aggiornato');
-  navigate('gruppi',{viewId:g.id});
-}
+// ============================================================
+// CALENDARIO VISITE — per cliente, con conteggio e storico
+// ============================================================
+function CalendarioVisite({ session }) {
+  const [clienti, setClienti] = useState([]);
+  const [visite, setVisite] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [clienteSelezionato, setClienteSelezionato] = useState("");
+  const emptyForm = {
+    data_visita: new Date().toISOString().slice(0, 10),
+    argomenti_trattati: "",
+    cataloghi_lasciati: "",
+    note: "",
+  };
+  const [form, setForm] = useState(emptyForm);
+  const [saving, setSaving] = useState(false);
 
-function deleteGruppo(id){
-  showConfirm('Eliminare questo gruppo? I clienti associati resteranno ma perderanno il riferimento al gruppo.', () => {
-    state.groups = state.groups.filter(g=>g.id!==id);
-    state.clients.forEach(c=>{ if(c.groupId===id) c.groupId=''; });
-    saveGroups(); saveClients();
-    toast('Gruppo eliminato');
-    navigate('gruppi');
+  const headers = () => ({
+    "Content-Type": "application/json",
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${session.access_token}`,
   });
+
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [resClienti, resVisite] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale&order=ragione_sociale.asc`, {
+          headers: headers(),
+        }),
+        fetch(`${SUPABASE_URL}/rest/v1/visite?select=*&order=data_visita.desc`, {
+          headers: headers(),
+        }),
+      ]);
+      const dataClienti = await resClienti.json();
+      const dataVisite = await resVisite.json();
+      if (!resClienti.ok) throw new Error(dataClienti.message || "Errore nel caricamento clienti");
+      if (!resVisite.ok) throw new Error(dataVisite.message || "Errore nel caricamento visite");
+      setClienti(dataClienti);
+      setVisite(dataVisite);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const save = async () => {
+    if (!clienteSelezionato) {
+      setError("Seleziona un cliente.");
+      return;
+    }
+    if (!form.data_visita) {
+      setError("La data della visita è obbligatoria.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const body = {
+        cliente_id: clienteSelezionato,
+        data_visita: form.data_visita,
+        argomenti_trattati: form.argomenti_trattati || null,
+        cataloghi_lasciati: form.cataloghi_lasciati || null,
+        note: form.note || null,
+      };
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/visite`, {
+        method: "POST",
+        headers: { ...headers(), Prefer: "return=representation" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Errore nel salvataggio");
+      setForm(emptyForm);
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async (id) => {
+    if (!window.confirm("Eliminare questa visita?")) return;
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/visite?id=eq.${id}`, {
+        method: "DELETE",
+        headers: headers(),
+      });
+      if (!res.ok) throw new Error("Errore nell'eliminazione");
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const inputStyle = {
+    width: "100%",
+    padding: "8px 10px",
+    marginBottom: 10,
+    border: `1px solid ${COLORS.border}`,
+    borderRadius: 8,
+    fontSize: 13,
+    boxSizing: "border-box",
+  };
+
+  const nomeCliente = (id) => clienti.find((c) => c.id === id)?.ragione_sociale || "—";
+
+  const visiteFiltrate = clienteSelezionato
+    ? visite.filter((v) => v.cliente_id === clienteSelezionato)
+    : visite;
+
+  const conteggioPerCliente = (id) => visite.filter((v) => v.cliente_id === id).length;
+
+  return (
+    <div style={{ fontFamily: "Arial, sans-serif" }}>
+      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16 }}>
+        Calendario visite
+      </h2>
+
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+        <div
+          style={{
+            flex: "1 1 280px",
+            background: COLORS.card,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: 14,
+            boxShadow: "0 4px 14px rgba(20,40,60,0.05)",
+            padding: 20,
+            maxWidth: 340,
+          }}
+        >
+          <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>
+            Registra nuova visita
+          </h3>
+
+          <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 4 }}>
+            Cliente *
+          </label>
+          <select
+            value={clienteSelezionato}
+            onChange={(e) => setClienteSelezionato(e.target.value)}
+            style={inputStyle}
+          >
+            <option value="">-- seleziona cliente --</option>
+            {clienti.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.ragione_sociale} ({conteggioPerCliente(c.id)} visite)
+              </option>
+            ))}
+          </select>
+
+          <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 4 }}>
+            Data visita *
+          </label>
+          <input
+            type="date"
+            value={form.data_visita}
+            onChange={(e) => setForm({ ...form, data_visita: e.target.value })}
+            style={inputStyle}
+          />
+
+          <textarea
+            placeholder="Argomenti trattati"
+            value={form.argomenti_trattati}
+            onChange={(e) => setForm({ ...form, argomenti_trattati: e.target.value })}
+            style={{ ...inputStyle, minHeight: 50 }}
+          />
+          <textarea
+            placeholder="Cataloghi / listini lasciati"
+            value={form.cataloghi_lasciati}
+            onChange={(e) => setForm({ ...form, cataloghi_lasciati: e.target.value })}
+            style={{ ...inputStyle, minHeight: 40 }}
+          />
+          <textarea
+            placeholder="Note"
+            value={form.note}
+            onChange={(e) => setForm({ ...form, note: e.target.value })}
+            style={{ ...inputStyle, minHeight: 40 }}
+          />
+
+          {error && (
+            <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 10 }}>
+              {error}
+            </div>
+          )}
+
+          <button
+            onClick={save}
+            disabled={saving}
+            style={{
+              padding: "9px 16px",
+              background: COLORS.primary,
+              color: "#fff",
+              border: "none",
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            {saving ? "Salvataggio..." : "Salva visita"}
+          </button>
+        </div>
+
+        <div style={{ flex: "2 1 400px" }}>
+          <div style={{ marginBottom: 12 }}>
+            <select
+              value={clienteSelezionato}
+              onChange={(e) => setClienteSelezionato(e.target.value)}
+              style={{ ...inputStyle, maxWidth: 260, marginBottom: 0 }}
+            >
+              <option value="">Tutti i clienti</option>
+              {clienti.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.ragione_sociale}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {loading ? (
+            <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
+          ) : visiteFiltrate.length === 0 ? (
+            <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessuna visita registrata.</p>
+          ) : (
+            <div>
+              {visiteFiltrate.map((v) => (
+                <div
+                  key={v.id}
+                  style={{
+                    background: COLORS.card,
+                    border: `1px solid ${COLORS.border}`,
+                    borderRadius: 12,
+                    padding: 14,
+                    marginBottom: 10,
+                    boxShadow: "0 2px 8px rgba(20,40,60,0.04)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 700, color: COLORS.primary, fontSize: 13 }}>
+                        {nomeCliente(v.cliente_id)}
+                      </div>
+                      <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 2 }}>
+                        {new Date(v.data_visita).toLocaleDateString("it-IT")}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => remove(v.id)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: COLORS.danger,
+                        cursor: "pointer",
+                        fontSize: 12,
+                      }}
+                    >
+                      Elimina
+                    </button>
+                  </div>
+                  {v.argomenti_trattati && (
+                    <div style={{ fontSize: 12, marginTop: 8 }}>
+                      <strong>Argomenti:</strong> {v.argomenti_trattati}
+                    </div>
+                  )}
+                  {v.cataloghi_lasciati && (
+                    <div style={{ fontSize: 12, marginTop: 4 }}>
+                      <strong>Cataloghi lasciati:</strong> {v.cataloghi_lasciati}
+                    </div>
+                  )}
+                  {v.note && (
+                    <div style={{ fontSize: 12, marginTop: 4 }}>
+                      <strong>Note:</strong> {v.note}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
-function renderGruppoDetail(id){
-  const app = document.getElementById('app');
-  const g = state.groups.find(x=>x.id===id);
-  if(!g){ navigate('gruppi'); return; }
-  const clientiGruppo = state.clients.filter(c=>c.groupId===g.id);
-  app.innerHTML = `
-    <h1 class="page-title">${escapeHtml(g.name)}</h1>
-    <div class="row">
-      <button class="btn secondary" onclick="navigate('gruppi',{editId:'${g.id}'})">Rinomina gruppo</button>
-      <button class="btn danger" onclick="deleteGruppo('${g.id}')">Elimina gruppo</button>
-      <button class="btn secondary" onclick="navigate('gruppi')">&larr; Torna all'elenco</button>
+// ============================================================
+// PREVENTIVI / OFFERTE
+// ============================================================
+function nuovaRiga() {
+  return {
+    id: Math.random().toString(36).slice(2),
+    articolo: "",
+    descrizione: "",
+    finitura: "",
+    quantita: 1,
+    prezzo_unitario: 0,
+    sconto1: 0,
+    sconto2: 0,
+    prezzo_netto_manuale: "",
+  };
+}
+
+function calcolaRigaNetto(riga) {
+  const totaleListino = (Number(riga.quantita) || 0) * (Number(riga.prezzo_unitario) || 0);
+  if (
+    riga.prezzo_netto_manuale !== undefined &&
+    riga.prezzo_netto_manuale !== "" &&
+    riga.prezzo_netto_manuale !== null
+  ) {
+    return { totaleListino, netto: Number(riga.prezzo_netto_manuale) || 0 };
+  }
+  const dopoSconto1 = totaleListino * (1 - (Number(riga.sconto1) || 0) / 100);
+  const dopoSconto2 = dopoSconto1 * (1 - (Number(riga.sconto2) || 0) / 100);
+  return { totaleListino, netto: dopoSconto2 };
+}
+
+// modalita possibili per imballo/trasporto/iva: "escluso" | "percentuale" | "euro" | "nascosto"
+function calcolaValoreVoce(modalita, percentuale, valoreEuro, base) {
+  if (modalita === "nascosto" || modalita === "escluso") return 0;
+  if (modalita === "percentuale") return base * ((Number(percentuale) || 0) / 100);
+  if (modalita === "euro") return Number(valoreEuro) || 0;
+  return 0;
+}
+
+function calcolaTotaliPreventivo(t, righeArr) {
+  const totaleNetto = righeArr.reduce((sum, r) => sum + calcolaRigaNetto(r).netto, 0);
+
+  const valoreImballo = calcolaValoreVoce(
+    t.imballo_modalita,
+    t.imballo_percentuale,
+    t.imballo_valore,
+    totaleNetto
+  );
+  const sub1 = totaleNetto + valoreImballo;
+
+  const valoreTrasporto = calcolaValoreVoce(
+    t.trasporto_modalita,
+    t.trasporto_percentuale,
+    t.trasporto_valore,
+    sub1
+  );
+  const sub2 = sub1 + valoreTrasporto;
+
+  const valoreIva = calcolaValoreVoce(t.iva_modalita, t.iva_percentuale, t.iva_valore, sub2);
+  const totaleFinale = sub2 + valoreIva;
+
+  return { totaleNetto, valoreImballo, valoreTrasporto, valoreIva, totaleFinale };
+}
+
+function generaStampaHTML(p, clienti, aziende) {
+  const cliente = clienti.find((c) => c.id === p.cliente_id);
+  const azienda = aziende.find((a) => a.id === p.azienda_id);
+  const righeArr = p.righe || [];
+  const tot = calcolaTotaliPreventivo(p, righeArr);
+
+  const righeHtml = righeArr
+    .map((r) => {
+      const { netto } = calcolaRigaNetto(r);
+      return `<tr><td>${r.articolo || ""}</td><td>${r.descrizione || ""}</td><td>${
+        r.finitura || ""
+      }</td><td>${r.quantita || ""}</td><td>${Number(r.prezzo_unitario || 0).toFixed(
+        2
+      )} €</td><td>${netto.toFixed(2)} €</td></tr>`;
+    })
+    .join("");
+
+  const rigaVoce = (label, modalita, valore) => {
+    if (modalita === "nascosto") return "";
+    if (modalita === "escluso") return `<div>${label}: escluso</div>`;
+    return `<div>${label}: ${valore.toFixed(2)} €</div>`;
+  };
+
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Preventivo ${
+    p.rif || ""
+  }</title>
+  <style>
+    body{font-family:Arial, sans-serif; padding:40px; color:#233242;}
+    h1{color:#0b7bc4; font-size:20px; margin-bottom:4px;}
+    p{font-size:13px; margin:2px 0;}
+    table{width:100%; border-collapse:collapse; margin-top:20px;}
+    th,td{border-bottom:1px solid #e2edf5; padding:8px; text-align:left; font-size:12px;}
+    .totali{margin-top:20px; text-align:right; font-size:13px;}
+    .totali strong{font-size:16px; color:#0b7bc4;}
+  </style></head>
+  <body>
+    <h1>Preventivo${p.rif ? " — RIF " + p.rif : ""}</h1>
+    <p>Data: ${p.data ? new Date(p.data).toLocaleDateString("it-IT") : ""}</p>
+    <p>Spettabile: ${cliente ? cliente.ragione_sociale : ""}</p>
+    <p>${azienda ? azienda.nome : ""}</p>
+    <table>
+      <thead><tr><th>Articolo</th><th>Descrizione</th><th>Finitura</th><th>Qtà</th><th>Prezzo un.</th><th>Netto</th></tr></thead>
+      <tbody>${righeHtml}</tbody>
+    </table>
+    <div class="totali">
+      ${rigaVoce("Imballo", p.imballo_modalita, tot.valoreImballo)}
+      ${rigaVoce("Trasporto", p.trasporto_modalita, tot.valoreTrasporto)}
+      ${rigaVoce("IVA", p.iva_modalita, tot.valoreIva)}
+      <div><strong>Totale: ${tot.totaleFinale.toFixed(2)} €</strong></div>
     </div>
-    <div class="card" style="margin-top:14px;">
-      <h3>Clienti del gruppo (${clientiGruppo.length})</h3>
-      ${clientiGruppo.length===0 ? '<p class="small-note">Nessun cliente assegnato a questo gruppo. Assegna un cliente dalla sua scheda anagrafica.</p>' : clientiGruppo.map(c=>`
-        <div class="list-item" onclick="navigate('clienti',{viewId:'${c.id}'})">
-          <div><strong>${escapeHtml(c.name)}</strong><br><span class="small-note">${escapeHtml(c.address||'')}</span></div>
+    ${p.modalita_pagamento ? `<p style="margin-top:20px;"><strong>Modalità di pagamento:</strong> ${p.modalita_pagamento}</p>` : ""}
+  </body></html>`;
+}
+
+function stampaPreventivo(p, clienti, aziende) {
+  const win = window.open("", "_blank");
+  if (!win) return;
+  win.document.write(generaStampaHTML(p, clienti, aziende));
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 300);
+}
+
+function SelettoreVoce({ label, modalita, percentuale, valoreEuro, onChange, inputStyle }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+      <label style={{ fontSize: 12, minWidth: 80 }}>{label}</label>
+      <select
+        value={modalita}
+        onChange={(e) => onChange({ modalita: e.target.value })}
+        style={{ ...inputStyle, width: 130 }}
+      >
+        <option value="escluso">Escluso</option>
+        <option value="percentuale">In %</option>
+        <option value="euro">In €</option>
+        <option value="nascosto">Non mostrare</option>
+      </select>
+      {modalita === "percentuale" && (
+        <input
+          type="number"
+          value={percentuale}
+          onChange={(e) => onChange({ percentuale: e.target.value })}
+          style={{ ...inputStyle, width: 70 }}
+          placeholder="%"
+        />
+      )}
+      {modalita === "euro" && (
+        <input
+          type="number"
+          value={valoreEuro}
+          onChange={(e) => onChange({ valoreEuro: e.target.value })}
+          style={{ ...inputStyle, width: 80 }}
+          placeholder="€"
+        />
+      )}
+    </div>
+  );
+}
+
+function PreventiviOfferte({ session }) {
+  const [clienti, setClienti] = useState([]);
+  const [aziende, setAziende] = useState([]);
+  const [lista, setLista] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+
+  const emptyHeader = {
+    cliente_id: "",
+    azienda_id: "",
+    rif: "",
+    data: new Date().toISOString().slice(0, 10),
+    imballo_modalita: "percentuale",
+    imballo_percentuale: 0,
+    imballo_valore: 0,
+    trasporto_modalita: "escluso",
+    trasporto_percentuale: 0,
+    trasporto_valore: 0,
+    iva_modalita: "escluso",
+    iva_percentuale: 22,
+    iva_valore: 0,
+    modalita_pagamento: "",
+  };
+  const [header, setHeader] = useState(emptyHeader);
+  const [righe, setRighe] = useState([nuovaRiga()]);
+
+  const headers = () => ({
+    "Content-Type": "application/json",
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${session.access_token}`,
+  });
+
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [resClienti, resAziende, resPreventivi] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale&order=ragione_sociale.asc`, {
+          headers: headers(),
+        }),
+        fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?select=id,nome&order=nome.asc`, {
+          headers: headers(),
+        }),
+        fetch(`${SUPABASE_URL}/rest/v1/preventivi?select=*&order=data.desc`, {
+          headers: headers(),
+        }),
+      ]);
+      const dataClienti = await resClienti.json();
+      const dataAziende = await resAziende.json();
+      const dataPreventivi = await resPreventivi.json();
+      if (resClienti.ok) setClienti(dataClienti);
+      if (resAziende.ok) setAziende(dataAziende);
+      if (!resPreventivi.ok) throw new Error(dataPreventivi.message || "Errore nel caricamento");
+      setLista(dataPreventivi);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const resetForm = () => {
+    setHeader(emptyHeader);
+    setRighe([nuovaRiga()]);
+    setEditingId(null);
+  };
+
+  const aggiungiRiga = () => setRighe((r) => [...r, nuovaRiga()]);
+  const rimuoviRiga = (id) => setRighe((r) => r.filter((x) => x.id !== id));
+  const aggiornaRiga = (id, campo, valore) =>
+    setRighe((r) => r.map((x) => (x.id === id ? { ...x, [campo]: valore } : x)));
+
+  const tot = calcolaTotaliPreventivo(header, righe);
+
+  const salva = async () => {
+    if (!header.cliente_id || !header.azienda_id) {
+      setError("Seleziona cliente e azienda.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const body = {
+        cliente_id: header.cliente_id,
+        azienda_id: header.azienda_id,
+        rif: header.rif || null,
+        data: header.data,
+        righe: righe,
+        imballo_modalita: header.imballo_modalita,
+        imballo_percentuale: Number(header.imballo_percentuale) || 0,
+        imballo_valore: Number(header.imballo_valore) || 0,
+        trasporto_modalita: header.trasporto_modalita,
+        trasporto_percentuale: Number(header.trasporto_percentuale) || 0,
+        trasporto_valore: Number(header.trasporto_valore) || 0,
+        iva_modalita: header.iva_modalita,
+        iva_percentuale: Number(header.iva_percentuale) || 0,
+        iva_valore: Number(header.iva_valore) || 0,
+        modalita_pagamento: header.modalita_pagamento || null,
+      };
+      let res;
+      if (editingId) {
+        res = await fetch(`${SUPABASE_URL}/rest/v1/preventivi?id=eq.${editingId}`, {
+          method: "PATCH",
+          headers: { ...headers(), Prefer: "return=representation" },
+          body: JSON.stringify(body),
+        });
+      } else {
+        res = await fetch(`${SUPABASE_URL}/rest/v1/preventivi`, {
+          method: "POST",
+          headers: { ...headers(), Prefer: "return=representation" },
+          body: JSON.stringify(body),
+        });
+      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Errore nel salvataggio");
+      resetForm();
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const modifica = (p) => {
+    setEditingId(p.id);
+    setHeader({
+      cliente_id: p.cliente_id || "",
+      azienda_id: p.azienda_id || "",
+      rif: p.rif || "",
+      data: p.data || new Date().toISOString().slice(0, 10),
+      imballo_modalita: p.imballo_modalita || "percentuale",
+      imballo_percentuale: p.imballo_percentuale || 0,
+      imballo_valore: p.imballo_valore || 0,
+      trasporto_modalita: p.trasporto_modalita || "escluso",
+      trasporto_percentuale: p.trasporto_percentuale || 0,
+      trasporto_valore: p.trasporto_valore || 0,
+      iva_modalita: p.iva_modalita || "escluso",
+      iva_percentuale: p.iva_percentuale ?? 22,
+      iva_valore: p.iva_valore || 0,
+      modalita_pagamento: p.modalita_pagamento || "",
+    });
+    setRighe(p.righe && p.righe.length ? p.righe : [nuovaRiga()]);
+  };
+
+  const elimina = async (id) => {
+    if (!window.confirm("Eliminare questo preventivo?")) return;
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/preventivi?id=eq.${id}`, {
+        method: "DELETE",
+        headers: headers(),
+      });
+      if (!res.ok) throw new Error("Errore nell'eliminazione");
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const nomeCliente = (id) => clienti.find((c) => c.id === id)?.ragione_sociale || "—";
+  const nomeAzienda = (id) => aziende.find((a) => a.id === id)?.nome || "—";
+
+  const inputStyle = {
+    padding: "6px 8px",
+    border: `1px solid ${COLORS.border}`,
+    borderRadius: 6,
+    fontSize: 12,
+    boxSizing: "border-box",
+  };
+  const fieldStyle = {
+    width: "100%",
+    padding: "8px 10px",
+    marginBottom: 10,
+    border: `1px solid ${COLORS.border}`,
+    borderRadius: 8,
+    fontSize: 13,
+    boxSizing: "border-box",
+  };
+
+  const rigaTotali = (label, modalita, valore) => {
+    if (modalita === "nascosto") return null;
+    return (
+      <div style={{ color: COLORS.muted }}>
+        {label}: {modalita === "escluso" ? "escluso" : `${valore.toFixed(2)} €`}
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ fontFamily: "Arial, sans-serif" }}>
+      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16 }}>
+        Preventivi / Offerte
+      </h2>
+
+      <div
+        style={{
+          background: COLORS.card,
+          border: `1px solid ${COLORS.border}`,
+          borderRadius: 14,
+          boxShadow: "0 4px 14px rgba(20,40,60,0.05)",
+          padding: 20,
+          marginBottom: 24,
+        }}
+      >
+        <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>
+          {editingId ? "Modifica preventivo" : "Nuovo preventivo"}
+        </h3>
+
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
+          <select
+            value={header.azienda_id}
+            onChange={(e) => setHeader({ ...header, azienda_id: e.target.value })}
+            style={{ ...fieldStyle, maxWidth: 220 }}
+          >
+            <option value="">-- Azienda --</option>
+            {aziende.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.nome}
+              </option>
+            ))}
+          </select>
+          <select
+            value={header.cliente_id}
+            onChange={(e) => setHeader({ ...header, cliente_id: e.target.value })}
+            style={{ ...fieldStyle, maxWidth: 220 }}
+          >
+            <option value="">-- Cliente (Spettabile) --</option>
+            {clienti.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.ragione_sociale}
+              </option>
+            ))}
+          </select>
+          <input
+            type="date"
+            value={header.data}
+            onChange={(e) => setHeader({ ...header, data: e.target.value })}
+            style={{ ...fieldStyle, maxWidth: 160 }}
+          />
+          <input
+            placeholder="RIF"
+            value={header.rif}
+            onChange={(e) => setHeader({ ...header, rif: e.target.value })}
+            style={{ ...fieldStyle, maxWidth: 160 }}
+          />
         </div>
-      `).join('')}
-    </div>
-    <div class="card">
-      <h3>Allegati (PDF, Excel, immagini)</h3>
-      <input type="file" id="f-attach" accept=".pdf,.xlsx,.xls,.csv,image/*" onchange="addAttachment('${g.id}', this)">
-      <p class="small-note">Es. accordi commerciali, listini dedicati, condizioni particolari del gruppo. File di piccole dimensioni consigliati.</p>
-      ${(g.attachments||[]).length===0 ? '' : `
-      <div style="margin-top:10px;">
-        ${g.attachments.map((a,idx)=>`
-          <div class="list-item" style="cursor:default;">
-            <div><strong>${escapeHtml(a.name)}</strong><br><span class="small-note">${escapeHtml(a.type)}</span></div>
-            <div>
-              <a href="${a.data}" download="${escapeHtml(a.name)}" class="btn small secondary" style="text-decoration:none;">Scarica</a>
-              <span class="close-x" onclick="removeAttachment('${g.id}',${idx})" title="Rimuovi">&times;</span>
+
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 12 }}>
+          <thead>
+            <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
+              <th style={{ padding: 6 }}>Art.</th>
+              <th style={{ padding: 6 }}>Descrizione</th>
+              <th style={{ padding: 6 }}>Finitura</th>
+              <th style={{ padding: 6 }}>Qtà</th>
+              <th style={{ padding: 6 }}>Prezzo un.</th>
+              <th style={{ padding: 6 }}>Sc.1 %</th>
+              <th style={{ padding: 6 }}>Sc.2 %</th>
+              <th style={{ padding: 6 }}>Netto manuale</th>
+              <th style={{ padding: 6 }}>Netto</th>
+              <th style={{ padding: 6 }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {righe.map((r) => {
+              const { netto } = calcolaRigaNetto(r);
+              return (
+                <tr key={r.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
+                  <td style={{ padding: 4 }}>
+                    <input
+                      value={r.articolo}
+                      onChange={(e) => aggiornaRiga(r.id, "articolo", e.target.value)}
+                      style={{ ...inputStyle, width: 70 }}
+                    />
+                  </td>
+                  <td style={{ padding: 4 }}>
+                    <input
+                      value={r.descrizione}
+                      onChange={(e) => aggiornaRiga(r.id, "descrizione", e.target.value)}
+                      style={{ ...inputStyle, width: 150 }}
+                    />
+                  </td>
+                  <td style={{ padding: 4 }}>
+                    <input
+                      value={r.finitura}
+                      onChange={(e) => aggiornaRiga(r.id, "finitura", e.target.value)}
+                      style={{ ...inputStyle, width: 70 }}
+                    />
+                  </td>
+                  <td style={{ padding: 4 }}>
+                    <input
+                      type="number"
+                      value={r.quantita}
+                      onChange={(e) => aggiornaRiga(r.id, "quantita", e.target.value)}
+                      style={{ ...inputStyle, width: 45 }}
+                    />
+                  </td>
+                  <td style={{ padding: 4 }}>
+                    <input
+                      type="number"
+                      value={r.prezzo_unitario}
+                      onChange={(e) => aggiornaRiga(r.id, "prezzo_unitario", e.target.value)}
+                      style={{ ...inputStyle, width: 65 }}
+                    />
+                  </td>
+                  <td style={{ padding: 4 }}>
+                    <input
+                      type="number"
+                      value={r.sconto1}
+                      onChange={(e) => aggiornaRiga(r.id, "sconto1", e.target.value)}
+                      style={{ ...inputStyle, width: 50 }}
+                    />
+                  </td>
+                  <td style={{ padding: 4 }}>
+                    <input
+                      type="number"
+                      value={r.sconto2}
+                      onChange={(e) => aggiornaRiga(r.id, "sconto2", e.target.value)}
+                      style={{ ...inputStyle, width: 50 }}
+                    />
+                  </td>
+                  <td style={{ padding: 4 }}>
+                    <input
+                      type="number"
+                      placeholder="opz."
+                      value={r.prezzo_netto_manuale}
+                      onChange={(e) => aggiornaRiga(r.id, "prezzo_netto_manuale", e.target.value)}
+                      style={{ ...inputStyle, width: 65 }}
+                    />
+                  </td>
+                  <td style={{ padding: 4, fontWeight: 600 }}>
+                    {netto.toFixed(2)} €
+                  </td>
+                  <td style={{ padding: 4 }}>
+                    <button
+                      onClick={() => rimuoviRiga(r.id)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: COLORS.danger,
+                        cursor: "pointer",
+                        fontSize: 14,
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <p style={{ fontSize: 11, color: COLORS.muted, marginTop: -6, marginBottom: 16 }}>
+          Compila "Netto manuale" per fissare direttamente il prezzo netto di una riga,
+          ignorando listino e sconti.
+        </p>
+
+        <button
+          onClick={aggiungiRiga}
+          style={{
+            padding: "6px 12px",
+            background: "#fff",
+            color: COLORS.primary,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: 8,
+            fontSize: 12,
+            cursor: "pointer",
+            marginBottom: 20,
+          }}
+        >
+          + Aggiungi riga
+        </button>
+
+        <div
+          style={{
+            background: COLORS.bg,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: 12,
+            padding: 16,
+            marginBottom: 16,
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+          }}
+        >
+          <SelettoreVoce
+            label="Imballo"
+            modalita={header.imballo_modalita}
+            percentuale={header.imballo_percentuale}
+            valoreEuro={header.imballo_valore}
+            inputStyle={inputStyle}
+            onChange={(patch) =>
+              setHeader({
+                ...header,
+                imballo_modalita: patch.modalita ?? header.imballo_modalita,
+                imballo_percentuale: patch.percentuale ?? header.imballo_percentuale,
+                imballo_valore: patch.valoreEuro ?? header.imballo_valore,
+              })
+            }
+          />
+          <SelettoreVoce
+            label="Trasporto"
+            modalita={header.trasporto_modalita}
+            percentuale={header.trasporto_percentuale}
+            valoreEuro={header.trasporto_valore}
+            inputStyle={inputStyle}
+            onChange={(patch) =>
+              setHeader({
+                ...header,
+                trasporto_modalita: patch.modalita ?? header.trasporto_modalita,
+                trasporto_percentuale: patch.percentuale ?? header.trasporto_percentuale,
+                trasporto_valore: patch.valoreEuro ?? header.trasporto_valore,
+              })
+            }
+          />
+          <SelettoreVoce
+            label="IVA"
+            modalita={header.iva_modalita}
+            percentuale={header.iva_percentuale}
+            valoreEuro={header.iva_valore}
+            inputStyle={inputStyle}
+            onChange={(patch) =>
+              setHeader({
+                ...header,
+                iva_modalita: patch.modalita ?? header.iva_modalita,
+                iva_percentuale: patch.percentuale ?? header.iva_percentuale,
+                iva_valore: patch.valoreEuro ?? header.iva_valore,
+              })
+            }
+          />
+
+          <div style={{ marginTop: 4 }}>
+            <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 4 }}>
+              Modalità di pagamento
+            </label>
+            <input
+              placeholder="Es. 30% all'ordine, saldo alla consegna"
+              value={header.modalita_pagamento}
+              onChange={(e) => setHeader({ ...header, modalita_pagamento: e.target.value })}
+              style={{ ...fieldStyle, marginBottom: 0, maxWidth: 400 }}
+            />
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            fontSize: 13,
+            marginBottom: 16,
+          }}
+        >
+          <div style={{ textAlign: "right", minWidth: 220 }}>
+            <div style={{ color: COLORS.muted }}>Totale netto: {tot.totaleNetto.toFixed(2)} €</div>
+            {rigaTotali("Imballo", header.imballo_modalita, tot.valoreImballo)}
+            {rigaTotali("Trasporto", header.trasporto_modalita, tot.valoreTrasporto)}
+            {rigaTotali("IVA", header.iva_modalita, tot.valoreIva)}
+            <div style={{ fontWeight: 700, color: COLORS.primary, fontSize: 16, marginTop: 4 }}>
+              Totale: {tot.totaleFinale.toFixed(2)} €
             </div>
           </div>
-        `).join('')}
-      </div>`}
-    </div>
-  `;
-}
+        </div>
 
-function addAttachment(groupId, input){
-  const file = input.files[0];
-  if(!file) return;
-  if(file.size > 4*1024*1024){ toast('File troppo grande (max ~4MB)'); return; }
-  const reader = new FileReader();
-  reader.onload = function(e){
-    const g = state.groups.find(x=>x.id===groupId);
-    if(!g.attachments) g.attachments=[];
-    g.attachments.push({name:file.name, type:file.type||'file', data:e.target.result});
-    saveGroups();
-    toast('Allegato aggiunto');
-    renderGruppoDetail(groupId);
-  };
-  reader.readAsDataURL(file);
-}
-function removeAttachment(groupId, idx){
-  const g = state.groups.find(x=>x.id===groupId);
-  g.attachments.splice(idx,1);
-  saveGroups();
-  renderGruppoDetail(groupId);
-}
+        {error && (
+          <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 10 }}>{error}</div>
+        )}
 
-/* ===================== CALENDARIO VISITE ===================== */
-function renderCalendarioPage(){
-  const app = document.getElementById('app');
-  const y = calendarCursor.getFullYear();
-  const m = calendarCursor.getMonth();
-  const firstDay = new Date(y, m, 1);
-  const startOffset = (firstDay.getDay()+6)%7; // lunedì=0
-  const daysInMonth = new Date(y, m+1, 0).getDate();
-  const monthName = calendarCursor.toLocaleDateString('it-IT', {month:'long', year:'numeric'});
-
-  // Mappa data -> visite
-  const visitsByDay = {};
-  state.clients.forEach(c=>{
-    (c.visits||[]).forEach(v=>{
-      const d = new Date(v.date);
-      if(d.getFullYear()===y && d.getMonth()===m){
-        const day = d.getDate();
-        if(!visitsByDay[day]) visitsByDay[day]=[];
-        visitsByDay[day].push({client:c, visit:v});
-      }
-    });
-  });
-
-  let cells = '';
-  for(let i=0;i<startOffset;i++) cells += `<div style="min-height:80px;"></div>`;
-  for(let d=1; d<=daysInMonth; d++){
-    const vs = visitsByDay[d]||[];
-    const isToday = (new Date()).toDateString()===new Date(y,m,d).toDateString();
-    cells += `
-      <div style="min-height:80px;border:1px solid var(--border);border-radius:8px;padding:6px;background:${isToday?'var(--blue-lighter)':'var(--white)'};cursor:pointer;" onclick="openDayVisit(${y},${m},${d})">
-        <div style="font-weight:bold;color:${isToday?'var(--blue-dark)':'var(--ink)'};font-size:12px;">${d}</div>
-        ${vs.slice(0,2).map(x=>`<div class="small-note" style="background:var(--blue-light);border-radius:4px;padding:2px 4px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(x.client.name)}</div>`).join('')}
-        ${vs.length>2?`<div class="small-note">+${vs.length-2} altre</div>`:''}
-      </div>
-    `;
-  }
-
-  app.innerHTML = `
-    <h1 class="page-title">Calendario visite</h1>
-    <p class="page-sub">Clicca su un giorno per registrare una visita a un cliente.</p>
-    <div class="row" style="align-items:center;margin-bottom:12px;">
-      <button class="btn secondary small" onclick="changeMonth(-1)">&larr; Mese prec.</button>
-      <strong style="text-transform:capitalize;">${monthName}</strong>
-      <button class="btn secondary small" onclick="changeMonth(1)">Mese succ. &rarr;</button>
-      <button class="btn secondary small" onclick="calendarCursor=new Date();renderCalendarioPage();">Oggi</button>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px;">
-      ${['Lun','Mar','Mer','Gio','Ven','Sab','Dom'].map(d=>`<div class="small-note" style="text-align:center;font-weight:bold;">${d}</div>`).join('')}
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;">${cells}</div>
-    <div id="dayVisitPanel"></div>
-  `;
-}
-function changeMonth(delta){
-  calendarCursor.setMonth(calendarCursor.getMonth()+delta);
-  renderCalendarioPage();
-}
-function openDayVisit(y,m,d){
-  const dateStr = new Date(y,m,d).toISOString().slice(0,10);
-  const panel = document.getElementById('dayVisitPanel');
-  panel.innerHTML = `
-    <div class="card" style="margin-top:16px;">
-      <h3>Registra visita del ${fmtDate(dateStr)}</h3>
-      <div class="row">
-        <div class="col">
-          <label>Cliente</label>
-          <select id="cv-client">
-            <option value="">— Seleziona cliente —</option>
-            ${state.clients.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}
-          </select>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={salva}
+            disabled={saving}
+            style={{
+              padding: "9px 16px",
+              background: COLORS.primary,
+              color: "#fff",
+              border: "none",
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            {saving ? "Salvataggio..." : editingId ? "Salva modifiche" : "Salva preventivo"}
+          </button>
+          {editingId && (
+            <button
+              onClick={resetForm}
+              style={{
+                padding: "9px 16px",
+                background: "#fff",
+                color: COLORS.primary,
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: 8,
+                fontSize: 13,
+                cursor: "pointer",
+              }}
+            >
+              Annulla
+            </button>
+          )}
         </div>
       </div>
-      <label>Note (argomenti trattati, cataloghi/listini lasciati...)</label>
-      <textarea id="cv-note"></textarea>
-      <button class="btn" onclick="saveCalendarVisit('${dateStr}')">Salva visita</button>
-      <hr class="section-divider">
-      <h3>Visite in questo giorno</h3>
-      <div id="dayVisitsList">${renderDayVisitsList(dateStr)}</div>
-    </div>
-  `;
-}
-function renderDayVisitsList(dateStr){
-  const items = [];
-  state.clients.forEach(c=>{
-    (c.visits||[]).forEach(v=>{
-      if(v.date===dateStr) items.push({client:c, visit:v});
-    });
-  });
-  if(items.length===0) return '<p class="small-note">Nessuna visita registrata per questo giorno.</p>';
-  return items.map(x=>`
-    <div class="list-item" style="cursor:default;">
-      <div><strong>${escapeHtml(x.client.name)}</strong><br><span class="small-note">${escapeHtml(x.visit.note||'')}</span></div>
-    </div>
-  `).join('');
-}
-function saveCalendarVisit(dateStr){
-  const clientId = document.getElementById('cv-client').value;
-  const note = document.getElementById('cv-note').value.trim();
-  if(!clientId){ toast('Seleziona un cliente'); return; }
-  const c = state.clients.find(x=>x.id===clientId);
-  if(!c.visits) c.visits=[];
-  c.visits.push({id:uid(), date:dateStr, note});
-  saveClients();
-  toast('Visita registrata e salvata nella scheda cliente');
-  renderCalendarioPage();
-  openDayVisit(new Date(dateStr).getFullYear(), new Date(dateStr).getMonth(), new Date(dateStr).getDate());
-}
 
-/* ===================== PREVENTIVI E OFFERTE ===================== */
-let currentQuoteLines = [];
-let currentQuoteMeta = {};
-
-function newLine(direct){
-  return { id:uid(), art:'', description:'', finish:'', qty:1, unitPrice:0, discount1:0, discount2:0, directNet:0, isDirectNet: !!direct };
-}
-
-function renderPreventiviPage(){
-  const app = document.getElementById('app');
-  if(currentParams.action==='new'){ return renderPreventivoForm(null); }
-  if(currentParams.editId){ return renderPreventivoForm(currentParams.editId); }
-  if(currentParams.viewId){ return renderPreventivoView(currentParams.viewId); }
-
-  const search = currentParams.search || '';
-  let list = state.quotes.slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
-  if(search) list = list.filter(q=>(q.rif||'').toLowerCase().includes(search.toLowerCase()) || clientName(q.clientId).toLowerCase().includes(search.toLowerCase()));
-
-  app.innerHTML = `
-    <h1 class="page-title">Preventivi e offerte</h1>
-    <p class="page-sub">Richieste clienti e offerte showroom, con esportazione PDF professionale.</p>
-    <div class="row" style="margin-bottom:14px;">
-      <button class="btn" onclick="navigate('preventivi',{action:'new'})">+ Nuovo preventivo/offerta</button>
-      <div class="col"><input type="text" placeholder="Cerca per RIF o cliente..." value="${escapeHtml(search)}" oninput="navigate('preventivi',{search:this.value})" style="margin-bottom:0;"></div>
-    </div>
-    ${list.length===0 ? emptyState('Nessun preventivo o offerta creata', 'Crea il primo preventivo o offerta per un cliente o per uno showroom.') : ''}
-    <div>
-      ${list.map(q=>`
-        <div class="list-item" onclick="navigate('preventivi',{viewId:'${q.id}'})">
-          <div>
-            <strong>${q.type==='offerta'?'Offerta':'Preventivo'} ${q.rif?('— RIF: '+escapeHtml(q.rif)):''}</strong>
-            <span class="pill" style="background:${q.status==='accettato'?'#E7F7ED':'var(--blue-light)'};color:${q.status==='accettato'?'var(--ok)':'var(--blue-dark)'};">${q.status==='accettato'?'Accettato / Ordine':'Aperto'}</span><br>
-            <span class="small-note">${escapeHtml(companyName(q.companyId))} · ${escapeHtml(clientName(q.clientId))} · ${fmtDate(q.date)} · Netto: ${euro(quoteNetTotal(q))}</span>
-          </div>
-        </div>
-      `).join('')}
-    </div>
-  `;
-}
-
-function quoteLineNetTotal(line){
-  if(line.isDirectNet){
-    return (parseFloat(line.directNet)||0) * (parseFloat(line.qty)||0);
-  }
-  const listinoTotal = (parseFloat(line.unitPrice)||0) * (parseFloat(line.qty)||0);
-  const afterD1 = listinoTotal * (1-(parseFloat(line.discount1)||0)/100);
-  const afterD2 = afterD1 * (1-(parseFloat(line.discount2)||0)/100);
-  return afterD2;
-}
-function quoteNetTotal(q){
-  return (q.lines||[]).reduce((acc,l)=>acc+quoteLineNetTotal(l),0);
-}
-
-const CHARGE_LABELS = { iva:'IVA', trasporto:'Trasporto', imballo:'Imballo' };
-const CHARGE_ESCLUSO_TEXT = { iva:'Esclusa', trasporto:'Escluso', imballo:'Escluso' };
-
-// Calcola una singola voce (iva/trasporto/imballo) in base alla modalità scelta.
-// Ritorna null se la voce non deve comparire affatto (modalità "non specificato").
-function computeCharge(key, q, netto){
-  const mode = q[key+'Mode'] || 'none';
-  const value = parseFloat(q[key+'Value']) || 0;
-  if(mode === 'none') return null;
-  if(mode === 'escluso') return { mode, display: CHARGE_ESCLUSO_TEXT[key], amount: 0, included:false };
-  if(mode === 'importo') return { mode, display: euro(value), amount: value, included:true };
-  if(mode === 'percentuale'){
-    const amt = netto * value/100;
-    return { mode, display: value + '% (' + euro(amt) + ')', amount: amt, included:true };
-  }
-  return null;
-}
-function quoteCharges(q){
-  const netto = quoteNetTotal(q);
-  const iva = computeCharge('iva', q, netto);
-  const trasporto = computeCharge('trasporto', q, netto);
-  const imballo = computeCharge('imballo', q, netto);
-  const totale = netto + (iva&&iva.included?iva.amount:0) + (trasporto&&trasporto.included?trasporto.amount:0) + (imballo&&imballo.included?imballo.amount:0);
-  return { netto, iva, trasporto, imballo, totale };
-}
-
-function chargeFieldHtml(key, q){
-  const mode = q[key+'Mode'] || 'none';
-  const value = q[key+'Value']||0;
-  return `
-    <div class="col">
-      <label>${CHARGE_LABELS[key]}</label>
-      <select id="q-${key}-mode" onchange="onChargeModeChange('${key}', this.value)">
-        <option value="none" ${mode==='none'?'selected':''}>Non specificato (non comparirà sul PDF)</option>
-        <option value="escluso" ${mode==='escluso'?'selected':''}>Escluso</option>
-        <option value="importo" ${mode==='importo'?'selected':''}>Importo (€)</option>
-        <option value="percentuale" ${mode==='percentuale'?'selected':''}>Percentuale (%)</option>
-      </select>
-      ${(mode==='importo'||mode==='percentuale') ? `<input type="number" step="0.01" id="q-${key}-value" value="${value}" placeholder="${mode==='importo'?'Importo in €':'Percentuale %'}" onchange="onChargeValueChange('${key}', this.value)">` : ''}
-    </div>
-  `;
-}
-function onChargeModeChange(key, mode){
-  currentQuoteMeta[key+'Mode'] = mode;
-  renderChargesSection();
-  renderQuoteSummary();
-}
-function onChargeValueChange(key, value){
-  currentQuoteMeta[key+'Value'] = parseFloat(value)||0;
-  renderQuoteSummary();
-}
-function renderChargesSection(){
-  const el = document.getElementById('chargesFields');
-  if(!el) return;
-  el.innerHTML = `
-    <div class="row">
-      ${chargeFieldHtml('iva', currentQuoteMeta)}
-      ${chargeFieldHtml('trasporto', currentQuoteMeta)}
-      ${chargeFieldHtml('imballo', currentQuoteMeta)}
-    </div>
-  `;
-}
-
-function renderPreventivoForm(editId){
-  const app = document.getElementById('app');
-  const editing = editId ? state.quotes.find(q=>q.id===editId) : null;
-  if(editing){
-    currentQuoteMeta = {
-      id:editing.id, type:editing.type, companyId:editing.companyId, clientId:editing.clientId,
-      rif:editing.rif, date:editing.date, status:editing.status,
-      ivaMode: editing.ivaMode || 'escluso', ivaValue: editing.ivaValue || 0,
-      trasportoMode: editing.trasportoMode || 'escluso', trasportoValue: editing.trasportoValue || 0,
-      // retrocompatibilità: i preventivi creati in precedenza avevano solo "imballoPercent"
-      imballoMode: editing.imballoMode || (editing.imballoPercent ? 'percentuale' : 'none'),
-      imballoValue: editing.imballoValue!=null ? editing.imballoValue : (editing.imballoPercent || 0)
-    };
-    currentQuoteLines = JSON.parse(JSON.stringify(editing.lines||[]));
-  }else{
-    currentQuoteMeta = {
-      id:uid(), type:'preventivo', companyId:'', clientId:'', rif:'', date:new Date().toISOString().slice(0,10), status:'aperto',
-      ivaMode:'escluso', ivaValue:0, trasportoMode:'escluso', trasportoValue:0, imballoMode:'none', imballoValue:0
-    };
-    currentQuoteLines = [newLine(false)];
-  }
-  app.innerHTML = `
-    <h1 class="page-title">${editing?'Modifica preventivo/offerta':'Nuovo preventivo/offerta'}</h1>
-    <div class="card">
-      <div class="row">
-        <div class="col">
-          <label>Tipo</label>
-          <select id="q-type" onchange="currentQuoteMeta.type=this.value">
-            <option value="preventivo" ${currentQuoteMeta.type==='preventivo'?'selected':''}>Preventivo (richiesta cliente)</option>
-            <option value="offerta" ${currentQuoteMeta.type==='offerta'?'selected':''}>Offerta showroom</option>
-          </select>
-        </div>
-        <div class="col">
-          <label>Azienda (mandante)</label>
-          <select id="q-company" onchange="onQuoteCompanyChange(this.value)">
-            <option value="">— Seleziona azienda —</option>
-            ${state.companies.map(c=>`<option value="${c.id}" ${currentQuoteMeta.companyId===c.id?'selected':''}>${escapeHtml(c.name)}</option>`).join('')}
-          </select>
-        </div>
-        <div class="col">
-          <label>Data</label>
-          <input id="q-date" type="date" value="${currentQuoteMeta.date}" onchange="currentQuoteMeta.date=this.value">
-        </div>
-      </div>
-      <div class="row">
-        <div class="col">
-          <label>Spettabile (cliente)</label>
-          <select id="q-client" onchange="onQuoteClientChange(this.value)">
-            <option value="">— Seleziona cliente —</option>
-            ${state.clients.map(c=>`<option value="${c.id}" ${currentQuoteMeta.clientId===c.id?'selected':''}>${escapeHtml(c.name)}</option>`).join('')}
-          </select>
-        </div>
-        <div class="col">
-          <label>RIF (riferimento)</label>
-          <input id="q-rif" type="text" value="${escapeHtml(currentQuoteMeta.rif)}" placeholder="Es. nome progetto / cantiere" onchange="currentQuoteMeta.rif=this.value">
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <h3>Righe preventivo</h3>
-      <p class="small-note">Seleziona l'azienda sopra per abilitare l'autocompletamento articoli dal listino. Ogni riga ha due righe di sconto in cascata sul prezzo di listino.</p>
-      <div id="linesContainer"></div>
-      <div class="row">
-        <button class="btn secondary small" onclick="addQuoteLine(false)">+ Riga con sconti da listino</button>
-        <button class="btn secondary small" onclick="addQuoteLine(true)">+ Riga con prezzo netto diretto</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h3>IVA, trasporto e imballo</h3>
-      <p class="small-note">Per ognuna scegli se indicare un importo fisso, una percentuale sul netto, se segnarla come esclusa, oppure non specificarla (in questo caso non comparirà affatto sul PDF).</p>
-      <div id="chargesFields"></div>
-      <div id="quoteSummary"></div>
-    </div>
-
-    <div class="row">
-      <button class="btn" onclick="saveQuote()">Salva ${currentQuoteMeta.type==='offerta'?'offerta':'preventivo'}</button>
-      <button class="btn secondary" onclick="navigate('preventivi')">Annulla</button>
-    </div>
-  `;
-  renderQuoteLines();
-  renderChargesSection();
-}
-
-function onQuoteCompanyChange(val){ currentQuoteMeta.companyId = val; renderQuoteLines(); }
-function onQuoteClientChange(val){ currentQuoteMeta.clientId = val; }
-
-function addQuoteLine(direct){
-  currentQuoteLines.push(newLine(direct));
-  renderQuoteLines();
-}
-function removeQuoteLine(lineId){
-  currentQuoteLines = currentQuoteLines.filter(l=>l.id!==lineId);
-  renderQuoteLines();
-}
-
-function renderQuoteLines(){
-  const container = document.getElementById('linesContainer');
-  const company = state.companies.find(c=>c.id===currentQuoteMeta.companyId);
-  const priceList = company ? (company.priceList||[]) : [];
-  const datalistId = 'articoli-datalist';
-
-  container.innerHTML = `
-    <datalist id="${datalistId}">
-      ${priceList.map(a=>`<option value="${escapeHtml(a.code)}">`).join('')}
-    </datalist>
-    ${currentQuoteLines.map(line=>`
-      <div class="quote-line-row" id="row-${line.id}">
-        <div class="row" style="align-items:flex-end;">
-          <div class="col" style="max-width:140px;">
-            <label>Art. (codice)</label>
-            <input type="text" list="${datalistId}" value="${escapeHtml(line.art)}" oninput="setLineArt('${line.id}', this.value)" onchange="onLineArtInput('${line.id}', this.value)">
-          </div>
-          <div class="col" style="flex:2;min-width:220px;">
-            <label>Descrizione</label>
-            <input type="text" id="desc-${line.id}" value="${escapeHtml(line.description)}" onchange="updateLineField('${line.id}','description',this.value)">
-          </div>
-          <div class="col" style="max-width:130px;">
-            <label>Finitura</label>
-            <input type="text" id="fin-${line.id}" value="${escapeHtml(line.finish)}" onchange="updateLineField('${line.id}','finish',this.value)">
-          </div>
-          <div class="col" style="max-width:90px;">
-            <label>Quantità</label>
-            <input type="number" min="0" step="1" id="qty-${line.id}" value="${line.qty}" onchange="updateLineField('${line.id}','qty',this.value)">
-          </div>
-          <div class="close-x" onclick="removeQuoteLine('${line.id}')" title="Rimuovi riga">&times;</div>
-        </div>
-        ${line.isDirectNet ? `
-        <div class="row">
-          <div class="col" style="max-width:180px;"><label>Prezzo netto unitario (diretto)</label><input type="number" step="0.01" id="net-${line.id}" value="${line.directNet}" onchange="updateLineField('${line.id}','directNet',this.value)"></div>
-          <div class="col"><p class="small-note">Riga a prezzo netto diretto: nessun prezzo di listino né sconto applicati.</p></div>
-        </div>
-        ` : `
-        <div class="row">
-          <div class="col" style="max-width:140px;"><label>Prezzo listino unitario</label><input type="number" step="0.01" id="price-${line.id}" value="${line.unitPrice}" onchange="updateLineField('${line.id}','unitPrice',this.value)"></div>
-          <div class="col" style="max-width:110px;"><label>Sconto 1 (%)</label><input type="number" step="0.01" value="${line.discount1}" onchange="updateLineField('${line.id}','discount1',this.value)"></div>
-          <div class="col" style="max-width:110px;"><label>Sconto 2 (%)</label><input type="number" step="0.01" value="${line.discount2}" onchange="updateLineField('${line.id}','discount2',this.value)"></div>
-          <div class="col"><label>Prezzo netto riga</label><input type="text" id="netcell-${line.id}" disabled value="${euro(quoteLineNetTotal(line))}"></div>
-        </div>
-        `}
-      </div>
-    `).join('')}
-  `;
-  renderQuoteSummary();
-}
-
-function setLineArt(lineId, code){
-  const line = currentQuoteLines.find(l=>l.id===lineId);
-  if(!line) return;
-  line.art = code;
-  // Autocompletamento "live" senza ricostruire il DOM, per non perdere il focus sul campo
-  const company = state.companies.find(c=>c.id===currentQuoteMeta.companyId);
-  if(company){
-    const match = (company.priceList||[]).find(a=>a.code===code);
-    if(match){
-      line.description = match.description;
-      line.finish = match.finish||'';
-      const descEl = document.getElementById('desc-'+lineId);
-      const finEl = document.getElementById('fin-'+lineId);
-      if(descEl) descEl.value = match.description;
-      if(finEl) finEl.value = match.finish||'';
-      if(!line.isDirectNet){
-        line.unitPrice = match.price;
-        const priceEl = document.getElementById('price-'+lineId);
-        if(priceEl) priceEl.value = match.price;
-        const netEl = document.getElementById('netcell-'+lineId);
-        if(netEl) netEl.value = euro(quoteLineNetTotal(line));
-      }
-      renderQuoteSummary();
-    }
-  }
-}
-function onLineArtInput(lineId, code){
-  // Eseguito su blur/Invio: assicura che tutto sia coerente e aggiorna eventuale riepilogo
-  const line = currentQuoteLines.find(l=>l.id===lineId);
-  if(!line) return;
-  line.art = code;
-  const company = state.companies.find(c=>c.id===currentQuoteMeta.companyId);
-  if(company){
-    const match = (company.priceList||[]).find(a=>a.code===code);
-    if(match){
-      line.description = match.description;
-      line.finish = match.finish||'';
-      if(!line.isDirectNet) line.unitPrice = match.price;
-    }
-  }
-  renderQuoteLines();
-}
-function updateLineField(lineId, field, value){
-  const line = currentQuoteLines.find(l=>l.id===lineId);
-  if(field==='description' || field==='finish'){ line[field]=value; }
-  else{ line[field] = parseFloat(value)||0; }
-  renderQuoteSummary();
-  // Update net-price cell display without full rerender to keep focus
-  const summaryOnly = document.getElementById('quoteSummary');
-  if(summaryOnly) renderQuoteLinesLight();
-}
-function renderQuoteLinesLight(){
-  // Refresh only computed net values without losing input focus: safe full rerender since blur already occurred (onchange)
-  renderQuoteLines();
-}
-
-function renderQuoteSummary(){
-  const el = document.getElementById('quoteSummary');
-  if(!el) return;
-  const tempQuote = Object.assign({}, currentQuoteMeta, {lines: currentQuoteLines});
-  const ch = quoteCharges(tempQuote);
-  const rows = [{ label:'Netto totale', value: euro(ch.netto) }];
-  if(ch.iva) rows.push({ label:'IVA', value: ch.iva.display });
-  if(ch.trasporto) rows.push({ label:'Trasporto', value: ch.trasporto.display });
-  if(ch.imballo) rows.push({ label:'Imballo', value: ch.imballo.display });
-  rows.push({ label:'Totale documento', value: euro(ch.totale) });
-  el.innerHTML = `
-    <div class="grid-cards" style="margin-top:12px;">
-      ${rows.map(r=>`<div class="stat-card"><div class="num" style="font-size:16px;">${r.value}</div><div class="lbl">${r.label}</div></div>`).join('')}
-    </div>
-  `;
-}
-
-function saveQuote(){
-  if(!currentQuoteMeta.companyId){ toast("Seleziona l'azienda"); return; }
-  if(!currentQuoteMeta.clientId){ toast('Seleziona il cliente'); return; }
-  const existingIdx = state.quotes.findIndex(q=>q.id===currentQuoteMeta.id);
-  const quote = Object.assign({}, currentQuoteMeta, {lines: currentQuoteLines});
-  if(existingIdx>=0) state.quotes[existingIdx] = quote;
-  else state.quotes.push(quote);
-  saveQuotes();
-  toast('Preventivo salvato');
-  navigate('preventivi',{viewId:quote.id});
-}
-
-function renderPreventivoView(id){
-  const app = document.getElementById('app');
-  const q = state.quotes.find(x=>x.id===id);
-  if(!q){ navigate('preventivi'); return; }
-  const ch = quoteCharges(q);
-  const summaryCards = [
-    `<div class="stat-card"><div class="num">${euro(ch.netto)}</div><div class="lbl">Netto totale</div></div>`,
-    ch.iva ? `<div class="stat-card"><div class="num" style="font-size:16px;">${ch.iva.display}</div><div class="lbl">IVA</div></div>` : '',
-    ch.trasporto ? `<div class="stat-card"><div class="num" style="font-size:16px;">${ch.trasporto.display}</div><div class="lbl">Trasporto</div></div>` : '',
-    ch.imballo ? `<div class="stat-card"><div class="num" style="font-size:16px;">${ch.imballo.display}</div><div class="lbl">Imballo</div></div>` : '',
-    `<div class="stat-card"><div class="num">${euro(ch.totale)}</div><div class="lbl">Totale documento</div></div>`
-  ].join('');
-  app.innerHTML = `
-    <h1 class="page-title">${q.type==='offerta'?'Offerta':'Preventivo'} ${q.rif?('— RIF: '+escapeHtml(q.rif)):''}</h1>
-    <p class="page-sub">${escapeHtml(companyName(q.companyId))} · Spettabile ${escapeHtml(clientName(q.clientId))} · ${fmtDate(q.date)}</p>
-    <div class="row" style="margin-bottom:14px;">
-      <button class="btn secondary" onclick="navigate('preventivi',{editId:'${q.id}'})">Modifica</button>
-      <button class="btn secondary" onclick="exportQuotePDF('${q.id}')">Esporta PDF</button>
-      ${q.status!=='accettato' ? `<button class="btn" onclick="acceptQuote('${q.id}')">Segna come accettato / Ordine</button>` : `<span class="pill" style="background:#E7F7ED;color:var(--ok);">Accettato / Ordine</span>`}
-      <button class="btn danger" onclick="deleteQuote('${q.id}')">Elimina</button>
-      <button class="btn secondary" onclick="navigate('preventivi')">&larr; Torna all'elenco</button>
-    </div>
-    <div class="card">
-      <table>
-        <thead><tr>
-          <th>Art.</th><th>Descrizione</th><th>Finitura</th><th>Qtà</th>
-          <th>Prezzo unit.</th><th>Prezzo tot.</th><th>Sc.1</th><th>Sc.2</th><th>Netto</th>
-        </tr></thead>
-        <tbody>
-          ${(q.lines||[]).map(l=>`
-            <tr>
-              <td>${escapeHtml(l.art)}</td>
-              <td>${escapeHtml(l.description)}</td>
-              <td>${escapeHtml(l.finish||'')}</td>
-              <td>${l.qty}</td>
-              <td>${l.isDirectNet ? '—' : euro(l.unitPrice)}</td>
-              <td>${l.isDirectNet ? '—' : euro((l.unitPrice||0)*(l.qty||0))}</td>
-              <td>${l.isDirectNet ? '—' : (l.discount1||0)+'%'}</td>
-              <td>${l.isDirectNet ? '—' : (l.discount2||0)+'%'}</td>
-              <td>${euro(quoteLineNetTotal(l))}</td>
+      <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>
+        Preventivi salvati
+      </h3>
+      {loading ? (
+        <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
+      ) : lista.length === 0 ? (
+        <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun preventivo salvato.</p>
+      ) : (
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead>
+            <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
+              <th style={{ padding: "8px 6px" }}>RIF</th>
+              <th style={{ padding: "8px 6px" }}>Data</th>
+              <th style={{ padding: "8px 6px" }}>Cliente</th>
+              <th style={{ padding: "8px 6px" }}>Azienda</th>
+              <th style={{ padding: "8px 6px" }}></th>
             </tr>
-          `).join('')}
-        </tbody>
-      </table>
-      <hr class="section-divider">
-      <div class="grid-cards">
-        ${summaryCards}
+          </thead>
+          <tbody>
+            {lista.map((p) => (
+              <tr key={p.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
+                <td style={{ padding: "8px 6px" }}>{p.rif || "-"}</td>
+                <td style={{ padding: "8px 6px" }}>
+                  {p.data ? new Date(p.data).toLocaleDateString("it-IT") : "-"}
+                </td>
+                <td style={{ padding: "8px 6px" }}>{nomeCliente(p.cliente_id)}</td>
+                <td style={{ padding: "8px 6px" }}>{nomeAzienda(p.azienda_id)}</td>
+                <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }}>
+                  <button
+                    onClick={() => stampaPreventivo(p, clienti, aziende)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: COLORS.success,
+                      cursor: "pointer",
+                      fontSize: 12,
+                      marginRight: 10,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                    }}
+                  >
+                    <Printer size={13} /> PDF
+                  </button>
+                  <button
+                    onClick={() => modifica(p)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: COLORS.primary,
+                      cursor: "pointer",
+                      fontSize: 12,
+                      marginRight: 10,
+                    }}
+                  >
+                    Modifica
+                  </button>
+                  <button
+                    onClick={() => elimina(p.id)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: COLORS.danger,
+                      cursor: "pointer",
+                      fontSize: 12,
+                    }}
+                  >
+                    Elimina
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// SHELL PRINCIPALE APP (dietro login)
+// ============================================================
+function AppShell({ session, onLogout }) {
+  const [menuOpen, setMenuOpen] = useState(true);
+  const [page, setPage] = useState("dashboard");
+  const [role, setRole] = useState("user");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(
+          `${SUPABASE_URL}/rest/v1/profiles?id=eq.${session.user.id}&select=role`,
+          {
+            headers: {
+              apikey: SUPABASE_ANON_KEY,
+              Authorization: `Bearer ${session.access_token}`,
+            },
+          }
+        );
+        const data = await res.json();
+        if (data && data[0]) setRole(data[0].role);
+      } catch (e) {
+        // silenzioso: resta 'user'
+      }
+    })();
+  }, [session]);
+
+  const menuItems = [
+    { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { key: "clienti", label: "Clienti", icon: Users },
+    { key: "aziende", label: "Aziende mandanti", icon: Building2 },
+    { key: "visite", label: "Visite", icon: CalendarDays },
+    { key: "preventivi", label: "Preventivi", icon: FileText },
+    ...(role === "admin" ? [{ key: "admin", label: "Pannello Admin", icon: ShieldCheck }] : []),
+  ];
+
+  return (
+    <div style={{ minHeight: "100vh", background: COLORS.bg, fontFamily: "Arial, sans-serif" }}>
+      <header
+        style={{
+          display: "flex",
+          alignItems: "center",
+          padding: "14px 22px",
+          background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.primaryDark})`,
+          boxShadow: "0 2px 12px rgba(11,123,196,0.2)",
+        }}
+      >
+        <button
+          onClick={() => setMenuOpen((v) => !v)}
+          style={{
+            background: "rgba(255,255,255,0.15)",
+            border: "none",
+            borderRadius: 8,
+            width: 34,
+            height: 34,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#fff",
+            cursor: "pointer",
+            marginRight: 14,
+          }}
+        >
+          <MenuIcon size={18} />
+        </button>
+        <span style={{ fontWeight: 700, color: "#fff", fontSize: 16 }}>CRM Arredo Bagno</span>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 14 }}>
+          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.85)" }}>
+            {session.user.email}
+          </span>
+          <button
+            onClick={onLogout}
+            style={{
+              background: "rgba(255,255,255,0.15)",
+              border: "none",
+              borderRadius: 8,
+              padding: "7px 12px",
+              fontSize: 12,
+              color: "#fff",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <LogOut size={14} /> Esci
+          </button>
+        </div>
+      </header>
+
+      <div style={{ display: "flex" }}>
+        {menuOpen && (
+          <nav
+            style={{
+              width: 210,
+              background: COLORS.card,
+              borderRight: `1px solid ${COLORS.border}`,
+              minHeight: "calc(100vh - 61px)",
+              padding: "14px 10px",
+            }}
+          >
+            {menuItems.map((item) => {
+              const Icon = item.icon;
+              const active = page === item.key;
+              return (
+                <div
+                  key={item.key}
+                  onClick={() => setPage(item.key)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "10px 14px",
+                    marginBottom: 4,
+                    borderRadius: 10,
+                    fontSize: 14,
+                    color: active ? COLORS.primary : COLORS.text,
+                    background: active ? "#eaf5fc" : "transparent",
+                    cursor: "pointer",
+                    fontWeight: active ? 600 : 400,
+                  }}
+                >
+                  <Icon size={17} />
+                  {item.label}
+                </div>
+              );
+            })}
+          </nav>
+        )}
+
+        <main style={{ flex: 1, padding: 28 }}>
+          {page === "dashboard" && <Dashboard session={session} goTo={setPage} />}
+          {page === "admin" && role === "admin" && <AdminPanel session={session} />}
+          {page === "aziende" && <AziendeMandanti session={session} />}
+          {page === "clienti" && <ClientiAnagrafica session={session} />}
+          {page === "visite" && <CalendarioVisite session={session} />}
+          {page === "preventivi" && <PreventiviOfferte session={session} />}
+        </main>
       </div>
     </div>
-  `;
+  );
 }
 
-function deleteQuote(id){
-  showConfirm('Eliminare questo preventivo/offerta? Questa azione non può essere annullata.', () => {
-    state.quotes = state.quotes.filter(q=>q.id!==id);
-    saveQuotes();
-    toast('Preventivo/offerta eliminato');
-    navigate('preventivi');
-  });
-}
+// ============================================================
+// COMPONENTE RADICE
+// ============================================================
+export default function App() {
+  const [session, setSession] = useState(null);
 
-function acceptQuote(id){
-  const q = state.quotes.find(x=>x.id===id);
-  if(q.status==='accettato') return;
-  q.status='accettato';
-  saveQuotes();
-  const c = state.clients.find(x=>x.id===q.clientId);
-  if(c){
-    if(!c.revenueByCompany) c.revenueByCompany={};
-    const netto = quoteNetTotal(q);
-    c.revenueByCompany[q.companyId] = (c.revenueByCompany[q.companyId]||0) + netto;
-    saveClients();
+  if (!session) {
+    return <LoginScreen onLogin={(data) => setSession(data)} />;
   }
-  toast('Preventivo trasformato in ordine: fatturato aggiornato');
-  renderPreventivoView(id);
+
+  return <AppShell session={session} onLogout={() => setSession(null)} />;
 }
-
-function showPdfPreview(blobUrl, filename, title){
-  document.getElementById('pdfPreviewTitle').textContent = title || 'Anteprima PDF';
-  document.getElementById('pdfPreviewFrame').src = blobUrl;
-  const dl = document.getElementById('pdfDownloadLink');
-  dl.href = blobUrl;
-  dl.setAttribute('download', filename);
-  const openTab = document.getElementById('pdfOpenTabLink');
-  openTab.href = blobUrl;
-  document.getElementById('pdfPreviewOverlay').style.display = 'flex';
-}
-function closePdfPreview(){
-  document.getElementById('pdfPreviewOverlay').style.display = 'none';
-  document.getElementById('pdfPreviewFrame').src = '';
-}
-
-function drawTableManually(doc, startY, head, rows, colWidths){
-  const startX = 14;
-  const rowH = 7;
-  let y = startY;
-  doc.setFillColor(45,125,210);
-  doc.setTextColor(255,255,255);
-  doc.setFontSize(8);
-  doc.setFont('helvetica','bold');
-  let x = startX;
-  doc.rect(startX, y, colWidths.reduce((a,b)=>a+b,0), rowH, 'F');
-  head.forEach((h,i)=>{ doc.text(String(h), x+2, y+5); x+=colWidths[i]; });
-  y += rowH;
-  doc.setTextColor(20,20,20);
-  doc.setFont('helvetica','normal');
-  rows.forEach(row=>{
-    if(y > 275){ doc.addPage(); y = 20; }
-    x = startX;
-    doc.setDrawColor(225,232,238);
-    doc.rect(startX, y, colWidths.reduce((a,b)=>a+b,0), rowH);
-    row.forEach((cell,i)=>{
-      const text = String(cell);
-      doc.text(text.length>28?text.slice(0,26)+'…':text, x+2, y+5);
-      x += colWidths[i];
-    });
-    y += rowH;
-  });
-  return y;
-}
-
-function exportQuotePDF(id){
-  const q = state.quotes.find(x=>x.id===id);
-  if(!q){ toast('Preventivo non trovato'); return; }
-  if(!window.jspdf || !window.jspdf.jsPDF){ toast('Libreria PDF non disponibile, riprova tra qualche secondo'); return; }
-  try{
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    const company = companyName(q.companyId);
-    const client = clientName(q.clientId);
-
-    doc.setFont('helvetica','bold');
-    doc.setFontSize(16);
-    doc.text(company, 14, 18);
-    doc.setFont('helvetica','normal');
-    doc.setFontSize(10);
-    doc.text('Data: ' + fmtDate(q.date), 14, 26);
-    doc.text('Spettabile: ' + client, 14, 32);
-    if(q.rif) doc.text('RIF: ' + q.rif, 14, 38);
-    doc.setFontSize(12);
-    doc.text(q.type==='offerta' ? 'OFFERTA' : 'PREVENTIVO', 165, 18);
-
-    const head = ['Articolo','Descrizione','Finitura','Qtà','Prezzo unitario','Prezzo totale','Sc.1','Sc.2','Prezzo netto'];
-    const rows = (q.lines||[]).map(l=>[
-      l.art||'', l.description||'', l.finish||'', String(l.qty||0),
-      l.isDirectNet ? '—' : euro(l.unitPrice),
-      l.isDirectNet ? '—' : euro((l.unitPrice||0)*(l.qty||0)),
-      l.isDirectNet ? '—' : (l.discount1||0)+'%',
-      l.isDirectNet ? '—' : (l.discount2||0)+'%',
-      euro(quoteLineNetTotal(l))
-    ]);
-
-    let finalY;
-    if(typeof doc.autoTable === 'function'){
-      doc.autoTable({
-        startY: 44,
-        head: [head],
-        body: rows,
-        styles:{font:'helvetica', fontSize:8, cellPadding:3},
-        headStyles:{fillColor:[45,125,210], textColor:255, fontSize:7.5},
-        columnStyles:{
-          3:{halign:'right'}, 4:{halign:'right'}, 5:{halign:'right'},
-          6:{halign:'right'}, 7:{halign:'right'}, 8:{halign:'right'}
-        },
-        theme:'grid'
-      });
-      finalY = doc.lastAutoTable.finalY;
-    } else {
-      // Riserva: disegno manuale della tabella se il plugin non è disponibile
-      const colWidths = [18,48,16,10,26,26,12,12,22];
-      finalY = drawTableManually(doc, 44, head, rows, colWidths);
-    }
-
-    let y = finalY + 10;
-    const ch = quoteCharges(q);
-    doc.setFontSize(10);
-    doc.setTextColor(20,20,20);
-    doc.text('Netto totale: ' + euro(ch.netto), 140, y); y+=6;
-    if(ch.iva){ doc.text('IVA: ' + ch.iva.display, 140, y); y+=6; }
-    if(ch.trasporto){ doc.text('Trasporto: ' + ch.trasporto.display, 140, y); y+=6; }
-    if(ch.imballo){ doc.text('Imballo: ' + ch.imballo.display, 140, y); y+=6; }
-    doc.setFont('helvetica','bold');
-    doc.text('Totale documento: ' + euro(ch.totale), 140, y); y+=10;
-    doc.setFont('helvetica','normal');
-    const filename = (q.type==='offerta'?'Offerta_':'Preventivo_') + (q.rif||q.id).replace(/[^a-z0-9_\-]/gi,'_') + '.pdf';
-    const blob = doc.output('blob');
-    const blobUrl = URL.createObjectURL(blob);
-    showPdfPreview(blobUrl, filename, (q.type==='offerta'?'Offerta':'Preventivo') + (q.rif?(' — RIF: '+q.rif):''));
-    toast('PDF generato: usa "Scarica" o "Apri in nuova scheda"');
-  }catch(err){
-    console.error('Errore esportazione PDF', err);
-    toast('Errore durante la creazione del PDF. Riprova.');
-  }
-}
-
-/* ===================== MAPPA CLIENTI ===================== */
-let leafletMap = null;
-function renderMappaPage(){
-  const app = document.getElementById('app');
-  const withCoords = state.clients.filter(c=>c.lat && c.lng);
-  app.innerHTML = `
-    <h1 class="page-title">Mappa clienti</h1>
-    <p class="page-sub">Posizione dei clienti geolocalizzati (${withCoords.length} su ${state.clients.length}).</p>
-    ${withCoords.length===0 ? emptyState('Nessun cliente geolocalizzato', 'Vai sulla scheda di un cliente e usa "Geolocalizza indirizzo" nella tab Anagrafica.') : '<div id="map"></div>'}
-  `;
-  if(withCoords.length===0) return;
-  setTimeout(()=>{
-    if(leafletMap){ leafletMap.remove(); leafletMap=null; }
-    leafletMap = L.map('map').setView([withCoords[0].lat, withCoords[0].lng], 8);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(leafletMap);
-    const bounds = [];
-    withCoords.forEach(c=>{
-      const marker = L.marker([c.lat, c.lng]).addTo(leafletMap);
-      marker.bindPopup(`<strong>${escapeHtml(c.name)}</strong><br>${escapeHtml(c.address||'')}`);
-      bounds.push([c.lat, c.lng]);
-    });
-    if(bounds.length>1) leafletMap.fitBounds(bounds, {padding:[30,30]});
-  }, 50);
-}
-
-/* ===================== FATTURATO ===================== */
-function renderFatturatoPage(){
-  const app = document.getElementById('app');
-  const byCompany = {};
-  let totalAll = 0;
-  state.clients.forEach(c=>{
-    Object.entries(c.revenueByCompany||{}).forEach(([cid,val])=>{
-      byCompany[cid] = (byCompany[cid]||0) + val;
-      totalAll += val;
-    });
-  });
-  const clientsWithRevenue = state.clients.filter(c=>c.revenueByCompany && Object.keys(c.revenueByCompany).length>0)
-    .sort((a,b)=>{
-      const ta = Object.values(a.revenueByCompany).reduce((x,y)=>x+y,0);
-      const tb = Object.values(b.revenueByCompany).reduce((x,y)=>x+y,0);
-      return tb-ta;
-    });
-
-  app.innerHTML = `
-    <h1 class="page-title">Fatturato</h1>
-    <p class="page-sub">Fatturato generato dai preventivi/offerte segnati come "Accettato / Ordine".</p>
-    <div class="card">
-      <h3>Totale per azienda mandante</h3>
-      ${Object.keys(byCompany).length===0 ? '<p class="small-note">Nessun ordine confermato ancora.</p>' : `
-      <table>
-        <thead><tr><th>Azienda</th><th>Fatturato</th></tr></thead>
-        <tbody>${Object.entries(byCompany).map(([cid,val])=>`<tr><td>${escapeHtml(companyName(cid))}</td><td>${euro(val)}</td></tr>`).join('')}</tbody>
-      </table>`}
-      <h3 style="margin-top:14px;">Totale complessivo: ${euro(totalAll)}</h3>
-    </div>
-    <div class="card">
-      <h3>Fatturato per cliente</h3>
-      ${clientsWithRevenue.length===0 ? '<p class="small-note">Nessun cliente con ordini confermati.</p>' : clientsWithRevenue.map(c=>{
-        const tot = Object.values(c.revenueByCompany).reduce((x,y)=>x+y,0);
-        return `
-        <div class="list-item" onclick="navigate('clienti',{viewId:'${c.id}', tab:'fatturato'})">
-          <div><strong>${escapeHtml(c.name)}</strong></div>
-          <span class="pill">${euro(tot)}</span>
-        </div>`;
-      }).join('')}
-    </div>
-  `;
-}
-
-</script>
-</body>
-</html>
