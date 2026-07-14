@@ -1649,13 +1649,29 @@ function generaStampaHTML(p, clienti, aziende) {
   const azienda = aziende.find((a) => a.id === p.azienda_id);
   const righeArr = p.righe || [];
   const tot = calcolaTotaliPreventivo(p, righeArr);
+  const soloNetto = p.modalita_prezzi_pdf === "solo_netto";
+
+  const intestazioneColonne = soloNetto
+    ? `<th>Articolo</th><th>Descrizione</th><th>Finitura</th><th>Qtà</th><th>Prezzo netto un.</th><th>Prezzo netto totale</th>`
+    : `<th>Articolo</th><th>Descrizione</th><th>Finitura</th><th>Qtà</th><th>Prezzo listino un.</th><th>Sc.1</th><th>Sc.2</th><th>Prezzo netto un.</th><th>Prezzo netto totale</th>`;
 
   const righeHtml = righeArr
     .map((r) => {
       const { netto } = calcolaRigaNetto(r);
+      const qta = Number(r.quantita) || 0;
+      const nettoUnitario = qta > 0 ? netto / qta : netto;
+      if (soloNetto) {
+        return `<tr><td>${r.articolo || ""}</td><td>${r.descrizione || ""}</td><td>${
+          r.finitura || ""
+        }</td><td>${r.quantita || ""}</td><td>${nettoUnitario.toFixed(2)} €</td><td>${netto.toFixed(
+          2
+        )} €</td></tr>`;
+      }
       return `<tr><td>${r.articolo || ""}</td><td>${r.descrizione || ""}</td><td>${
         r.finitura || ""
       }</td><td>${r.quantita || ""}</td><td>${Number(r.prezzo_unitario || 0).toFixed(
+        2
+      )} €</td><td>${r.sconto1 || 0}%</td><td>${r.sconto2 || 0}%</td><td>${nettoUnitario.toFixed(
         2
       )} €</td><td>${netto.toFixed(2)} €</td></tr>`;
     })
@@ -1685,7 +1701,7 @@ function generaStampaHTML(p, clienti, aziende) {
     <p>Spettabile: ${cliente ? cliente.ragione_sociale : ""}</p>
     <p>${azienda ? azienda.nome : ""}</p>
     <table>
-      <thead><tr><th>Articolo</th><th>Descrizione</th><th>Finitura</th><th>Qtà</th><th>Prezzo un.</th><th>Netto</th></tr></thead>
+      <thead><tr>${intestazioneColonne}</tr></thead>
       <tbody>${righeHtml}</tbody>
     </table>
     <div class="totali">
@@ -1767,6 +1783,7 @@ function PreventiviOfferte({ session }) {
     iva_percentuale: 22,
     iva_valore: 0,
     modalita_pagamento: "",
+    modalita_prezzi_pdf: "dettagliato",
   };
   const [header, setHeader] = useState(emptyHeader);
   const [righe, setRighe] = useState([nuovaRiga()]);
@@ -1848,6 +1865,7 @@ function PreventiviOfferte({ session }) {
         iva_percentuale: Number(header.iva_percentuale) || 0,
         iva_valore: Number(header.iva_valore) || 0,
         modalita_pagamento: header.modalita_pagamento || null,
+        modalita_prezzi_pdf: header.modalita_prezzi_pdf || "dettagliato",
       };
       let res;
       if (editingId) {
@@ -1891,6 +1909,7 @@ function PreventiviOfferte({ session }) {
       iva_percentuale: p.iva_percentuale ?? 22,
       iva_valore: p.iva_valore || 0,
       modalita_pagamento: p.modalita_pagamento || "",
+      modalita_prezzi_pdf: p.modalita_prezzi_pdf || "dettagliato",
     });
     setRighe(p.righe && p.righe.length ? p.righe : [nuovaRiga()]);
   };
@@ -2190,6 +2209,20 @@ function PreventiviOfferte({ session }) {
               onChange={(e) => setHeader({ ...header, modalita_pagamento: e.target.value })}
               style={{ ...fieldStyle, marginBottom: 0, maxWidth: 400 }}
             />
+          </div>
+
+          <div style={{ marginTop: 4 }}>
+            <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 4 }}>
+              Prezzi mostrati nel PDF
+            </label>
+            <select
+              value={header.modalita_prezzi_pdf}
+              onChange={(e) => setHeader({ ...header, modalita_prezzi_pdf: e.target.value })}
+              style={{ ...inputStyle, maxWidth: 300 }}
+            >
+              <option value="dettagliato">Completo (listino + sconti + netto)</option>
+              <option value="solo_netto">Solo prezzi netti (unitario e totale)</option>
+            </select>
           </div>
         </div>
 
