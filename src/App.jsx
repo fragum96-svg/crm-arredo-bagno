@@ -1282,16 +1282,63 @@ function ClientiAnagrafica({ session }) {
 }
 
 // ============================================================
-// CALENDARIO VISITE — per cliente, con conteggio e storico
+// CALENDARIO VISITE — vista mensile / settimanale / giornaliera
 // ============================================================
+const GIORNI_SETTIMANA = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
+const MESI = [
+  "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
+  "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre",
+];
+
+function toISODate(d) {
+  return d.toISOString().slice(0, 10);
+}
+
+function startOfWeek(date) {
+  const d = new Date(date);
+  const day = (d.getDay() + 6) % 7; // 0 = lunedì
+  d.setDate(d.getDate() - day);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function getMonthGrid(date) {
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const firstOfMonth = new Date(year, month, 1);
+  const start = startOfWeek(firstOfMonth);
+  const days = [];
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    days.push(d);
+  }
+  return days;
+}
+
+function getWeekDays(date) {
+  const start = startOfWeek(date);
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    days.push(d);
+  }
+  return days;
+}
+
 function CalendarioVisite({ session }) {
   const [clienti, setClienti] = useState([]);
   const [visite, setVisite] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [viewMode, setViewMode] = useState("mese");
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [giornoSelezionato, setGiornoSelezionato] = useState(toISODate(new Date()));
+  const [mostraForm, setMostraForm] = useState(false);
   const [clienteSelezionato, setClienteSelezionato] = useState("");
   const emptyForm = {
-    data_visita: new Date().toISOString().slice(0, 10),
+    data_visita: toISODate(new Date()),
     argomenti_trattati: "",
     cataloghi_lasciati: "",
     note: "",
@@ -1313,7 +1360,7 @@ function CalendarioVisite({ session }) {
         fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale&order=ragione_sociale.asc`, {
           headers: headers(),
         }),
-        fetch(`${SUPABASE_URL}/rest/v1/visite?select=*&order=data_visita.desc`, {
+        fetch(`${SUPABASE_URL}/rest/v1/visite?select=*&order=data_visita.asc`, {
           headers: headers(),
         }),
       ]);
@@ -1362,6 +1409,7 @@ function CalendarioVisite({ session }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Errore nel salvataggio");
       setForm(emptyForm);
+      setMostraForm(false);
       load();
     } catch (err) {
       setError(err.message);
@@ -1395,38 +1443,68 @@ function CalendarioVisite({ session }) {
   };
 
   const nomeCliente = (id) => clienti.find((c) => c.id === id)?.ragione_sociale || "—";
+  const visitePerGiorno = (isoDate) => visite.filter((v) => v.data_visita === isoDate);
 
-  const visiteFiltrate = clienteSelezionato
-    ? visite.filter((v) => v.cliente_id === clienteSelezionato)
-    : visite;
+  const cambiaPeriodo = (direzione) => {
+    const d = new Date(currentDate);
+    if (viewMode === "mese") d.setMonth(d.getMonth() + direzione);
+    else if (viewMode === "settimana") d.setDate(d.getDate() + direzione * 7);
+    else d.setDate(d.getDate() + direzione);
+    setCurrentDate(d);
+    if (viewMode === "giorno") setGiornoSelezionato(toISODate(d));
+  };
 
-  const conteggioPerCliente = (id) => visite.filter((v) => v.cliente_id === id).length;
+  const vaiAOggi = () => {
+    const oggi = new Date();
+    setCurrentDate(oggi);
+    setGiornoSelezionato(toISODate(oggi));
+  };
+
+  const etichettaPeriodo = () => {
+    if (viewMode === "mese") return `${MESI[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
+    if (viewMode === "settimana") {
+      const days = getWeekDays(currentDate);
+      return `${days[0].getDate()} ${MESI[days[0].getMonth()].slice(0, 3)} - ${days[6].getDate()} ${MESI[days[6].getMonth()].slice(0, 3)} ${days[6].getFullYear()}`;
+    }
+    return `${currentDate.getDate()} ${MESI[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
+  };
+
+  const oggiISO = toISODate(new Date());
 
   return (
     <div style={{ fontFamily: "Arial, sans-serif" }}>
-      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16 }}>
-        Calendario visite
-      </h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+        <h2 style={{ color: COLORS.text, fontSize: 20 }}>Calendario visite</h2>
+        <button
+          onClick={() => setMostraForm((v) => !v)}
+          style={{
+            padding: "9px 16px",
+            background: COLORS.primary,
+            color: "#fff",
+            border: "none",
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          {mostraForm ? "Chiudi" : "+ Nuova visita"}
+        </button>
+      </div>
 
-      <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+      {mostraForm && (
         <div
           style={{
-            flex: "1 1 280px",
             background: COLORS.card,
             border: `1px solid ${COLORS.border}`,
             borderRadius: 14,
             boxShadow: "0 4px 14px rgba(20,40,60,0.05)",
             padding: 20,
-            maxWidth: 340,
+            marginBottom: 20,
+            maxWidth: 420,
           }}
         >
-          <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>
-            Registra nuova visita
-          </h3>
-
-          <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 4 }}>
-            Cliente *
-          </label>
+          <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>Registra / pianifica visita</h3>
           <select
             value={clienteSelezionato}
             onChange={(e) => setClienteSelezionato(e.target.value)}
@@ -1434,22 +1512,15 @@ function CalendarioVisite({ session }) {
           >
             <option value="">-- seleziona cliente --</option>
             {clienti.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.ragione_sociale} ({conteggioPerCliente(c.id)} visite)
-              </option>
+              <option key={c.id} value={c.id}>{c.ragione_sociale}</option>
             ))}
           </select>
-
-          <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 4 }}>
-            Data visita *
-          </label>
           <input
             type="date"
             value={form.data_visita}
             onChange={(e) => setForm({ ...form, data_visita: e.target.value })}
             style={inputStyle}
           />
-
           <textarea
             placeholder="Argomenti trattati"
             value={form.argomenti_trattati}
@@ -1468,13 +1539,7 @@ function CalendarioVisite({ session }) {
             onChange={(e) => setForm({ ...form, note: e.target.value })}
             style={{ ...inputStyle, minHeight: 40 }}
           />
-
-          {error && (
-            <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 10 }}>
-              {error}
-            </div>
-          )}
-
+          {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 10 }}>{error}</div>}
           <button
             onClick={save}
             disabled={saving}
@@ -1489,93 +1554,209 @@ function CalendarioVisite({ session }) {
               cursor: "pointer",
             }}
           >
-            {saving ? "Salvataggio..." : "Salva visita"}
+            {saving ? "Salvataggio..." : "Salva"}
           </button>
         </div>
+      )}
 
-        <div style={{ flex: "2 1 400px" }}>
-          <div style={{ marginBottom: 12 }}>
-            <select
-              value={clienteSelezionato}
-              onChange={(e) => setClienteSelezionato(e.target.value)}
-              style={{ ...inputStyle, maxWidth: 260, marginBottom: 0 }}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 14,
+          flexWrap: "wrap",
+          gap: 10,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button onClick={() => cambiaPeriodo(-1)} style={{ ...inputStyle, width: 36, cursor: "pointer", textAlign: "center" }}>‹</button>
+          <span style={{ fontWeight: 700, color: COLORS.text, fontSize: 15, minWidth: 160, textAlign: "center" }}>
+            {etichettaPeriodo()}
+          </span>
+          <button onClick={() => cambiaPeriodo(1)} style={{ ...inputStyle, width: 36, cursor: "pointer", textAlign: "center" }}>›</button>
+          <button
+            onClick={vaiAOggi}
+            style={{ ...inputStyle, width: "auto", padding: "6px 12px", cursor: "pointer", color: COLORS.primary }}
+          >
+            Oggi
+          </button>
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          {["mese", "settimana", "giorno"].map((m) => (
+            <button
+              key={m}
+              onClick={() => setViewMode(m)}
+              style={{
+                padding: "7px 14px",
+                borderRadius: 8,
+                border: `1px solid ${COLORS.border}`,
+                background: viewMode === m ? COLORS.primary : "#fff",
+                color: viewMode === m ? "#fff" : COLORS.text,
+                fontSize: 12,
+                cursor: "pointer",
+                textTransform: "capitalize",
+              }}
             >
-              <option value="">Tutti i clienti</option>
-              {clienti.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.ragione_sociale}
-                </option>
-              ))}
-            </select>
-          </div>
+              {m}
+            </button>
+          ))}
+        </div>
+      </div>
 
-          {loading ? (
-            <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
-          ) : visiteFiltrate.length === 0 ? (
-            <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessuna visita registrata.</p>
-          ) : (
-            <div>
-              {visiteFiltrate.map((v) => (
-                <div
-                  key={v.id}
-                  style={{
-                    background: COLORS.card,
-                    border: `1px solid ${COLORS.border}`,
-                    borderRadius: 12,
-                    padding: 14,
-                    marginBottom: 10,
-                    boxShadow: "0 2px 8px rgba(20,40,60,0.04)",
-                  }}
-                >
+      {loading ? (
+        <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
+      ) : (
+        <>
+          {viewMode === "mese" && (
+            <div
+              style={{
+                background: COLORS.card,
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: 14,
+                overflow: "hidden",
+              }}
+            >
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
+                {GIORNI_SETTIMANA.map((g) => (
+                  <div key={g} style={{ padding: "8px 4px", fontSize: 11, color: COLORS.muted, textAlign: "center", borderBottom: `1px solid ${COLORS.border}` }}>
+                    {g}
+                  </div>
+                ))}
+                {getMonthGrid(currentDate).map((d, i) => {
+                  const iso = toISODate(d);
+                  const eventi = visitePerGiorno(iso);
+                  const fuoriMese = d.getMonth() !== currentDate.getMonth();
+                  const isOggi = iso === oggiISO;
+                  return (
+                    <div
+                      key={i}
+                      onClick={() => {
+                        setGiornoSelezionato(iso);
+                        setViewMode("giorno");
+                        setCurrentDate(d);
+                      }}
+                      style={{
+                        minHeight: 78,
+                        padding: 6,
+                        borderRight: `1px solid ${COLORS.border}`,
+                        borderBottom: `1px solid ${COLORS.border}`,
+                        opacity: fuoriMese ? 0.4 : 1,
+                        cursor: "pointer",
+                        background: isOggi ? "#eaf5fc" : "transparent",
+                      }}
+                    >
+                      <div style={{ fontSize: 11, color: COLORS.text, fontWeight: isOggi ? 700 : 400, marginBottom: 4 }}>
+                        {d.getDate()}
+                      </div>
+                      {eventi.slice(0, 2).map((v) => (
+                        <div
+                          key={v.id}
+                          style={{
+                            fontSize: 10,
+                            background: "#0b7bc418",
+                            color: COLORS.primary,
+                            borderRadius: 4,
+                            padding: "2px 4px",
+                            marginBottom: 2,
+                            overflow: "hidden",
+                            whiteSpace: "nowrap",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {nomeCliente(v.cliente_id)}
+                        </div>
+                      ))}
+                      {eventi.length > 2 && (
+                        <div style={{ fontSize: 10, color: COLORS.muted }}>+{eventi.length - 2} altre</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {viewMode === "settimana" && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 8 }}>
+              {getWeekDays(currentDate).map((d) => {
+                const iso = toISODate(d);
+                const eventi = visitePerGiorno(iso);
+                const isOggi = iso === oggiISO;
+                return (
                   <div
+                    key={iso}
                     style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
+                      background: COLORS.card,
+                      border: `1px solid ${COLORS.border}`,
+                      borderRadius: 10,
+                      padding: 8,
+                      minHeight: 140,
+                      boxShadow: isOggi ? "0 0 0 2px #0b7bc4 inset" : "none",
                     }}
                   >
-                    <div>
+                    <div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 6 }}>
+                      {GIORNI_SETTIMANA[(d.getDay() + 6) % 7]} {d.getDate()}
+                    </div>
+                    {eventi.map((v) => (
+                      <div
+                        key={v.id}
+                        style={{
+                          fontSize: 11,
+                          background: "#0b7bc418",
+                          color: COLORS.primary,
+                          borderRadius: 6,
+                          padding: "4px 6px",
+                          marginBottom: 4,
+                        }}
+                      >
+                        {nomeCliente(v.cliente_id)}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {viewMode === "giorno" && (
+            <div>
+              {visitePerGiorno(giornoSelezionato).length === 0 ? (
+                <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessuna visita in questa data.</p>
+              ) : (
+                visitePerGiorno(giornoSelezionato).map((v) => (
+                  <div
+                    key={v.id}
+                    style={{
+                      background: COLORS.card,
+                      border: `1px solid ${COLORS.border}`,
+                      borderRadius: 12,
+                      padding: 14,
+                      marginBottom: 10,
+                      boxShadow: "0 2px 8px rgba(20,40,60,0.04)",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                       <div style={{ fontWeight: 700, color: COLORS.primary, fontSize: 13 }}>
                         {nomeCliente(v.cliente_id)}
                       </div>
-                      <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 2 }}>
-                        {new Date(v.data_visita).toLocaleDateString("it-IT")}
-                      </div>
+                      <button
+                        onClick={() => remove(v.id)}
+                        style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 12 }}
+                      >
+                        Elimina
+                      </button>
                     </div>
-                    <button
-                      onClick={() => remove(v.id)}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        color: COLORS.danger,
-                        cursor: "pointer",
-                        fontSize: 12,
-                      }}
-                    >
-                      Elimina
-                    </button>
+                    {v.argomenti_trattati && <div style={{ fontSize: 12, marginTop: 8 }}><strong>Argomenti:</strong> {v.argomenti_trattati}</div>}
+                    {v.cataloghi_lasciati && <div style={{ fontSize: 12, marginTop: 4 }}><strong>Cataloghi lasciati:</strong> {v.cataloghi_lasciati}</div>}
+                    {v.note && <div style={{ fontSize: 12, marginTop: 4 }}><strong>Note:</strong> {v.note}</div>}
                   </div>
-                  {v.argomenti_trattati && (
-                    <div style={{ fontSize: 12, marginTop: 8 }}>
-                      <strong>Argomenti:</strong> {v.argomenti_trattati}
-                    </div>
-                  )}
-                  {v.cataloghi_lasciati && (
-                    <div style={{ fontSize: 12, marginTop: 4 }}>
-                      <strong>Cataloghi lasciati:</strong> {v.cataloghi_lasciati}
-                    </div>
-                  )}
-                  {v.note && (
-                    <div style={{ fontSize: 12, marginTop: 4 }}>
-                      <strong>Note:</strong> {v.note}
-                    </div>
-                  )}
-                </div>
-              ))}
+                ))
+              )}
             </div>
           )}
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }
