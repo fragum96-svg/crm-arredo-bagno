@@ -460,3 +460,4 @@ export default function App() {
   }
 
   return <AppShell session={session} onLogout={() => setSession(null)} />;
+}
