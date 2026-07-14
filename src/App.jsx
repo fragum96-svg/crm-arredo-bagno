@@ -1,4 +1,14 @@
 import { useState, useEffect } from "react";
+import {
+  Users,
+  Building2,
+  CalendarDays,
+  FileText,
+  LogOut,
+  Menu as MenuIcon,
+  LayoutDashboard,
+  ShieldCheck,
+} from "lucide-react";
 
 // ============================================================
 // CONFIGURAZIONE SUPABASE
@@ -6,6 +16,18 @@ import { useState, useEffect } from "react";
 const SUPABASE_URL = "https://hifwdbjkerlfjbgwhpxc.supabase.co";
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpZndkYmprZXJsZmpiZ3docHhjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5OTEzMTYsImV4cCI6MjA5OTU2NzMxNn0.wAPiUA4YU9ofHJgDrtFBHAFLzEuOAnAwMdX4Elk3Bsc";
+
+const COLORS = {
+  primary: "#0b7bc4",
+  primaryDark: "#075985",
+  bg: "#f7fafc",
+  card: "#ffffff",
+  border: "#e2edf5",
+  text: "#233242",
+  muted: "#7c8b98",
+  danger: "#c0392b",
+  success: "#1a7a3c",
+};
 
 function makeSupabaseClient(url, key) {
   const authHeaders = (token) => ({
@@ -87,30 +109,45 @@ function LoginScreen({ onLogin }) {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "#ffffff",
+        background: `linear-gradient(135deg, ${COLORS.bg} 0%, #e8f3fa 100%)`,
         fontFamily: "Arial, sans-serif",
       }}
     >
       <div
         style={{
-          width: 340,
-          padding: 32,
-          border: "1px solid #e0eef7",
-          borderRadius: 12,
-          boxShadow: "0 4px 24px rgba(0,120,200,0.08)",
+          width: 360,
+          padding: 36,
+          background: COLORS.card,
+          border: `1px solid ${COLORS.border}`,
+          borderRadius: 16,
+          boxShadow: "0 12px 40px rgba(11,123,196,0.12)",
         }}
       >
+        <div
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 12,
+            background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.primaryDark})`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            marginBottom: 14,
+          }}
+        >
+          <ShieldCheck size={22} color="#fff" />
+        </div>
         <h1
           style={{
-            fontSize: 20,
+            fontSize: 21,
             fontWeight: 700,
-            color: "#0b7bc4",
+            color: COLORS.text,
             marginBottom: 4,
           }}
         >
           CRM Arredo Bagno
         </h1>
-        <p style={{ fontSize: 13, color: "#6b7b8a", marginBottom: 24 }}>
+        <p style={{ fontSize: 13, color: COLORS.muted, marginBottom: 24 }}>
           Accedi con le credenziali che ti sono state fornite
         </p>
 
@@ -142,8 +179,8 @@ function LoginScreen({ onLogin }) {
             width: "100%",
             padding: "10px 12px",
             marginBottom: 16,
-            border: "1px solid #d5e4ef",
-            borderRadius: 8,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: 10,
             fontSize: 14,
             boxSizing: "border-box",
           }}
@@ -161,15 +198,15 @@ function LoginScreen({ onLogin }) {
             width: "100%",
             padding: "10px 12px",
             marginBottom: 16,
-            border: "1px solid #d5e4ef",
-            borderRadius: 8,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: 10,
             fontSize: 14,
             boxSizing: "border-box",
           }}
         />
 
         {error && (
-          <div style={{ color: "#c0392b", fontSize: 12, marginBottom: 12 }}>
+          <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 12 }}>
             {error}
           </div>
         )}
@@ -179,14 +216,15 @@ function LoginScreen({ onLogin }) {
           disabled={loading}
           style={{
             width: "100%",
-            padding: "11px 0",
-            background: "#0b7bc4",
+            padding: "12px 0",
+            background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.primaryDark})`,
             color: "#fff",
             border: "none",
-            borderRadius: 8,
+            borderRadius: 10,
             fontSize: 14,
             fontWeight: 600,
             cursor: "pointer",
+            boxShadow: "0 6px 16px rgba(11,123,196,0.25)",
           }}
         >
           {loading ? "Accesso in corso..." : "Accedi"}
@@ -241,15 +279,17 @@ function AdminPanel() {
       style={{
         maxWidth: 420,
         padding: 24,
-        border: "1px solid #e0eef7",
-        borderRadius: 12,
+        background: COLORS.card,
+        border: `1px solid ${COLORS.border}`,
+        borderRadius: 14,
+        boxShadow: "0 4px 16px rgba(20,40,60,0.05)",
         fontFamily: "Arial, sans-serif",
       }}
     >
-      <h2 style={{ fontSize: 16, color: "#0b7bc4", marginBottom: 4 }}>
+      <h2 style={{ fontSize: 16, color: COLORS.primary, marginBottom: 4 }}>
         Crea nuovo utente
       </h2>
-      <p style={{ fontSize: 12, color: "#6b7b8a", marginBottom: 16 }}>
+      <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 16 }}>
         Genera le credenziali da consegnare al collaboratore. Nessuna
         registrazione pubblica è possibile.
       </p>
@@ -264,7 +304,7 @@ function AdminPanel() {
             width: "100%",
             padding: "10px 12px",
             marginBottom: 10,
-            border: "1px solid #d5e4ef",
+            border: `1px solid ${COLORS.border}`,
             borderRadius: 8,
             fontSize: 14,
             boxSizing: "border-box",
@@ -280,7 +320,7 @@ function AdminPanel() {
             width: "100%",
             padding: "10px 12px",
             marginBottom: 10,
-            border: "1px solid #d5e4ef",
+            border: `1px solid ${COLORS.border}`,
             borderRadius: 8,
             fontSize: 14,
             boxSizing: "border-box",
@@ -291,7 +331,7 @@ function AdminPanel() {
           disabled={loading}
           style={{
             padding: "10px 18px",
-            background: "#0b7bc4",
+            background: COLORS.primary,
             color: "#fff",
             border: "none",
             borderRadius: 8,
@@ -308,12 +348,120 @@ function AdminPanel() {
           style={{
             marginTop: 12,
             fontSize: 12,
-            color: msg.type === "error" ? "#c0392b" : "#1a7a3c",
+            color: msg.type === "error" ? COLORS.danger : COLORS.success,
           }}
         >
           {msg.text}
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================================
+// DASHBOARD — riepilogo generale
+// ============================================================
+function Dashboard({ session, goTo }) {
+  const [counts, setCounts] = useState({ clienti: 0, aziende: 0, visiteMese: 0, preventivi: 0 });
+  const [loading, setLoading] = useState(true);
+
+  const headers = () => ({
+    "Content-Type": "application/json",
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${session.access_token}`,
+  });
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const inizioMese = new Date();
+        inizioMese.setDate(1);
+        const inizioMeseStr = inizioMese.toISOString().slice(0, 10);
+
+        const [rClienti, rAziende, rVisite, rPreventivi] = await Promise.all([
+          fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id`, { headers: headers() }),
+          fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?select=id`, { headers: headers() }),
+          fetch(`${SUPABASE_URL}/rest/v1/visite?select=id&data_visita=gte.${inizioMeseStr}`, {
+            headers: headers(),
+          }),
+          fetch(`${SUPABASE_URL}/rest/v1/preventivi?select=id`, { headers: headers() }),
+        ]);
+        const [dClienti, dAziende, dVisite, dPreventivi] = await Promise.all([
+          rClienti.json(),
+          rAziende.json(),
+          rVisite.json(),
+          rPreventivi.json(),
+        ]);
+        setCounts({
+          clienti: Array.isArray(dClienti) ? dClienti.length : 0,
+          aziende: Array.isArray(dAziende) ? dAziende.length : 0,
+          visiteMese: Array.isArray(dVisite) ? dVisite.length : 0,
+          preventivi: Array.isArray(dPreventivi) ? dPreventivi.length : 0,
+        });
+      } catch (e) {
+        // in caso di errore lasciamo i contatori a 0
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [session]);
+
+  const cards = [
+    { key: "clienti", label: "Clienti", value: counts.clienti, icon: Users, color: "#0b7bc4" },
+    { key: "aziende", label: "Aziende mandanti", value: counts.aziende, icon: Building2, color: "#0e9488" },
+    { key: "visite", label: "Visite questo mese", value: counts.visiteMese, icon: CalendarDays, color: "#c77d0b" },
+    { key: "preventivi", label: "Preventivi totali", value: counts.preventivi, icon: FileText, color: "#7c4dbd" },
+  ];
+
+  return (
+    <div style={{ fontFamily: "Arial, sans-serif" }}>
+      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 4 }}>Dashboard</h2>
+      <p style={{ color: COLORS.muted, fontSize: 13, marginBottom: 20 }}>
+        Riepilogo generale della tua attività
+      </p>
+
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+        {cards.map((c) => {
+          const Icon = c.icon;
+          return (
+            <div
+              key={c.key}
+              onClick={() => goTo(c.key)}
+              style={{
+                flex: "1 1 200px",
+                minWidth: 180,
+                background: COLORS.card,
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: 14,
+                padding: 20,
+                cursor: "pointer",
+                boxShadow: "0 4px 14px rgba(20,40,60,0.05)",
+                transition: "transform 0.15s ease",
+              }}
+            >
+              <div
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 10,
+                  background: `${c.color}18`,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: 12,
+                }}
+              >
+                <Icon size={20} color={c.color} />
+              </div>
+              <div style={{ fontSize: 26, fontWeight: 700, color: COLORS.text }}>
+                {loading ? "…" : c.value}
+              </div>
+              <div style={{ fontSize: 13, color: COLORS.muted, marginTop: 2 }}>{c.label}</div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -446,7 +594,7 @@ function AziendeMandanti({ session }) {
     width: "100%",
     padding: "8px 10px",
     marginBottom: 10,
-    border: "1px solid #d5e4ef",
+    border: `1px solid ${COLORS.border}`,
     borderRadius: 8,
     fontSize: 13,
     boxSizing: "border-box",
@@ -454,7 +602,7 @@ function AziendeMandanti({ session }) {
 
   return (
     <div style={{ fontFamily: "Arial, sans-serif" }}>
-      <h2 style={{ color: "#0b7bc4", fontSize: 18, marginBottom: 16 }}>
+      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16 }}>
         Aziende mandanti
       </h2>
 
@@ -462,8 +610,10 @@ function AziendeMandanti({ session }) {
         <div
           style={{
             flex: "1 1 280px",
-            border: "1px solid #e0eef7",
-            borderRadius: 12,
+            background: COLORS.card,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: 14,
+            boxShadow: "0 4px 14px rgba(20,40,60,0.05)",
             padding: 20,
             maxWidth: 340,
           }}
@@ -515,7 +665,7 @@ function AziendeMandanti({ session }) {
           />
 
           {error && (
-            <div style={{ color: "#c0392b", fontSize: 12, marginBottom: 10 }}>
+            <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 10 }}>
               {error}
             </div>
           )}
@@ -526,7 +676,7 @@ function AziendeMandanti({ session }) {
               disabled={saving}
               style={{
                 padding: "9px 16px",
-                background: "#0b7bc4",
+                background: COLORS.primary,
                 color: "#fff",
                 border: "none",
                 borderRadius: 8,
@@ -543,8 +693,8 @@ function AziendeMandanti({ session }) {
                 style={{
                   padding: "9px 16px",
                   background: "#fff",
-                  color: "#0b7bc4",
-                  border: "1px solid #d5e4ef",
+                  color: COLORS.primary,
+                  border: `1px solid ${COLORS.border}`,
                   borderRadius: 8,
                   fontSize: 13,
                   cursor: "pointer",
@@ -558,15 +708,15 @@ function AziendeMandanti({ session }) {
 
         <div style={{ flex: "2 1 400px" }}>
           {loading ? (
-            <p style={{ color: "#6b7b8a", fontSize: 13 }}>Caricamento...</p>
+            <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
           ) : list.length === 0 ? (
-            <p style={{ color: "#6b7b8a", fontSize: 13 }}>
+            <p style={{ color: COLORS.muted, fontSize: 13 }}>
               Nessuna azienda ancora inserita.
             </p>
           ) : (
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
-                <tr style={{ textAlign: "left", borderBottom: "2px solid #e0eef7" }}>
+                <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
                   <th style={{ padding: "8px 6px" }}>Nome</th>
                   <th style={{ padding: "8px 6px" }}>Sc. 1</th>
                   <th style={{ padding: "8px 6px" }}>Sc. 2</th>
@@ -593,7 +743,7 @@ function AziendeMandanti({ session }) {
                         style={{
                           background: "none",
                           border: "none",
-                          color: "#0b7bc4",
+                          color: COLORS.primary,
                           cursor: "pointer",
                           fontSize: 12,
                           marginRight: 10,
@@ -606,7 +756,7 @@ function AziendeMandanti({ session }) {
                         style={{
                           background: "none",
                           border: "none",
-                          color: "#c0392b",
+                          color: COLORS.danger,
                           cursor: "pointer",
                           fontSize: 12,
                         }}
@@ -784,7 +934,7 @@ function ClientiAnagrafica({ session }) {
     width: "100%",
     padding: "8px 10px",
     marginBottom: 10,
-    border: "1px solid #d5e4ef",
+    border: `1px solid ${COLORS.border}`,
     borderRadius: 8,
     fontSize: 13,
     boxSizing: "border-box",
@@ -796,7 +946,7 @@ function ClientiAnagrafica({ session }) {
 
   return (
     <div style={{ fontFamily: "Arial, sans-serif" }}>
-      <h2 style={{ color: "#0b7bc4", fontSize: 18, marginBottom: 16 }}>
+      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16 }}>
         Anagrafica clienti
       </h2>
 
@@ -804,8 +954,10 @@ function ClientiAnagrafica({ session }) {
         <div
           style={{
             flex: "1 1 300px",
-            border: "1px solid #e0eef7",
-            borderRadius: 12,
+            background: COLORS.card,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: 14,
+            boxShadow: "0 4px 14px rgba(20,40,60,0.05)",
             padding: 20,
             maxWidth: 360,
           }}
@@ -862,7 +1014,7 @@ function ClientiAnagrafica({ session }) {
               marginBottom: 10,
               maxHeight: 120,
               overflowY: "auto",
-              border: "1px solid #d5e4ef",
+              border: `1px solid ${COLORS.border}`,
               borderRadius: 8,
               padding: 8,
             }}
@@ -907,7 +1059,7 @@ function ClientiAnagrafica({ session }) {
           />
 
           {error && (
-            <div style={{ color: "#c0392b", fontSize: 12, marginBottom: 10 }}>
+            <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 10 }}>
               {error}
             </div>
           )}
@@ -918,7 +1070,7 @@ function ClientiAnagrafica({ session }) {
               disabled={saving}
               style={{
                 padding: "9px 16px",
-                background: "#0b7bc4",
+                background: COLORS.primary,
                 color: "#fff",
                 border: "none",
                 borderRadius: 8,
@@ -935,8 +1087,8 @@ function ClientiAnagrafica({ session }) {
                 style={{
                   padding: "9px 16px",
                   background: "#fff",
-                  color: "#0b7bc4",
-                  border: "1px solid #d5e4ef",
+                  color: COLORS.primary,
+                  border: `1px solid ${COLORS.border}`,
                   borderRadius: 8,
                   fontSize: 13,
                   cursor: "pointer",
@@ -965,13 +1117,13 @@ function ClientiAnagrafica({ session }) {
           </div>
 
           {loading ? (
-            <p style={{ color: "#6b7b8a", fontSize: 13 }}>Caricamento...</p>
+            <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
           ) : filteredList.length === 0 ? (
-            <p style={{ color: "#6b7b8a", fontSize: 13 }}>Nessun cliente trovato.</p>
+            <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun cliente trovato.</p>
           ) : (
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
-                <tr style={{ textAlign: "left", borderBottom: "2px solid #e0eef7" }}>
+                <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
                   <th style={{ padding: "8px 6px" }}>Ragione sociale</th>
                   <th style={{ padding: "8px 6px" }}>Classificazione</th>
                   <th style={{ padding: "8px 6px" }}>Telefono</th>
@@ -992,7 +1144,7 @@ function ClientiAnagrafica({ session }) {
                         style={{
                           background: "none",
                           border: "none",
-                          color: "#0b7bc4",
+                          color: COLORS.primary,
                           cursor: "pointer",
                           fontSize: 12,
                           marginRight: 10,
@@ -1005,7 +1157,7 @@ function ClientiAnagrafica({ session }) {
                         style={{
                           background: "none",
                           border: "none",
-                          color: "#c0392b",
+                          color: COLORS.danger,
                           cursor: "pointer",
                           fontSize: 12,
                         }}
@@ -1131,7 +1283,7 @@ function CalendarioVisite({ session }) {
     width: "100%",
     padding: "8px 10px",
     marginBottom: 10,
-    border: "1px solid #d5e4ef",
+    border: `1px solid ${COLORS.border}`,
     borderRadius: 8,
     fontSize: 13,
     boxSizing: "border-box",
@@ -1147,7 +1299,7 @@ function CalendarioVisite({ session }) {
 
   return (
     <div style={{ fontFamily: "Arial, sans-serif" }}>
-      <h2 style={{ color: "#0b7bc4", fontSize: 18, marginBottom: 16 }}>
+      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16 }}>
         Calendario visite
       </h2>
 
@@ -1155,8 +1307,10 @@ function CalendarioVisite({ session }) {
         <div
           style={{
             flex: "1 1 280px",
-            border: "1px solid #e0eef7",
-            borderRadius: 12,
+            background: COLORS.card,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: 14,
+            boxShadow: "0 4px 14px rgba(20,40,60,0.05)",
             padding: 20,
             maxWidth: 340,
           }}
@@ -1211,7 +1365,7 @@ function CalendarioVisite({ session }) {
           />
 
           {error && (
-            <div style={{ color: "#c0392b", fontSize: 12, marginBottom: 10 }}>
+            <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 10 }}>
               {error}
             </div>
           )}
@@ -1221,7 +1375,7 @@ function CalendarioVisite({ session }) {
             disabled={saving}
             style={{
               padding: "9px 16px",
-              background: "#0b7bc4",
+              background: COLORS.primary,
               color: "#fff",
               border: "none",
               borderRadius: 8,
@@ -1251,19 +1405,21 @@ function CalendarioVisite({ session }) {
           </div>
 
           {loading ? (
-            <p style={{ color: "#6b7b8a", fontSize: 13 }}>Caricamento...</p>
+            <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
           ) : visiteFiltrate.length === 0 ? (
-            <p style={{ color: "#6b7b8a", fontSize: 13 }}>Nessuna visita registrata.</p>
+            <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessuna visita registrata.</p>
           ) : (
             <div>
               {visiteFiltrate.map((v) => (
                 <div
                   key={v.id}
                   style={{
-                    border: "1px solid #e0eef7",
-                    borderRadius: 10,
+                    background: COLORS.card,
+                    border: `1px solid ${COLORS.border}`,
+                    borderRadius: 12,
                     padding: 14,
                     marginBottom: 10,
+                    boxShadow: "0 2px 8px rgba(20,40,60,0.04)",
                   }}
                 >
                   <div
@@ -1274,10 +1430,10 @@ function CalendarioVisite({ session }) {
                     }}
                   >
                     <div>
-                      <div style={{ fontWeight: 700, color: "#0b7bc4", fontSize: 13 }}>
+                      <div style={{ fontWeight: 700, color: COLORS.primary, fontSize: 13 }}>
                         {nomeCliente(v.cliente_id)}
                       </div>
-                      <div style={{ fontSize: 12, color: "#6b7b8a", marginTop: 2 }}>
+                      <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 2 }}>
                         {new Date(v.data_visita).toLocaleDateString("it-IT")}
                       </div>
                     </div>
@@ -1286,7 +1442,7 @@ function CalendarioVisite({ session }) {
                       style={{
                         background: "none",
                         border: "none",
-                        color: "#c0392b",
+                        color: COLORS.danger,
                         cursor: "pointer",
                         fontSize: 12,
                       }}
@@ -1357,6 +1513,11 @@ function PreventiviOfferte({ session }) {
     rif: "",
     data: new Date().toISOString().slice(0, 10),
     imballo_percentuale: 0,
+    imballo_escluso: false,
+    trasporto_valore: 0,
+    trasporto_escluso: true,
+    iva_percentuale: 22,
+    iva_esclusa: true,
   };
   const [header, setHeader] = useState(emptyHeader);
   const [righe, setRighe] = useState([nuovaRiga()]);
@@ -1413,8 +1574,16 @@ function PreventiviOfferte({ session }) {
     setRighe((r) => r.map((x) => (x.id === id ? { ...x, [campo]: valore } : x)));
 
   const totaleNetto = righe.reduce((sum, r) => sum + calcolaRigaNetto(r).netto, 0);
-  const valoreImballo = totaleNetto * ((Number(header.imballo_percentuale) || 0) / 100);
-  const totaleConImballo = totaleNetto + valoreImballo;
+  const valoreImballo = header.imballo_escluso
+    ? 0
+    : totaleNetto * ((Number(header.imballo_percentuale) || 0) / 100);
+  const subtotaleDopoImballo = totaleNetto + valoreImballo;
+  const valoreTrasporto = header.trasporto_escluso ? 0 : Number(header.trasporto_valore) || 0;
+  const subtotaleDopoTrasporto = subtotaleDopoImballo + valoreTrasporto;
+  const valoreIva = header.iva_esclusa
+    ? 0
+    : subtotaleDopoTrasporto * ((Number(header.iva_percentuale) || 0) / 100);
+  const totaleFinale = subtotaleDopoTrasporto + valoreIva;
 
   const salva = async () => {
     if (!header.cliente_id || !header.azienda_id) {
@@ -1431,6 +1600,11 @@ function PreventiviOfferte({ session }) {
         data: header.data,
         righe: righe,
         imballo_percentuale: Number(header.imballo_percentuale) || 0,
+        imballo_escluso: header.imballo_escluso,
+        trasporto_valore: Number(header.trasporto_valore) || 0,
+        trasporto_escluso: header.trasporto_escluso,
+        iva_percentuale: Number(header.iva_percentuale) || 0,
+        iva_esclusa: header.iva_esclusa,
       };
       let res;
       if (editingId) {
@@ -1465,6 +1639,11 @@ function PreventiviOfferte({ session }) {
       rif: p.rif || "",
       data: p.data || new Date().toISOString().slice(0, 10),
       imballo_percentuale: p.imballo_percentuale || 0,
+      imballo_escluso: p.imballo_escluso ?? false,
+      trasporto_valore: p.trasporto_valore || 0,
+      trasporto_escluso: p.trasporto_escluso ?? true,
+      iva_percentuale: p.iva_percentuale ?? 22,
+      iva_esclusa: p.iva_esclusa ?? true,
     });
     setRighe(p.righe && p.righe.length ? p.righe : [nuovaRiga()]);
   };
@@ -1488,7 +1667,7 @@ function PreventiviOfferte({ session }) {
 
   const inputStyle = {
     padding: "6px 8px",
-    border: "1px solid #d5e4ef",
+    border: `1px solid ${COLORS.border}`,
     borderRadius: 6,
     fontSize: 12,
     boxSizing: "border-box",
@@ -1497,7 +1676,7 @@ function PreventiviOfferte({ session }) {
     width: "100%",
     padding: "8px 10px",
     marginBottom: 10,
-    border: "1px solid #d5e4ef",
+    border: `1px solid ${COLORS.border}`,
     borderRadius: 8,
     fontSize: 13,
     boxSizing: "border-box",
@@ -1505,14 +1684,16 @@ function PreventiviOfferte({ session }) {
 
   return (
     <div style={{ fontFamily: "Arial, sans-serif" }}>
-      <h2 style={{ color: "#0b7bc4", fontSize: 18, marginBottom: 16 }}>
+      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16 }}>
         Preventivi / Offerte
       </h2>
 
       <div
         style={{
-          border: "1px solid #e0eef7",
-          borderRadius: 12,
+          background: COLORS.card,
+          border: `1px solid ${COLORS.border}`,
+          borderRadius: 14,
+          boxShadow: "0 4px 14px rgba(20,40,60,0.05)",
           padding: 20,
           marginBottom: 24,
         }}
@@ -1562,7 +1743,7 @@ function PreventiviOfferte({ session }) {
 
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 12 }}>
           <thead>
-            <tr style={{ textAlign: "left", borderBottom: "2px solid #e0eef7" }}>
+            <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
               <th style={{ padding: 6 }}>Art.</th>
               <th style={{ padding: 6 }}>Descrizione</th>
               <th style={{ padding: 6 }}>Finitura</th>
@@ -1641,7 +1822,7 @@ function PreventiviOfferte({ session }) {
                       style={{
                         background: "none",
                         border: "none",
-                        color: "#c0392b",
+                        color: COLORS.danger,
                         cursor: "pointer",
                         fontSize: 14,
                       }}
@@ -1660,12 +1841,12 @@ function PreventiviOfferte({ session }) {
           style={{
             padding: "6px 12px",
             background: "#fff",
-            color: "#0b7bc4",
-            border: "1px solid #d5e4ef",
+            color: COLORS.primary,
+            border: `1px solid ${COLORS.border}`,
             borderRadius: 8,
             fontSize: 12,
             cursor: "pointer",
-            marginBottom: 16,
+            marginBottom: 20,
           }}
         >
           + Aggiungi riga
@@ -1673,37 +1854,119 @@ function PreventiviOfferte({ session }) {
 
         <div
           style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: 24,
-            fontSize: 13,
+            background: COLORS.bg,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: 12,
+            padding: 16,
             marginBottom: 16,
-            flexWrap: "wrap",
           }}
         >
-          <div>
-            <label style={{ fontSize: 12, color: "#333", marginRight: 6 }}>Imballo %</label>
-            <input
-              type="number"
-              value={header.imballo_percentuale}
-              onChange={(e) => setHeader({ ...header, imballo_percentuale: e.target.value })}
-              style={{ ...inputStyle, width: 70 }}
-            />
+          <div style={{ display: "flex", gap: 24, flexWrap: "wrap", fontSize: 12 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={header.imballo_escluso}
+                onChange={(e) => setHeader({ ...header, imballo_escluso: e.target.checked })}
+              />
+              Imballo escluso / non mostrare
+            </label>
+            {!header.imballo_escluso && (
+              <div>
+                <label style={{ marginRight: 6 }}>Imballo %</label>
+                <input
+                  type="number"
+                  value={header.imballo_percentuale}
+                  onChange={(e) => setHeader({ ...header, imballo_percentuale: e.target.value })}
+                  style={{ ...inputStyle, width: 70 }}
+                />
+              </div>
+            )}
           </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ color: "#6b7b8a" }}>Totale netto: {totaleNetto.toFixed(2)} €</div>
-            <div style={{ color: "#6b7b8a" }}>Imballo: {valoreImballo.toFixed(2)} €</div>
-            <div style={{ fontWeight: 700, color: "#0b7bc4", fontSize: 15 }}>
-              Totale: {totaleConImballo.toFixed(2)} €
+
+          <div style={{ display: "flex", gap: 24, flexWrap: "wrap", fontSize: 12, marginTop: 10 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={header.trasporto_escluso}
+                onChange={(e) => setHeader({ ...header, trasporto_escluso: e.target.checked })}
+              />
+              Trasporto escluso / non mostrare
+            </label>
+            {!header.trasporto_escluso && (
+              <div>
+                <label style={{ marginRight: 6 }}>Trasporto €</label>
+                <input
+                  type="number"
+                  value={header.trasporto_valore}
+                  onChange={(e) => setHeader({ ...header, trasporto_valore: e.target.value })}
+                  style={{ ...inputStyle, width: 80 }}
+                />
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: "flex", gap: 24, flexWrap: "wrap", fontSize: 12, marginTop: 10 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={header.iva_esclusa}
+                onChange={(e) => setHeader({ ...header, iva_esclusa: e.target.checked })}
+              />
+              IVA esclusa / non mostrare
+            </label>
+            {!header.iva_esclusa && (
+              <div>
+                <label style={{ marginRight: 6 }}>IVA %</label>
+                <input
+                  type="number"
+                  value={header.iva_percentuale}
+                  onChange={(e) => setHeader({ ...header, iva_percentuale: e.target.value })}
+                  style={{ ...inputStyle, width: 70 }}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            fontSize: 13,
+            marginBottom: 16,
+          }}
+        >
+          <div style={{ textAlign: "right", minWidth: 220 }}>
+            <div style={{ color: COLORS.muted }}>Totale netto: {totaleNetto.toFixed(2)} €</div>
+            {!header.imballo_escluso && (
+              <div style={{ color: COLORS.muted }}>Imballo: {valoreImballo.toFixed(2)} €</div>
+            )}
+            {!header.trasporto_escluso && (
+              <div style={{ color: COLORS.muted }}>Trasporto: {valoreTrasporto.toFixed(2)} €</div>
+            )}
+            {!header.iva_esclusa && (
+              <div style={{ color: COLORS.muted }}>IVA: {valoreIva.toFixed(2)} €</div>
+            )}
+            <div style={{ fontWeight: 700, color: COLORS.primary, fontSize: 16, marginTop: 4 }}>
+              Totale: {totaleFinale.toFixed(2)} €
             </div>
-            <div style={{ fontSize: 11, color: "#9aa7b2", marginTop: 4 }}>
-              IVA e trasporto esclusi
-            </div>
+            {(header.imballo_escluso || header.trasporto_escluso || header.iva_esclusa) && (
+              <div style={{ fontSize: 11, color: "#9aa7b2", marginTop: 4 }}>
+                {[
+                  header.iva_esclusa && "IVA",
+                  header.trasporto_escluso && "trasporto",
+                  header.imballo_escluso && "imballo",
+                ]
+                  .filter(Boolean)
+                  .join(", ")}{" "}
+                esclusi
+              </div>
+            )}
           </div>
         </div>
 
         {error && (
-          <div style={{ color: "#c0392b", fontSize: 12, marginBottom: 10 }}>{error}</div>
+          <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 10 }}>{error}</div>
         )}
 
         <div style={{ display: "flex", gap: 8 }}>
@@ -1712,7 +1975,7 @@ function PreventiviOfferte({ session }) {
             disabled={saving}
             style={{
               padding: "9px 16px",
-              background: "#0b7bc4",
+              background: COLORS.primary,
               color: "#fff",
               border: "none",
               borderRadius: 8,
@@ -1729,8 +1992,8 @@ function PreventiviOfferte({ session }) {
               style={{
                 padding: "9px 16px",
                 background: "#fff",
-                color: "#0b7bc4",
-                border: "1px solid #d5e4ef",
+                color: COLORS.primary,
+                border: `1px solid ${COLORS.border}`,
                 borderRadius: 8,
                 fontSize: 13,
                 cursor: "pointer",
@@ -1746,13 +2009,13 @@ function PreventiviOfferte({ session }) {
         Preventivi salvati
       </h3>
       {loading ? (
-        <p style={{ color: "#6b7b8a", fontSize: 13 }}>Caricamento...</p>
+        <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
       ) : lista.length === 0 ? (
-        <p style={{ color: "#6b7b8a", fontSize: 13 }}>Nessun preventivo salvato.</p>
+        <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun preventivo salvato.</p>
       ) : (
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
-            <tr style={{ textAlign: "left", borderBottom: "2px solid #e0eef7" }}>
+            <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
               <th style={{ padding: "8px 6px" }}>RIF</th>
               <th style={{ padding: "8px 6px" }}>Data</th>
               <th style={{ padding: "8px 6px" }}>Cliente</th>
@@ -1775,7 +2038,7 @@ function PreventiviOfferte({ session }) {
                     style={{
                       background: "none",
                       border: "none",
-                      color: "#0b7bc4",
+                      color: COLORS.primary,
                       cursor: "pointer",
                       fontSize: 12,
                       marginRight: 10,
@@ -1788,7 +2051,7 @@ function PreventiviOfferte({ session }) {
                     style={{
                       background: "none",
                       border: "none",
-                      color: "#c0392b",
+                      color: COLORS.danger,
                       cursor: "pointer",
                       fontSize: 12,
                     }}
@@ -1809,8 +2072,8 @@ function PreventiviOfferte({ session }) {
 // SHELL PRINCIPALE APP (dietro login)
 // ============================================================
 function AppShell({ session, onLogout }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [page, setPage] = useState("clienti");
+  const [menuOpen, setMenuOpen] = useState(true);
+  const [page, setPage] = useState("dashboard");
   const [role, setRole] = useState("user");
 
   useEffect(() => {
@@ -1834,52 +2097,64 @@ function AppShell({ session, onLogout }) {
   }, [session]);
 
   const menuItems = [
-    { key: "clienti", label: "Clienti" },
-    { key: "aziende", label: "Aziende mandanti" },
-    { key: "visite", label: "Visite" },
-    { key: "preventivi", label: "Preventivi" },
-    ...(role === "admin" ? [{ key: "admin", label: "Pannello Admin" }] : []),
+    { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { key: "clienti", label: "Clienti", icon: Users },
+    { key: "aziende", label: "Aziende mandanti", icon: Building2 },
+    { key: "visite", label: "Visite", icon: CalendarDays },
+    { key: "preventivi", label: "Preventivi", icon: FileText },
+    ...(role === "admin" ? [{ key: "admin", label: "Pannello Admin", icon: ShieldCheck }] : []),
   ];
 
   return (
-    <div style={{ minHeight: "100vh", background: "#fff", fontFamily: "Arial, sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: COLORS.bg, fontFamily: "Arial, sans-serif" }}>
       <header
         style={{
           display: "flex",
           alignItems: "center",
-          padding: "14px 20px",
-          borderBottom: "1px solid #e0eef7",
+          padding: "14px 22px",
+          background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.primaryDark})`,
+          boxShadow: "0 2px 12px rgba(11,123,196,0.2)",
         }}
       >
         <button
           onClick={() => setMenuOpen((v) => !v)}
           style={{
-            background: "none",
+            background: "rgba(255,255,255,0.15)",
             border: "none",
-            fontSize: 22,
-            color: "#0b7bc4",
+            borderRadius: 8,
+            width: 34,
+            height: 34,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#fff",
             cursor: "pointer",
-            marginRight: 12,
+            marginRight: 14,
           }}
         >
-          ☰
+          <MenuIcon size={18} />
         </button>
-        <span style={{ fontWeight: 700, color: "#0b7bc4" }}>CRM Arredo Bagno</span>
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ fontSize: 12, color: "#6b7b8a" }}>{session.user.email}</span>
+        <span style={{ fontWeight: 700, color: "#fff", fontSize: 16 }}>CRM Arredo Bagno</span>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 14 }}>
+          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.85)" }}>
+            {session.user.email}
+          </span>
           <button
             onClick={onLogout}
             style={{
-              background: "none",
-              border: "1px solid #d5e4ef",
-              borderRadius: 6,
-              padding: "6px 12px",
+              background: "rgba(255,255,255,0.15)",
+              border: "none",
+              borderRadius: 8,
+              padding: "7px 12px",
               fontSize: 12,
-              color: "#0b7bc4",
+              color: "#fff",
               cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
             }}
           >
-            Esci
+            <LogOut size={14} /> Esci
           </button>
         </div>
       </header>
@@ -1888,56 +2163,49 @@ function AppShell({ session, onLogout }) {
         {menuOpen && (
           <nav
             style={{
-              width: 200,
-              borderRight: "1px solid #e0eef7",
-              minHeight: "calc(100vh - 53px)",
-              padding: "12px 0",
+              width: 210,
+              background: COLORS.card,
+              borderRight: `1px solid ${COLORS.border}`,
+              minHeight: "calc(100vh - 61px)",
+              padding: "14px 10px",
             }}
           >
-            {menuItems.map((item) => (
-              <div
-                key={item.key}
-                onClick={() => {
-                  setPage(item.key);
-                  setMenuOpen(false);
-                }}
-                style={{
-                  padding: "10px 20px",
-                  fontSize: 14,
-                  color: page === item.key ? "#0b7bc4" : "#333",
-                  background: page === item.key ? "#eaf5fc" : "transparent",
-                  cursor: "pointer",
-                  fontWeight: page === item.key ? 600 : 400,
-                }}
-              >
-                {item.label}
-              </div>
-            ))}
+            {menuItems.map((item) => {
+              const Icon = item.icon;
+              const active = page === item.key;
+              return (
+                <div
+                  key={item.key}
+                  onClick={() => setPage(item.key)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "10px 14px",
+                    marginBottom: 4,
+                    borderRadius: 10,
+                    fontSize: 14,
+                    color: active ? COLORS.primary : COLORS.text,
+                    background: active ? "#eaf5fc" : "transparent",
+                    cursor: "pointer",
+                    fontWeight: active ? 600 : 400,
+                  }}
+                >
+                  <Icon size={17} />
+                  {item.label}
+                </div>
+              );
+            })}
           </nav>
         )}
 
-        <main style={{ flex: 1, padding: 24 }}>
+        <main style={{ flex: 1, padding: 28 }}>
+          {page === "dashboard" && <Dashboard session={session} goTo={setPage} />}
           {page === "admin" && role === "admin" && <AdminPanel />}
           {page === "aziende" && <AziendeMandanti session={session} />}
           {page === "clienti" && <ClientiAnagrafica session={session} />}
           {page === "visite" && <CalendarioVisite session={session} />}
           {page === "preventivi" && <PreventiviOfferte session={session} />}
-          {page !== "admin" &&
-            page !== "aziende" &&
-            page !== "clienti" &&
-            page !== "visite" &&
-            page !== "preventivi" && (
-            <div style={{ color: "#6b7b8a", fontSize: 14 }}>
-              <h2 style={{ color: "#0b7bc4", fontSize: 18, marginBottom: 8 }}>
-                {menuItems.find((m) => m.key === page)?.label}
-              </h2>
-              <p>
-                Sezione da completare con le funzionalità specifiche (anagrafica
-                clienti, preventivi PDF, mappa, ecc.) — costruiamo ogni sezione
-                una alla volta.
-              </p>
-            </div>
-          )}
         </main>
       </div>
     </div>
