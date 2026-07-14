@@ -319,6 +319,1493 @@ function AdminPanel() {
 }
 
 // ============================================================
+// AZIENDE MANDANTI — elenco, aggiunta, modifica, eliminazione
+// ============================================================
+function AziendeMandanti({ session }) {
+  const [list, setList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const emptyForm = {
+    nome: "",
+    sconto1: "",
+    sconto2: "",
+    imballo_percentuale: "",
+    trasporto: "",
+    resi: "",
+    note: "",
+  };
+  const [form, setForm] = useState(emptyForm);
+  const [editingId, setEditingId] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const headers = () => ({
+    "Content-Type": "application/json",
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${session.access_token}`,
+  });
+
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/aziende_mandanti?select=*&order=nome.asc`,
+        { headers: headers() }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Errore nel caricamento");
+      setList(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const resetForm = () => {
+    setForm(emptyForm);
+    setEditingId(null);
+  };
+
+  const save = async () => {
+    if (!form.nome.trim()) {
+      setError("Il nome azienda è obbligatorio.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const body = {
+        nome: form.nome,
+        sconto1: form.sconto1 !== "" ? Number(form.sconto1) : null,
+        sconto2: form.sconto2 !== "" ? Number(form.sconto2) : null,
+        imballo_percentuale:
+          form.imballo_percentuale !== "" ? Number(form.imballo_percentuale) : null,
+        trasporto: form.trasporto || null,
+        resi: form.resi || null,
+        note: form.note || null,
+      };
+      let res;
+      if (editingId) {
+        res = await fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?id=eq.${editingId}`, {
+          method: "PATCH",
+          headers: { ...headers(), Prefer: "return=representation" },
+          body: JSON.stringify(body),
+        });
+      } else {
+        res = await fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti`, {
+          method: "POST",
+          headers: { ...headers(), Prefer: "return=representation" },
+          body: JSON.stringify(body),
+        });
+      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Errore nel salvataggio");
+      resetForm();
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const edit = (azienda) => {
+    setEditingId(azienda.id);
+    setForm({
+      nome: azienda.nome || "",
+      sconto1: azienda.sconto1 ?? "",
+      sconto2: azienda.sconto2 ?? "",
+      imballo_percentuale: azienda.imballo_percentuale ?? "",
+      trasporto: azienda.trasporto || "",
+      resi: azienda.resi || "",
+      note: azienda.note || "",
+    });
+  };
+
+  const remove = async (id) => {
+    if (!window.confirm("Eliminare questa azienda?")) return;
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?id=eq.${id}`, {
+        method: "DELETE",
+        headers: headers(),
+      });
+      if (!res.ok) throw new Error("Errore nell'eliminazione");
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const inputStyle = {
+    width: "100%",
+    padding: "8px 10px",
+    marginBottom: 10,
+    border: "1px solid #d5e4ef",
+    borderRadius: 8,
+    fontSize: 13,
+    boxSizing: "border-box",
+  };
+
+  return (
+    <div style={{ fontFamily: "Arial, sans-serif" }}>
+      <h2 style={{ color: "#0b7bc4", fontSize: 18, marginBottom: 16 }}>
+        Aziende mandanti
+      </h2>
+
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+        <div
+          style={{
+            flex: "1 1 280px",
+            border: "1px solid #e0eef7",
+            borderRadius: 12,
+            padding: 20,
+            maxWidth: 340,
+          }}
+        >
+          <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>
+            {editingId ? "Modifica azienda" : "Nuova azienda"}
+          </h3>
+          <input
+            placeholder="Nome azienda *"
+            value={form.nome}
+            onChange={(e) => setForm({ ...form, nome: e.target.value })}
+            style={inputStyle}
+          />
+          <input
+            placeholder="Sconto 1 (%)"
+            value={form.sconto1}
+            onChange={(e) => setForm({ ...form, sconto1: e.target.value })}
+            style={inputStyle}
+          />
+          <input
+            placeholder="Sconto 2 (%)"
+            value={form.sconto2}
+            onChange={(e) => setForm({ ...form, sconto2: e.target.value })}
+            style={inputStyle}
+          />
+          <input
+            placeholder="Imballo (%)"
+            value={form.imballo_percentuale}
+            onChange={(e) => setForm({ ...form, imballo_percentuale: e.target.value })}
+            style={inputStyle}
+          />
+          <input
+            placeholder="Trasporto (policy)"
+            value={form.trasporto}
+            onChange={(e) => setForm({ ...form, trasporto: e.target.value })}
+            style={inputStyle}
+          />
+          <input
+            placeholder="Resi (policy)"
+            value={form.resi}
+            onChange={(e) => setForm({ ...form, resi: e.target.value })}
+            style={inputStyle}
+          />
+          <textarea
+            placeholder="Note"
+            value={form.note}
+            onChange={(e) => setForm({ ...form, note: e.target.value })}
+            style={{ ...inputStyle, minHeight: 60 }}
+          />
+
+          {error && (
+            <div style={{ color: "#c0392b", fontSize: 12, marginBottom: 10 }}>
+              {error}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={save}
+              disabled={saving}
+              style={{
+                padding: "9px 16px",
+                background: "#0b7bc4",
+                color: "#fff",
+                border: "none",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              {saving ? "Salvataggio..." : editingId ? "Salva modifiche" : "Aggiungi azienda"}
+            </button>
+            {editingId && (
+              <button
+                onClick={resetForm}
+                style={{
+                  padding: "9px 16px",
+                  background: "#fff",
+                  color: "#0b7bc4",
+                  border: "1px solid #d5e4ef",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  cursor: "pointer",
+                }}
+              >
+                Annulla
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div style={{ flex: "2 1 400px" }}>
+          {loading ? (
+            <p style={{ color: "#6b7b8a", fontSize: 13 }}>Caricamento...</p>
+          ) : list.length === 0 ? (
+            <p style={{ color: "#6b7b8a", fontSize: 13 }}>
+              Nessuna azienda ancora inserita.
+            </p>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ textAlign: "left", borderBottom: "2px solid #e0eef7" }}>
+                  <th style={{ padding: "8px 6px" }}>Nome</th>
+                  <th style={{ padding: "8px 6px" }}>Sc. 1</th>
+                  <th style={{ padding: "8px 6px" }}>Sc. 2</th>
+                  <th style={{ padding: "8px 6px" }}>Imballo</th>
+                  <th style={{ padding: "8px 6px" }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((a) => (
+                  <tr key={a.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
+                    <td style={{ padding: "8px 6px", fontWeight: 600 }}>{a.nome}</td>
+                    <td style={{ padding: "8px 6px" }}>
+                      {a.sconto1 != null ? `${a.sconto1}%` : "-"}
+                    </td>
+                    <td style={{ padding: "8px 6px" }}>
+                      {a.sconto2 != null ? `${a.sconto2}%` : "-"}
+                    </td>
+                    <td style={{ padding: "8px 6px" }}>
+                      {a.imballo_percentuale != null ? `${a.imballo_percentuale}%` : "-"}
+                    </td>
+                    <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }}>
+                      <button
+                        onClick={() => edit(a)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#0b7bc4",
+                          cursor: "pointer",
+                          fontSize: 12,
+                          marginRight: 10,
+                        }}
+                      >
+                        Modifica
+                      </button>
+                      <button
+                        onClick={() => remove(a.id)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#c0392b",
+                          cursor: "pointer",
+                          fontSize: 12,
+                        }}
+                      >
+                        Elimina
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// ANAGRAFICA CLIENTI — elenco, aggiunta, modifica, eliminazione
+// ============================================================
+const CLASSIFICAZIONI = [
+  "Architetto",
+  "Contractor",
+  "Showroom",
+  "Rivenditore termoidraulica",
+  "Professionista",
+  "Impresa",
+  "Privato",
+];
+
+function ClientiAnagrafica({ session }) {
+  const [list, setList] = useState([]);
+  const [aziendeOptions, setAziendeOptions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const emptyForm = {
+    ragione_sociale: "",
+    indirizzo: "",
+    telefono: "",
+    email: "",
+    classificazione: "",
+    aziende_collaborate: [],
+    competitor: "",
+    note: "",
+  };
+  const [form, setForm] = useState(emptyForm);
+  const [editingId, setEditingId] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [filtroClassificazione, setFiltroClassificazione] = useState("");
+
+  const headers = () => ({
+    "Content-Type": "application/json",
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${session.access_token}`,
+  });
+
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [resClienti, resAziende] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/clienti?select=*&order=ragione_sociale.asc`, {
+          headers: headers(),
+        }),
+        fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?select=id,nome&order=nome.asc`, {
+          headers: headers(),
+        }),
+      ]);
+      const dataClienti = await resClienti.json();
+      const dataAziende = await resAziende.json();
+      if (!resClienti.ok) throw new Error(dataClienti.message || "Errore nel caricamento clienti");
+      setList(dataClienti);
+      if (resAziende.ok) setAziendeOptions(dataAziende);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const resetForm = () => {
+    setForm(emptyForm);
+    setEditingId(null);
+  };
+
+  const toggleAzienda = (nome) => {
+    setForm((f) => ({
+      ...f,
+      aziende_collaborate: f.aziende_collaborate.includes(nome)
+        ? f.aziende_collaborate.filter((n) => n !== nome)
+        : [...f.aziende_collaborate, nome],
+    }));
+  };
+
+  const save = async () => {
+    if (!form.ragione_sociale.trim()) {
+      setError("La ragione sociale è obbligatoria.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const body = {
+        ragione_sociale: form.ragione_sociale,
+        indirizzo: form.indirizzo || null,
+        telefono: form.telefono || null,
+        email: form.email || null,
+        classificazione: form.classificazione || null,
+        aziende_collaborate: form.aziende_collaborate,
+        competitor: form.competitor
+          ? form.competitor.split(",").map((s) => s.trim()).filter(Boolean)
+          : [],
+        note: form.note || null,
+      };
+      let res;
+      if (editingId) {
+        res = await fetch(`${SUPABASE_URL}/rest/v1/clienti?id=eq.${editingId}`, {
+          method: "PATCH",
+          headers: { ...headers(), Prefer: "return=representation" },
+          body: JSON.stringify(body),
+        });
+      } else {
+        res = await fetch(`${SUPABASE_URL}/rest/v1/clienti`, {
+          method: "POST",
+          headers: { ...headers(), Prefer: "return=representation" },
+          body: JSON.stringify(body),
+        });
+      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Errore nel salvataggio");
+      resetForm();
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const edit = (cliente) => {
+    setEditingId(cliente.id);
+    setForm({
+      ragione_sociale: cliente.ragione_sociale || "",
+      indirizzo: cliente.indirizzo || "",
+      telefono: cliente.telefono || "",
+      email: cliente.email || "",
+      classificazione: cliente.classificazione || "",
+      aziende_collaborate: cliente.aziende_collaborate || [],
+      competitor: (cliente.competitor || []).join(", "),
+      note: cliente.note || "",
+    });
+  };
+
+  const remove = async (id) => {
+    if (!window.confirm("Eliminare questo cliente?")) return;
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/clienti?id=eq.${id}`, {
+        method: "DELETE",
+        headers: headers(),
+      });
+      if (!res.ok) throw new Error("Errore nell'eliminazione");
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const inputStyle = {
+    width: "100%",
+    padding: "8px 10px",
+    marginBottom: 10,
+    border: "1px solid #d5e4ef",
+    borderRadius: 8,
+    fontSize: 13,
+    boxSizing: "border-box",
+  };
+
+  const filteredList = filtroClassificazione
+    ? list.filter((c) => c.classificazione === filtroClassificazione)
+    : list;
+
+  return (
+    <div style={{ fontFamily: "Arial, sans-serif" }}>
+      <h2 style={{ color: "#0b7bc4", fontSize: 18, marginBottom: 16 }}>
+        Anagrafica clienti
+      </h2>
+
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+        <div
+          style={{
+            flex: "1 1 300px",
+            border: "1px solid #e0eef7",
+            borderRadius: 12,
+            padding: 20,
+            maxWidth: 360,
+          }}
+        >
+          <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>
+            {editingId ? "Modifica cliente" : "Nuovo cliente"}
+          </h3>
+          <input
+            placeholder="Ragione sociale *"
+            value={form.ragione_sociale}
+            onChange={(e) => setForm({ ...form, ragione_sociale: e.target.value })}
+            style={inputStyle}
+          />
+          <input
+            placeholder="Indirizzo"
+            value={form.indirizzo}
+            onChange={(e) => setForm({ ...form, indirizzo: e.target.value })}
+            style={inputStyle}
+          />
+          <input
+            placeholder="Telefono"
+            value={form.telefono}
+            onChange={(e) => setForm({ ...form, telefono: e.target.value })}
+            style={inputStyle}
+          />
+          <input
+            placeholder="Email"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            style={inputStyle}
+          />
+
+          <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 4 }}>
+            Classificazione
+          </label>
+          <select
+            value={form.classificazione}
+            onChange={(e) => setForm({ ...form, classificazione: e.target.value })}
+            style={inputStyle}
+          >
+            <option value="">-- seleziona --</option>
+            {CLASSIFICAZIONI.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+
+          <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 6 }}>
+            Aziende mandanti con cui collabora
+          </label>
+          <div
+            style={{
+              marginBottom: 10,
+              maxHeight: 120,
+              overflowY: "auto",
+              border: "1px solid #d5e4ef",
+              borderRadius: 8,
+              padding: 8,
+            }}
+          >
+            {aziendeOptions.length === 0 && (
+              <span style={{ fontSize: 12, color: "#9aa7b2" }}>
+                Nessuna azienda mandante inserita ancora
+              </span>
+            )}
+            {aziendeOptions.map((a) => (
+              <label
+                key={a.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  fontSize: 12,
+                  marginBottom: 4,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={form.aziende_collaborate.includes(a.nome)}
+                  onChange={() => toggleAzienda(a.nome)}
+                />
+                {a.nome}
+              </label>
+            ))}
+          </div>
+
+          <input
+            placeholder="Competitor (separati da virgola)"
+            value={form.competitor}
+            onChange={(e) => setForm({ ...form, competitor: e.target.value })}
+            style={inputStyle}
+          />
+          <textarea
+            placeholder="Note"
+            value={form.note}
+            onChange={(e) => setForm({ ...form, note: e.target.value })}
+            style={{ ...inputStyle, minHeight: 60 }}
+          />
+
+          {error && (
+            <div style={{ color: "#c0392b", fontSize: 12, marginBottom: 10 }}>
+              {error}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={save}
+              disabled={saving}
+              style={{
+                padding: "9px 16px",
+                background: "#0b7bc4",
+                color: "#fff",
+                border: "none",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              {saving ? "Salvataggio..." : editingId ? "Salva modifiche" : "Aggiungi cliente"}
+            </button>
+            {editingId && (
+              <button
+                onClick={resetForm}
+                style={{
+                  padding: "9px 16px",
+                  background: "#fff",
+                  color: "#0b7bc4",
+                  border: "1px solid #d5e4ef",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  cursor: "pointer",
+                }}
+              >
+                Annulla
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div style={{ flex: "2 1 420px" }}>
+          <div style={{ marginBottom: 12 }}>
+            <select
+              value={filtroClassificazione}
+              onChange={(e) => setFiltroClassificazione(e.target.value)}
+              style={{ ...inputStyle, maxWidth: 240, marginBottom: 0 }}
+            >
+              <option value="">Tutte le classificazioni</option>
+              {CLASSIFICAZIONI.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {loading ? (
+            <p style={{ color: "#6b7b8a", fontSize: 13 }}>Caricamento...</p>
+          ) : filteredList.length === 0 ? (
+            <p style={{ color: "#6b7b8a", fontSize: 13 }}>Nessun cliente trovato.</p>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ textAlign: "left", borderBottom: "2px solid #e0eef7" }}>
+                  <th style={{ padding: "8px 6px" }}>Ragione sociale</th>
+                  <th style={{ padding: "8px 6px" }}>Classificazione</th>
+                  <th style={{ padding: "8px 6px" }}>Telefono</th>
+                  <th style={{ padding: "8px 6px" }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredList.map((c) => (
+                  <tr key={c.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
+                    <td style={{ padding: "8px 6px", fontWeight: 600 }}>
+                      {c.ragione_sociale}
+                    </td>
+                    <td style={{ padding: "8px 6px" }}>{c.classificazione || "-"}</td>
+                    <td style={{ padding: "8px 6px" }}>{c.telefono || "-"}</td>
+                    <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }}>
+                      <button
+                        onClick={() => edit(c)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#0b7bc4",
+                          cursor: "pointer",
+                          fontSize: 12,
+                          marginRight: 10,
+                        }}
+                      >
+                        Modifica
+                      </button>
+                      <button
+                        onClick={() => remove(c.id)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#c0392b",
+                          cursor: "pointer",
+                          fontSize: 12,
+                        }}
+                      >
+                        Elimina
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// CALENDARIO VISITE — per cliente, con conteggio e storico
+// ============================================================
+function CalendarioVisite({ session }) {
+  const [clienti, setClienti] = useState([]);
+  const [visite, setVisite] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [clienteSelezionato, setClienteSelezionato] = useState("");
+  const emptyForm = {
+    data_visita: new Date().toISOString().slice(0, 10),
+    argomenti_trattati: "",
+    cataloghi_lasciati: "",
+    note: "",
+  };
+  const [form, setForm] = useState(emptyForm);
+  const [saving, setSaving] = useState(false);
+
+  const headers = () => ({
+    "Content-Type": "application/json",
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${session.access_token}`,
+  });
+
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [resClienti, resVisite] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale&order=ragione_sociale.asc`, {
+          headers: headers(),
+        }),
+        fetch(`${SUPABASE_URL}/rest/v1/visite?select=*&order=data_visita.desc`, {
+          headers: headers(),
+        }),
+      ]);
+      const dataClienti = await resClienti.json();
+      const dataVisite = await resVisite.json();
+      if (!resClienti.ok) throw new Error(dataClienti.message || "Errore nel caricamento clienti");
+      if (!resVisite.ok) throw new Error(dataVisite.message || "Errore nel caricamento visite");
+      setClienti(dataClienti);
+      setVisite(dataVisite);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const save = async () => {
+    if (!clienteSelezionato) {
+      setError("Seleziona un cliente.");
+      return;
+    }
+    if (!form.data_visita) {
+      setError("La data della visita è obbligatoria.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const body = {
+        cliente_id: clienteSelezionato,
+        data_visita: form.data_visita,
+        argomenti_trattati: form.argomenti_trattati || null,
+        cataloghi_lasciati: form.cataloghi_lasciati || null,
+        note: form.note || null,
+      };
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/visite`, {
+        method: "POST",
+        headers: { ...headers(), Prefer: "return=representation" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Errore nel salvataggio");
+      setForm(emptyForm);
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async (id) => {
+    if (!window.confirm("Eliminare questa visita?")) return;
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/visite?id=eq.${id}`, {
+        method: "DELETE",
+        headers: headers(),
+      });
+      if (!res.ok) throw new Error("Errore nell'eliminazione");
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const inputStyle = {
+    width: "100%",
+    padding: "8px 10px",
+    marginBottom: 10,
+    border: "1px solid #d5e4ef",
+    borderRadius: 8,
+    fontSize: 13,
+    boxSizing: "border-box",
+  };
+
+  const nomeCliente = (id) => clienti.find((c) => c.id === id)?.ragione_sociale || "—";
+
+  const visiteFiltrate = clienteSelezionato
+    ? visite.filter((v) => v.cliente_id === clienteSelezionato)
+    : visite;
+
+  const conteggioPerCliente = (id) => visite.filter((v) => v.cliente_id === id).length;
+
+  return (
+    <div style={{ fontFamily: "Arial, sans-serif" }}>
+      <h2 style={{ color: "#0b7bc4", fontSize: 18, marginBottom: 16 }}>
+        Calendario visite
+      </h2>
+
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+        <div
+          style={{
+            flex: "1 1 280px",
+            border: "1px solid #e0eef7",
+            borderRadius: 12,
+            padding: 20,
+            maxWidth: 340,
+          }}
+        >
+          <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>
+            Registra nuova visita
+          </h3>
+
+          <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 4 }}>
+            Cliente *
+          </label>
+          <select
+            value={clienteSelezionato}
+            onChange={(e) => setClienteSelezionato(e.target.value)}
+            style={inputStyle}
+          >
+            <option value="">-- seleziona cliente --</option>
+            {clienti.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.ragione_sociale} ({conteggioPerCliente(c.id)} visite)
+              </option>
+            ))}
+          </select>
+
+          <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 4 }}>
+            Data visita *
+          </label>
+          <input
+            type="date"
+            value={form.data_visita}
+            onChange={(e) => setForm({ ...form, data_visita: e.target.value })}
+            style={inputStyle}
+          />
+
+          <textarea
+            placeholder="Argomenti trattati"
+            value={form.argomenti_trattati}
+            onChange={(e) => setForm({ ...form, argomenti_trattati: e.target.value })}
+            style={{ ...inputStyle, minHeight: 50 }}
+          />
+          <textarea
+            placeholder="Cataloghi / listini lasciati"
+            value={form.cataloghi_lasciati}
+            onChange={(e) => setForm({ ...form, cataloghi_lasciati: e.target.value })}
+            style={{ ...inputStyle, minHeight: 40 }}
+          />
+          <textarea
+            placeholder="Note"
+            value={form.note}
+            onChange={(e) => setForm({ ...form, note: e.target.value })}
+            style={{ ...inputStyle, minHeight: 40 }}
+          />
+
+          {error && (
+            <div style={{ color: "#c0392b", fontSize: 12, marginBottom: 10 }}>
+              {error}
+            </div>
+          )}
+
+          <button
+            onClick={save}
+            disabled={saving}
+            style={{
+              padding: "9px 16px",
+              background: "#0b7bc4",
+              color: "#fff",
+              border: "none",
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            {saving ? "Salvataggio..." : "Salva visita"}
+          </button>
+        </div>
+
+        <div style={{ flex: "2 1 400px" }}>
+          <div style={{ marginBottom: 12 }}>
+            <select
+              value={clienteSelezionato}
+              onChange={(e) => setClienteSelezionato(e.target.value)}
+              style={{ ...inputStyle, maxWidth: 260, marginBottom: 0 }}
+            >
+              <option value="">Tutti i clienti</option>
+              {clienti.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.ragione_sociale}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {loading ? (
+            <p style={{ color: "#6b7b8a", fontSize: 13 }}>Caricamento...</p>
+          ) : visiteFiltrate.length === 0 ? (
+            <p style={{ color: "#6b7b8a", fontSize: 13 }}>Nessuna visita registrata.</p>
+          ) : (
+            <div>
+              {visiteFiltrate.map((v) => (
+                <div
+                  key={v.id}
+                  style={{
+                    border: "1px solid #e0eef7",
+                    borderRadius: 10,
+                    padding: 14,
+                    marginBottom: 10,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 700, color: "#0b7bc4", fontSize: 13 }}>
+                        {nomeCliente(v.cliente_id)}
+                      </div>
+                      <div style={{ fontSize: 12, color: "#6b7b8a", marginTop: 2 }}>
+                        {new Date(v.data_visita).toLocaleDateString("it-IT")}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => remove(v.id)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "#c0392b",
+                        cursor: "pointer",
+                        fontSize: 12,
+                      }}
+                    >
+                      Elimina
+                    </button>
+                  </div>
+                  {v.argomenti_trattati && (
+                    <div style={{ fontSize: 12, marginTop: 8 }}>
+                      <strong>Argomenti:</strong> {v.argomenti_trattati}
+                    </div>
+                  )}
+                  {v.cataloghi_lasciati && (
+                    <div style={{ fontSize: 12, marginTop: 4 }}>
+                      <strong>Cataloghi lasciati:</strong> {v.cataloghi_lasciati}
+                    </div>
+                  )}
+                  {v.note && (
+                    <div style={{ fontSize: 12, marginTop: 4 }}>
+                      <strong>Note:</strong> {v.note}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// PREVENTIVI / OFFERTE
+// ============================================================
+function nuovaRiga() {
+  return {
+    id: Math.random().toString(36).slice(2),
+    articolo: "",
+    descrizione: "",
+    finitura: "",
+    quantita: 1,
+    prezzo_unitario: 0,
+    sconto1: 0,
+    sconto2: 0,
+  };
+}
+
+function calcolaRigaNetto(riga) {
+  const totaleListino = (Number(riga.quantita) || 0) * (Number(riga.prezzo_unitario) || 0);
+  const dopoSconto1 = totaleListino * (1 - (Number(riga.sconto1) || 0) / 100);
+  const dopoSconto2 = dopoSconto1 * (1 - (Number(riga.sconto2) || 0) / 100);
+  return { totaleListino, netto: dopoSconto2 };
+}
+
+function PreventiviOfferte({ session }) {
+  const [clienti, setClienti] = useState([]);
+  const [aziende, setAziende] = useState([]);
+  const [lista, setLista] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+
+  const emptyHeader = {
+    cliente_id: "",
+    azienda_id: "",
+    rif: "",
+    data: new Date().toISOString().slice(0, 10),
+    imballo_percentuale: 0,
+  };
+  const [header, setHeader] = useState(emptyHeader);
+  const [righe, setRighe] = useState([nuovaRiga()]);
+
+  const headers = () => ({
+    "Content-Type": "application/json",
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${session.access_token}`,
+  });
+
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [resClienti, resAziende, resPreventivi] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale&order=ragione_sociale.asc`, {
+          headers: headers(),
+        }),
+        fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?select=id,nome&order=nome.asc`, {
+          headers: headers(),
+        }),
+        fetch(`${SUPABASE_URL}/rest/v1/preventivi?select=*&order=data.desc`, {
+          headers: headers(),
+        }),
+      ]);
+      const dataClienti = await resClienti.json();
+      const dataAziende = await resAziende.json();
+      const dataPreventivi = await resPreventivi.json();
+      if (resClienti.ok) setClienti(dataClienti);
+      if (resAziende.ok) setAziende(dataAziende);
+      if (!resPreventivi.ok) throw new Error(dataPreventivi.message || "Errore nel caricamento");
+      setLista(dataPreventivi);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const resetForm = () => {
+    setHeader(emptyHeader);
+    setRighe([nuovaRiga()]);
+    setEditingId(null);
+  };
+
+  const aggiungiRiga = () => setRighe((r) => [...r, nuovaRiga()]);
+  const rimuoviRiga = (id) => setRighe((r) => r.filter((x) => x.id !== id));
+  const aggiornaRiga = (id, campo, valore) =>
+    setRighe((r) => r.map((x) => (x.id === id ? { ...x, [campo]: valore } : x)));
+
+  const totaleNetto = righe.reduce((sum, r) => sum + calcolaRigaNetto(r).netto, 0);
+  const valoreImballo = totaleNetto * ((Number(header.imballo_percentuale) || 0) / 100);
+  const totaleConImballo = totaleNetto + valoreImballo;
+
+  const salva = async () => {
+    if (!header.cliente_id || !header.azienda_id) {
+      setError("Seleziona cliente e azienda.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const body = {
+        cliente_id: header.cliente_id,
+        azienda_id: header.azienda_id,
+        rif: header.rif || null,
+        data: header.data,
+        righe: righe,
+        imballo_percentuale: Number(header.imballo_percentuale) || 0,
+      };
+      let res;
+      if (editingId) {
+        res = await fetch(`${SUPABASE_URL}/rest/v1/preventivi?id=eq.${editingId}`, {
+          method: "PATCH",
+          headers: { ...headers(), Prefer: "return=representation" },
+          body: JSON.stringify(body),
+        });
+      } else {
+        res = await fetch(`${SUPABASE_URL}/rest/v1/preventivi`, {
+          method: "POST",
+          headers: { ...headers(), Prefer: "return=representation" },
+          body: JSON.stringify(body),
+        });
+      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Errore nel salvataggio");
+      resetForm();
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const modifica = (p) => {
+    setEditingId(p.id);
+    setHeader({
+      cliente_id: p.cliente_id || "",
+      azienda_id: p.azienda_id || "",
+      rif: p.rif || "",
+      data: p.data || new Date().toISOString().slice(0, 10),
+      imballo_percentuale: p.imballo_percentuale || 0,
+    });
+    setRighe(p.righe && p.righe.length ? p.righe : [nuovaRiga()]);
+  };
+
+  const elimina = async (id) => {
+    if (!window.confirm("Eliminare questo preventivo?")) return;
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/preventivi?id=eq.${id}`, {
+        method: "DELETE",
+        headers: headers(),
+      });
+      if (!res.ok) throw new Error("Errore nell'eliminazione");
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const nomeCliente = (id) => clienti.find((c) => c.id === id)?.ragione_sociale || "—";
+  const nomeAzienda = (id) => aziende.find((a) => a.id === id)?.nome || "—";
+
+  const inputStyle = {
+    padding: "6px 8px",
+    border: "1px solid #d5e4ef",
+    borderRadius: 6,
+    fontSize: 12,
+    boxSizing: "border-box",
+  };
+  const fieldStyle = {
+    width: "100%",
+    padding: "8px 10px",
+    marginBottom: 10,
+    border: "1px solid #d5e4ef",
+    borderRadius: 8,
+    fontSize: 13,
+    boxSizing: "border-box",
+  };
+
+  return (
+    <div style={{ fontFamily: "Arial, sans-serif" }}>
+      <h2 style={{ color: "#0b7bc4", fontSize: 18, marginBottom: 16 }}>
+        Preventivi / Offerte
+      </h2>
+
+      <div
+        style={{
+          border: "1px solid #e0eef7",
+          borderRadius: 12,
+          padding: 20,
+          marginBottom: 24,
+        }}
+      >
+        <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>
+          {editingId ? "Modifica preventivo" : "Nuovo preventivo"}
+        </h3>
+
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
+          <select
+            value={header.azienda_id}
+            onChange={(e) => setHeader({ ...header, azienda_id: e.target.value })}
+            style={{ ...fieldStyle, maxWidth: 220 }}
+          >
+            <option value="">-- Azienda --</option>
+            {aziende.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.nome}
+              </option>
+            ))}
+          </select>
+          <select
+            value={header.cliente_id}
+            onChange={(e) => setHeader({ ...header, cliente_id: e.target.value })}
+            style={{ ...fieldStyle, maxWidth: 220 }}
+          >
+            <option value="">-- Cliente (Spettabile) --</option>
+            {clienti.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.ragione_sociale}
+              </option>
+            ))}
+          </select>
+          <input
+            type="date"
+            value={header.data}
+            onChange={(e) => setHeader({ ...header, data: e.target.value })}
+            style={{ ...fieldStyle, maxWidth: 160 }}
+          />
+          <input
+            placeholder="RIF"
+            value={header.rif}
+            onChange={(e) => setHeader({ ...header, rif: e.target.value })}
+            style={{ ...fieldStyle, maxWidth: 160 }}
+          />
+        </div>
+
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 12 }}>
+          <thead>
+            <tr style={{ textAlign: "left", borderBottom: "2px solid #e0eef7" }}>
+              <th style={{ padding: 6 }}>Art.</th>
+              <th style={{ padding: 6 }}>Descrizione</th>
+              <th style={{ padding: 6 }}>Finitura</th>
+              <th style={{ padding: 6 }}>Qtà</th>
+              <th style={{ padding: 6 }}>Prezzo un.</th>
+              <th style={{ padding: 6 }}>Sc.1 %</th>
+              <th style={{ padding: 6 }}>Sc.2 %</th>
+              <th style={{ padding: 6 }}>Netto</th>
+              <th style={{ padding: 6 }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {righe.map((r) => {
+              const { netto } = calcolaRigaNetto(r);
+              return (
+                <tr key={r.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
+                  <td style={{ padding: 4 }}>
+                    <input
+                      value={r.articolo}
+                      onChange={(e) => aggiornaRiga(r.id, "articolo", e.target.value)}
+                      style={{ ...inputStyle, width: 70 }}
+                    />
+                  </td>
+                  <td style={{ padding: 4 }}>
+                    <input
+                      value={r.descrizione}
+                      onChange={(e) => aggiornaRiga(r.id, "descrizione", e.target.value)}
+                      style={{ ...inputStyle, width: 160 }}
+                    />
+                  </td>
+                  <td style={{ padding: 4 }}>
+                    <input
+                      value={r.finitura}
+                      onChange={(e) => aggiornaRiga(r.id, "finitura", e.target.value)}
+                      style={{ ...inputStyle, width: 80 }}
+                    />
+                  </td>
+                  <td style={{ padding: 4 }}>
+                    <input
+                      type="number"
+                      value={r.quantita}
+                      onChange={(e) => aggiornaRiga(r.id, "quantita", e.target.value)}
+                      style={{ ...inputStyle, width: 50 }}
+                    />
+                  </td>
+                  <td style={{ padding: 4 }}>
+                    <input
+                      type="number"
+                      value={r.prezzo_unitario}
+                      onChange={(e) => aggiornaRiga(r.id, "prezzo_unitario", e.target.value)}
+                      style={{ ...inputStyle, width: 70 }}
+                    />
+                  </td>
+                  <td style={{ padding: 4 }}>
+                    <input
+                      type="number"
+                      value={r.sconto1}
+                      onChange={(e) => aggiornaRiga(r.id, "sconto1", e.target.value)}
+                      style={{ ...inputStyle, width: 55 }}
+                    />
+                  </td>
+                  <td style={{ padding: 4 }}>
+                    <input
+                      type="number"
+                      value={r.sconto2}
+                      onChange={(e) => aggiornaRiga(r.id, "sconto2", e.target.value)}
+                      style={{ ...inputStyle, width: 55 }}
+                    />
+                  </td>
+                  <td style={{ padding: 4, fontWeight: 600 }}>
+                    {netto.toFixed(2)} €
+                  </td>
+                  <td style={{ padding: 4 }}>
+                    <button
+                      onClick={() => rimuoviRiga(r.id)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "#c0392b",
+                        cursor: "pointer",
+                        fontSize: 14,
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        <button
+          onClick={aggiungiRiga}
+          style={{
+            padding: "6px 12px",
+            background: "#fff",
+            color: "#0b7bc4",
+            border: "1px solid #d5e4ef",
+            borderRadius: 8,
+            fontSize: 12,
+            cursor: "pointer",
+            marginBottom: 16,
+          }}
+        >
+          + Aggiungi riga
+        </button>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            gap: 24,
+            fontSize: 13,
+            marginBottom: 16,
+            flexWrap: "wrap",
+          }}
+        >
+          <div>
+            <label style={{ fontSize: 12, color: "#333", marginRight: 6 }}>Imballo %</label>
+            <input
+              type="number"
+              value={header.imballo_percentuale}
+              onChange={(e) => setHeader({ ...header, imballo_percentuale: e.target.value })}
+              style={{ ...inputStyle, width: 70 }}
+            />
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ color: "#6b7b8a" }}>Totale netto: {totaleNetto.toFixed(2)} €</div>
+            <div style={{ color: "#6b7b8a" }}>Imballo: {valoreImballo.toFixed(2)} €</div>
+            <div style={{ fontWeight: 700, color: "#0b7bc4", fontSize: 15 }}>
+              Totale: {totaleConImballo.toFixed(2)} €
+            </div>
+            <div style={{ fontSize: 11, color: "#9aa7b2", marginTop: 4 }}>
+              IVA e trasporto esclusi
+            </div>
+          </div>
+        </div>
+
+        {error && (
+          <div style={{ color: "#c0392b", fontSize: 12, marginBottom: 10 }}>{error}</div>
+        )}
+
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={salva}
+            disabled={saving}
+            style={{
+              padding: "9px 16px",
+              background: "#0b7bc4",
+              color: "#fff",
+              border: "none",
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            {saving ? "Salvataggio..." : editingId ? "Salva modifiche" : "Salva preventivo"}
+          </button>
+          {editingId && (
+            <button
+              onClick={resetForm}
+              style={{
+                padding: "9px 16px",
+                background: "#fff",
+                color: "#0b7bc4",
+                border: "1px solid #d5e4ef",
+                borderRadius: 8,
+                fontSize: 13,
+                cursor: "pointer",
+              }}
+            >
+              Annulla
+            </button>
+          )}
+        </div>
+      </div>
+
+      <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>
+        Preventivi salvati
+      </h3>
+      {loading ? (
+        <p style={{ color: "#6b7b8a", fontSize: 13 }}>Caricamento...</p>
+      ) : lista.length === 0 ? (
+        <p style={{ color: "#6b7b8a", fontSize: 13 }}>Nessun preventivo salvato.</p>
+      ) : (
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead>
+            <tr style={{ textAlign: "left", borderBottom: "2px solid #e0eef7" }}>
+              <th style={{ padding: "8px 6px" }}>RIF</th>
+              <th style={{ padding: "8px 6px" }}>Data</th>
+              <th style={{ padding: "8px 6px" }}>Cliente</th>
+              <th style={{ padding: "8px 6px" }}>Azienda</th>
+              <th style={{ padding: "8px 6px" }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {lista.map((p) => (
+              <tr key={p.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
+                <td style={{ padding: "8px 6px" }}>{p.rif || "-"}</td>
+                <td style={{ padding: "8px 6px" }}>
+                  {p.data ? new Date(p.data).toLocaleDateString("it-IT") : "-"}
+                </td>
+                <td style={{ padding: "8px 6px" }}>{nomeCliente(p.cliente_id)}</td>
+                <td style={{ padding: "8px 6px" }}>{nomeAzienda(p.azienda_id)}</td>
+                <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }}>
+                  <button
+                    onClick={() => modifica(p)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#0b7bc4",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      marginRight: 10,
+                    }}
+                  >
+                    Modifica
+                  </button>
+                  <button
+                    onClick={() => elimina(p.id)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#c0392b",
+                      cursor: "pointer",
+                      fontSize: 12,
+                    }}
+                  >
+                    Elimina
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
 // SHELL PRINCIPALE APP (dietro login)
 // ============================================================
 function AppShell({ session, onLogout }) {
@@ -431,15 +1918,23 @@ function AppShell({ session, onLogout }) {
 
         <main style={{ flex: 1, padding: 24 }}>
           {page === "admin" && role === "admin" && <AdminPanel />}
-          {page !== "admin" && (
+          {page === "aziende" && <AziendeMandanti session={session} />}
+          {page === "clienti" && <ClientiAnagrafica session={session} />}
+          {page === "visite" && <CalendarioVisite session={session} />}
+          {page === "preventivi" && <PreventiviOfferte session={session} />}
+          {page !== "admin" &&
+            page !== "aziende" &&
+            page !== "clienti" &&
+            page !== "visite" &&
+            page !== "preventivi" && (
             <div style={{ color: "#6b7b8a", fontSize: 14 }}>
               <h2 style={{ color: "#0b7bc4", fontSize: 18, marginBottom: 8 }}>
                 {menuItems.find((m) => m.key === page)?.label}
               </h2>
               <p>
                 Sezione da completare con le funzionalità specifiche (anagrafica
-                clienti, listini, preventivi PDF, mappa, ecc.) — ora che il
-                login è attivo, possiamo costruire ogni sezione una alla volta.
+                clienti, preventivi PDF, mappa, ecc.) — costruiamo ogni sezione
+                una alla volta.
               </p>
             </div>
           )}
