@@ -7,11 +7,10 @@ import {
 import { createClient } from '@supabase/supabase-js';
 
 // Inizializzazione client Supabase
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// Inizializzazione client Supabase con le tue chiavi corrette
+const supabaseUrl = "https://hifwdbjkerlfjbgwhpxc.supabase.co";
+const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpZndkYmprZXJsZmpiZ3docHhjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5OTEzMTYsImV4cCI6MjA5OTU2NzMxNn0.wAPiUA4YU9ofHJgDrtFBHAFLzEuOAnAwMdX4Elk3Bsc";
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [clienti, setClienti] = useState([]);
   const [aziende, setAziende] = useState([]);
