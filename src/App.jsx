@@ -1,4 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import Papa from "papaparse";
+import * as XLSX from "xlsx";
 import {
   Users,
   Building2,
@@ -9,6 +11,8 @@ import {
   LayoutDashboard,
   ShieldCheck,
   Printer,
+  Map as MapIcon,
+  Upload,
 } from "lucide-react";
 
 // ============================================================
@@ -543,13 +547,138 @@ function Dashboard({ session, goTo }) {
   );
 }
 
-// ============================================================
-// AZIENDE MANDANTI — elenco, aggiunta, modifica, eliminazione
-// ============================================================
+function formattaEuro(n) {
+  return (Number(n) || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+}
+
+async function geocodificaIndirizzo(indirizzo) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(indirizzo)}`
+    );
+    const data = await res.json();
+    if (data && data[0]) return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+  } catch (e) {
+    // silenzioso
+  }
+  return null;
+}
+
+function caricaLeaflet() {
+  return new Promise((resolve) => {
+    if (window.L) return resolve(window.L);
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css";
+    document.head.appendChild(link);
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js";
+    script.onload = () => resolve(window.L);
+    document.body.appendChild(script);
+  });
+}
+
+function MappaClienti({ session }) {
+  const mapRef = useRef(null);
+  const mapInstance = useRef(null);
+  const [clienti, setClienti] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const headers = () => ({
+    "Content-Type": "application/json",
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${session.access_token}`,
+  });
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const res = await fetch(
+          `${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale,indirizzo,classificazione,latitudine,longitudine`,
+          { headers: headers() }
+        );
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Errore nel caricamento");
+        setClienti(data);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
+
+  useEffect(() => {
+    (async () => {
+      const L = await caricaLeaflet();
+      if (!mapRef.current || mapInstance.current) return;
+      const map = L.map(mapRef.current).setView([42.5, 12.5], 6);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap",
+      }).addTo(map);
+      mapInstance.current = map;
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!mapInstance.current || !window.L) return;
+    const L = window.L;
+    const conCoordinate = clienti.filter((c) => c.latitudine && c.longitudine);
+    const markers = [];
+    conCoordinate.forEach((c) => {
+      const m = L.marker([c.latitudine, c.longitudine])
+        .addTo(mapInstance.current)
+        .bindPopup(`<strong>${c.ragione_sociale}</strong><br/>${c.classificazione || ""}<br/>${c.indirizzo || ""}`);
+      markers.push(m);
+    });
+    if (conCoordinate.length > 0) {
+      const gruppo = L.featureGroup(markers);
+      mapInstance.current.fitBounds(gruppo.getBounds().pad(0.2));
+    }
+    return () => {
+      markers.forEach((m) => mapInstance.current && mapInstance.current.removeLayer(m));
+    };
+  }, [clienti]);
+
+  const senzaCoordinate = clienti.filter((c) => c.indirizzo && (!c.latitudine || !c.longitudine));
+
+  return (
+    <div style={{ fontFamily: "Arial, sans-serif" }}>
+      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 4 }}>Mappa clienti</h2>
+      <p style={{ color: COLORS.muted, fontSize: 13, marginBottom: 16 }}>
+        Le coordinate si calcolano automaticamente quando salvi l'indirizzo in anagrafica.
+      </p>
+      {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 10 }}>{error}</div>}
+      {loading && <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>}
+      <div
+        ref={mapRef}
+        style={{
+          width: "100%",
+          height: 480,
+          borderRadius: 14,
+          border: `1px solid ${COLORS.border}`,
+          overflow: "hidden",
+        }}
+      />
+      {senzaCoordinate.length > 0 && (
+        <p style={{ fontSize: 12, color: COLORS.muted, marginTop: 10 }}>
+          {senzaCoordinate.length} cliente/i senza coordinate ancora calcolate: apri e risalva la
+          loro scheda in Anagrafica clienti per posizionarli.
+        </p>
+      )}
+    </div>
+  );
+}
 function AziendeMandanti({ session }) {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [uploadMsg, setUploadMsg] = useState(null);
+  const [uploadingId, setUploadingId] = useState(null);
   const emptyForm = {
     nome: "",
     sconto1: "",
@@ -591,6 +720,83 @@ function AziendeMandanti({ session }) {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const trovaColonna = (riga, candidati) => {
+    const chiavi = Object.keys(riga);
+    for (const c of candidati) {
+      const trovata = chiavi.find((k) => k.toLowerCase().trim().includes(c));
+      if (trovata) return riga[trovata];
+    }
+    return "";
+  };
+
+  const caricaListino = async (aziendaId, file) => {
+    setUploadingId(aziendaId);
+    setUploadMsg(null);
+    try {
+      let righe = [];
+      const nomeFile = file.name.toLowerCase();
+
+      if (nomeFile.endsWith(".csv")) {
+        const testo = await file.text();
+        const parsed = Papa.parse(testo, { header: true, skipEmptyLines: true, dynamicTyping: true });
+        righe = parsed.data;
+      } else if (nomeFile.endsWith(".xlsx") || nomeFile.endsWith(".xls")) {
+        const buffer = await file.arrayBuffer();
+        const wb = XLSX.read(buffer, { type: "array" });
+        const primoFoglio = wb.Sheets[wb.SheetNames[0]];
+        righe = XLSX.utils.sheet_to_json(primoFoglio, { defval: "" });
+      } else {
+        setUploadMsg({ type: "error", text: "Formato non supportato: usa file .xlsx, .xls o .csv." });
+        setUploadingId(null);
+        return;
+      }
+
+      const voci = righe
+        .map((r) => ({
+          azienda_id: aziendaId,
+          codice_articolo: String(
+            trovaColonna(r, ["codice", "articolo", "cod."])
+          ).trim(),
+          descrizione: String(trovaColonna(r, ["descrizione", "desc"])).trim(),
+          prezzo_unitario:
+            Number(
+              String(trovaColonna(r, ["prezzo", "listino", "importo"]))
+                .replace(",", ".")
+                .replace(/[^\d.-]/g, "")
+            ) || 0,
+        }))
+        .filter((v) => v.codice_articolo);
+
+      if (voci.length === 0) {
+        setUploadMsg({
+          type: "error",
+          text: "Nessuna riga valida trovata. Controlla che il file abbia colonne tipo Codice, Descrizione, Prezzo.",
+        });
+        setUploadingId(null);
+        return;
+      }
+
+      await fetch(`${SUPABASE_URL}/rest/v1/listini?azienda_id=eq.${aziendaId}`, {
+        method: "DELETE",
+        headers: headers(),
+      });
+
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/listini`, {
+        method: "POST",
+        headers: { ...headers(), Prefer: "return=representation" },
+        body: JSON.stringify(voci),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Errore nel salvataggio del listino");
+
+      setUploadMsg({ type: "success", text: `Listino caricato: ${voci.length} articoli.` });
+    } catch (err) {
+      setUploadMsg({ type: "error", text: err.message || "Errore nel caricamento del file." });
+    } finally {
+      setUploadingId(null);
+    }
+  };
 
   const resetForm = () => {
     setForm(emptyForm);
@@ -784,6 +990,17 @@ function AziendeMandanti({ session }) {
         </div>
 
         <div style={{ flex: "2 1 400px" }}>
+          {uploadMsg && (
+            <div
+              style={{
+                fontSize: 12,
+                marginBottom: 10,
+                color: uploadMsg.type === "error" ? COLORS.danger : COLORS.success,
+              }}
+            >
+              {uploadMsg.text}
+            </div>
+          )}
           {loading ? (
             <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
           ) : list.length === 0 ? (
@@ -798,6 +1015,7 @@ function AziendeMandanti({ session }) {
                   <th style={{ padding: "8px 6px" }}>Sc. 1</th>
                   <th style={{ padding: "8px 6px" }}>Sc. 2</th>
                   <th style={{ padding: "8px 6px" }}>Imballo</th>
+                  <th style={{ padding: "8px 6px" }}>Listino</th>
                   <th style={{ padding: "8px 6px" }}></th>
                 </tr>
               </thead>
@@ -813,6 +1031,31 @@ function AziendeMandanti({ session }) {
                     </td>
                     <td style={{ padding: "8px 6px" }}>
                       {a.imballo_percentuale != null ? `${a.imballo_percentuale}%` : "-"}
+                    </td>
+                    <td style={{ padding: "8px 6px" }}>
+                      <label
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4,
+                          fontSize: 11,
+                          color: COLORS.primary,
+                          cursor: "pointer",
+                        }}
+                      >
+                        <Upload size={12} />
+                        {uploadingId === a.id ? "Caricamento..." : "Carica"}
+                        <input
+                          type="file"
+                          accept=".xlsx,.xls,.csv"
+                          style={{ display: "none" }}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) caricaListino(a.id, file);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
                     </td>
                     <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }}>
                       <button
@@ -846,6 +1089,12 @@ function AziendeMandanti({ session }) {
               </tbody>
             </table>
           )}
+          <p style={{ fontSize: 11, color: COLORS.muted, marginTop: 10 }}>
+            Il file deve avere colonne riconoscibili come Codice/Articolo, Descrizione, Prezzo/Listino.
+            Caricare un nuovo file sostituisce il listino precedente di quell'azienda. Per i listini in
+            PDF, convertili prima in Excel con un servizio online gratuito (es. "PDF to Excel") e poi
+            caricali qui.
+          </p>
         </div>
       </div>
     </div>
@@ -953,6 +1202,10 @@ function ClientiAnagrafica({ session }) {
     setSaving(true);
     setError("");
     try {
+      let coords = null;
+      if (form.indirizzo && form.indirizzo.trim()) {
+        coords = await geocodificaIndirizzo(form.indirizzo);
+      }
       const body = {
         ragione_sociale: form.ragione_sociale,
         indirizzo: form.indirizzo || null,
@@ -965,6 +1218,7 @@ function ClientiAnagrafica({ session }) {
           ? form.competitor.split(",").map((s) => s.trim()).filter(Boolean)
           : [],
         note: form.note || null,
+        ...(coords ? { latitudine: coords.lat, longitudine: coords.lon } : {}),
       };
       let res;
       if (editingId) {
@@ -1792,6 +2046,38 @@ function calcolaRigaNetto(riga) {
   return { totaleListino, netto: dopoSconto2 };
 }
 
+const STATI_PREVENTIVO = [
+  { valore: "bozza", label: "Bozza", colore: "#9aa7b2" },
+  { valore: "inviato", label: "Inviato", colore: "#d4a017" },
+  { valore: "accettato", label: "Accettato", colore: "#1a7a3c" },
+  { valore: "rifiutato", label: "Rifiutato", colore: "#c0392b" },
+];
+
+function SelettoreStato({ stato, onChange }) {
+  return (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {STATI_PREVENTIVO.map((s) => (
+        <button
+          key={s.valore}
+          onClick={() => onChange(s.valore)}
+          style={{
+            padding: "6px 12px",
+            borderRadius: 20,
+            border: stato === s.valore ? `2px solid ${s.colore}` : "1px solid #e2edf5",
+            background: stato === s.valore ? `${s.colore}18` : "#fff",
+            color: s.colore,
+            fontSize: 12,
+            fontWeight: stato === s.valore ? 700 : 500,
+            cursor: "pointer",
+          }}
+        >
+          ● {s.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // modalita possibili per imballo/trasporto/iva: "escluso" | "percentuale" | "euro" | "nascosto"
 function calcolaValoreVoce(modalita, percentuale, valoreEuro, base) {
   if (modalita === "nascosto" || modalita === "escluso") return 0;
@@ -1844,25 +2130,27 @@ function generaStampaHTML(p, clienti, aziende) {
       if (soloNetto) {
         return `<tr><td>${r.articolo || ""}</td><td>${r.descrizione || ""}</td><td>${
           r.finitura || ""
-        }</td><td>${r.quantita || ""}</td><td>${nettoUnitario.toFixed(2)} €</td><td>${netto.toFixed(
-          2
-        )} €</td></tr>`;
+        }</td><td>${r.quantita || ""}</td><td>${formattaEuro(nettoUnitario)}</td><td>${formattaEuro(
+          netto
+        )}</td></tr>`;
       }
       return `<tr><td>${r.articolo || ""}</td><td>${r.descrizione || ""}</td><td>${
         r.finitura || ""
-      }</td><td>${r.quantita || ""}</td><td>${Number(r.prezzo_unitario || 0).toFixed(
-        2
-      )} €</td><td>${r.sconto1 || 0}%</td><td>${r.sconto2 || 0}%</td><td>${nettoUnitario.toFixed(
-        2
-      )} €</td><td>${netto.toFixed(2)} €</td></tr>`;
+      }</td><td>${r.quantita || ""}</td><td>${formattaEuro(r.prezzo_unitario)}</td><td>${
+        r.sconto1 || 0
+      }%</td><td>${r.sconto2 || 0}%</td><td>${formattaEuro(nettoUnitario)}</td><td>${formattaEuro(
+        netto
+      )}</td></tr>`;
     })
     .join("");
 
   const rigaVoce = (label, modalita, valore) => {
     if (modalita === "nascosto") return "";
     if (modalita === "escluso") return `<div>${label}: escluso</div>`;
-    return `<div>${label}: ${valore.toFixed(2)} €</div>`;
+    return `<div>${label}: ${formattaEuro(valore)}</div>`;
   };
+
+  const infoStato = STATI_PREVENTIVO.find((s) => s.valore === p.stato) || STATI_PREVENTIVO[0];
 
   return `<!doctype html><html><head><meta charset="utf-8"><title>Preventivo ${
     p.rif || ""
@@ -1878,6 +2166,7 @@ function generaStampaHTML(p, clienti, aziende) {
   </style></head>
   <body>
     <h1>Preventivo${p.rif ? " — RIF " + p.rif : ""}</h1>
+    <p>Stato: ${infoStato.label}</p>
     <p>Data: ${p.data ? new Date(p.data).toLocaleDateString("it-IT") : ""}</p>
     <p>Spettabile: ${cliente ? cliente.ragione_sociale : ""}</p>
     <p>${azienda ? azienda.nome : ""}</p>
@@ -1889,9 +2178,10 @@ function generaStampaHTML(p, clienti, aziende) {
       ${rigaVoce("Imballo", p.imballo_modalita, tot.valoreImballo)}
       ${rigaVoce("Trasporto", p.trasporto_modalita, tot.valoreTrasporto)}
       ${rigaVoce("IVA", p.iva_modalita, tot.valoreIva)}
-      <div><strong>Totale: ${tot.totaleFinale.toFixed(2)} €</strong></div>
+      <div><strong>Totale: ${formattaEuro(tot.totaleFinale)}</strong></div>
     </div>
     ${p.modalita_pagamento ? `<p style="margin-top:20px;"><strong>Modalità di pagamento:</strong> ${p.modalita_pagamento}</p>` : ""}
+    ${p.note ? `<p style="margin-top:10px;"><strong>Note:</strong> ${p.note}</p>` : ""}
   </body></html>`;
 }
 
@@ -1965,15 +2255,53 @@ function PreventiviOfferte({ session }) {
     iva_valore: 0,
     modalita_pagamento: "",
     modalita_prezzi_pdf: "dettagliato",
+    stato: "bozza",
+    note: "",
   };
   const [header, setHeader] = useState(emptyHeader);
   const [righe, setRighe] = useState([nuovaRiga()]);
+  const [suggerimenti, setSuggerimenti] = useState({});
 
   const headers = () => ({
     "Content-Type": "application/json",
     apikey: SUPABASE_ANON_KEY,
     Authorization: `Bearer ${session.access_token}`,
   });
+
+  const cercaSuggerimenti = async (rigaId, testo) => {
+    if (!header.azienda_id || !testo || testo.length < 2) {
+      setSuggerimenti((s) => ({ ...s, [rigaId]: [] }));
+      return;
+    }
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/listini?azienda_id=eq.${header.azienda_id}&codice_articolo=ilike.*${encodeURIComponent(
+          testo
+        )}*&select=*&limit=6`,
+        { headers: headers() }
+      );
+      const data = await res.json();
+      if (res.ok) setSuggerimenti((s) => ({ ...s, [rigaId]: data }));
+    } catch (e) {
+      // silenzioso
+    }
+  };
+
+  const selezionaSuggerimento = (rigaId, voce) => {
+    setRighe((r) =>
+      r.map((x) =>
+        x.id === rigaId
+          ? {
+              ...x,
+              articolo: voce.codice_articolo,
+              descrizione: voce.descrizione,
+              prezzo_unitario: voce.prezzo_unitario,
+            }
+          : x
+      )
+    );
+    setSuggerimenti((s) => ({ ...s, [rigaId]: [] }));
+  };
 
   const load = async () => {
     setLoading(true);
@@ -2047,6 +2375,8 @@ function PreventiviOfferte({ session }) {
         iva_valore: Number(header.iva_valore) || 0,
         modalita_pagamento: header.modalita_pagamento || null,
         modalita_prezzi_pdf: header.modalita_prezzi_pdf || "dettagliato",
+        stato: header.stato || "bozza",
+        note: header.note || null,
       };
       let res;
       if (editingId) {
@@ -2091,6 +2421,8 @@ function PreventiviOfferte({ session }) {
       iva_valore: p.iva_valore || 0,
       modalita_pagamento: p.modalita_pagamento || "",
       modalita_prezzi_pdf: p.modalita_prezzi_pdf || "dettagliato",
+      stato: p.stato || "bozza",
+      note: p.note || "",
     });
     setRighe(p.righe && p.righe.length ? p.righe : [nuovaRiga()]);
   };
@@ -2133,7 +2465,7 @@ function PreventiviOfferte({ session }) {
     if (modalita === "nascosto") return null;
     return (
       <div style={{ color: COLORS.muted }}>
-        {label}: {modalita === "escluso" ? "escluso" : `${valore.toFixed(2)} €`}
+        {label}: {modalita === "escluso" ? "escluso" : formattaEuro(valore)}
       </div>
     );
   };
@@ -2217,12 +2549,49 @@ function PreventiviOfferte({ session }) {
               const { netto } = calcolaRigaNetto(r);
               return (
                 <tr key={r.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
-                  <td style={{ padding: 4 }}>
+                  <td style={{ padding: 4, position: "relative" }}>
                     <input
                       value={r.articolo}
-                      onChange={(e) => aggiornaRiga(r.id, "articolo", e.target.value)}
+                      onChange={(e) => {
+                        aggiornaRiga(r.id, "articolo", e.target.value);
+                        cercaSuggerimenti(r.id, e.target.value);
+                      }}
                       style={{ ...inputStyle, width: 70 }}
+                      autoComplete="off"
                     />
+                    {suggerimenti[r.id] && suggerimenti[r.id].length > 0 && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: "100%",
+                          left: 0,
+                          zIndex: 10,
+                          background: "#fff",
+                          border: `1px solid ${COLORS.border}`,
+                          borderRadius: 8,
+                          boxShadow: "0 4px 14px rgba(20,40,60,0.12)",
+                          minWidth: 220,
+                          maxHeight: 160,
+                          overflowY: "auto",
+                        }}
+                      >
+                        {suggerimenti[r.id].map((voce) => (
+                          <div
+                            key={voce.id}
+                            onClick={() => selezionaSuggerimento(r.id, voce)}
+                            style={{
+                              padding: "6px 10px",
+                              fontSize: 11,
+                              cursor: "pointer",
+                              borderBottom: `1px solid ${COLORS.border}`,
+                            }}
+                          >
+                            <strong>{voce.codice_articolo}</strong> — {voce.descrizione} (
+                            {formattaEuro(voce.prezzo_unitario)})
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </td>
                   <td style={{ padding: 4 }}>
                     <input
@@ -2280,7 +2649,7 @@ function PreventiviOfferte({ session }) {
                     />
                   </td>
                   <td style={{ padding: 4, fontWeight: 600 }}>
-                    {netto.toFixed(2)} €
+                    {formattaEuro(netto)}
                   </td>
                   <td style={{ padding: 4 }}>
                     <button
@@ -2405,6 +2774,24 @@ function PreventiviOfferte({ session }) {
               <option value="solo_netto">Solo prezzi netti (unitario e totale)</option>
             </select>
           </div>
+          <div style={{ marginTop: 4 }}>
+            <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 6 }}>
+              Stato preventivo
+            </label>
+            <SelettoreStato stato={header.stato} onChange={(v) => setHeader({ ...header, stato: v })} />
+          </div>
+
+          <div style={{ marginTop: 12 }}>
+            <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 4 }}>
+              Note
+            </label>
+            <textarea
+              placeholder="Annotazioni aggiuntive sul preventivo"
+              value={header.note}
+              onChange={(e) => setHeader({ ...header, note: e.target.value })}
+              style={{ ...fieldStyle, marginBottom: 0, maxWidth: 500, minHeight: 60 }}
+            />
+          </div>
         </div>
 
         <div
@@ -2416,12 +2803,12 @@ function PreventiviOfferte({ session }) {
           }}
         >
           <div style={{ textAlign: "right", minWidth: 220 }}>
-            <div style={{ color: COLORS.muted }}>Totale netto: {tot.totaleNetto.toFixed(2)} €</div>
+            <div style={{ color: COLORS.muted }}>Totale netto: {formattaEuro(tot.totaleNetto)}</div>
             {rigaTotali("Imballo", header.imballo_modalita, tot.valoreImballo)}
             {rigaTotali("Trasporto", header.trasporto_modalita, tot.valoreTrasporto)}
             {rigaTotali("IVA", header.iva_modalita, tot.valoreIva)}
             <div style={{ fontWeight: 700, color: COLORS.primary, fontSize: 16, marginTop: 4 }}>
-              Totale: {tot.totaleFinale.toFixed(2)} €
+              Totale: {formattaEuro(tot.totaleFinale)}
             </div>
           </div>
         </div>
@@ -2477,6 +2864,7 @@ function PreventiviOfferte({ session }) {
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
+              <th style={{ padding: "8px 6px" }}>Stato</th>
               <th style={{ padding: "8px 6px" }}>RIF</th>
               <th style={{ padding: "8px 6px" }}>Data</th>
               <th style={{ padding: "8px 6px" }}>Cliente</th>
@@ -2485,8 +2873,15 @@ function PreventiviOfferte({ session }) {
             </tr>
           </thead>
           <tbody>
-            {lista.map((p) => (
+            {lista.map((p) => {
+              const infoStato = STATI_PREVENTIVO.find((s) => s.valore === p.stato) || STATI_PREVENTIVO[0];
+              return (
               <tr key={p.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
+                <td style={{ padding: "8px 6px" }}>
+                  <span style={{ color: infoStato.colore, fontSize: 12, fontWeight: 700 }}>
+                    ● {infoStato.label}
+                  </span>
+                </td>
                 <td style={{ padding: "8px 6px" }}>{p.rif || "-"}</td>
                 <td style={{ padding: "8px 6px" }}>
                   {p.data ? new Date(p.data).toLocaleDateString("it-IT") : "-"}
@@ -2537,7 +2932,8 @@ function PreventiviOfferte({ session }) {
                   </button>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       )}
@@ -2579,6 +2975,7 @@ function AppShell({ session, onLogout }) {
     { key: "aziende", label: "Aziende mandanti", icon: Building2 },
     { key: "visite", label: "Visite", icon: CalendarDays },
     { key: "preventivi", label: "Preventivi", icon: FileText },
+    { key: "mappa", label: "Mappa", icon: MapIcon },
     ...(role === "admin" ? [{ key: "admin", label: "Pannello Admin", icon: ShieldCheck }] : []),
   ];
 
@@ -2683,6 +3080,7 @@ function AppShell({ session, onLogout }) {
           {page === "clienti" && <ClientiAnagrafica session={session} />}
           {page === "visite" && <CalendarioVisite session={session} />}
           {page === "preventivi" && <PreventiviOfferte session={session} />}
+          {page === "mappa" && <MappaClienti session={session} />}
         </main>
       </div>
     </div>
