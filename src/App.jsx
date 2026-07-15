@@ -6,11 +6,12 @@ import {
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
-// Inizializzazione client Supabase
 // Inizializzazione client Supabase con le tue chiavi corrette
 const supabaseUrl = "https://hifwdbjkerlfjbgwhpxc.supabase.co";
 const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpZndkYmprZXJsZmpiZ3docHhjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5OTEzMTYsImV4cCI6MjA5OTU2NzMxNn0.wAPiUA4YU9ofHJgDrtFBHAFLzEuOAnAwMdX4Elk3Bsc";
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [clienti, setClienti] = useState([]);
   const [aziende, setAziende] = useState([]);
@@ -137,7 +138,8 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
       console.error(err);
     }
   };
-const handleSaveOrdine = async (e) => {
+
+  const handleSaveOrdine = async (e) => {
     e.preventDefault();
     try {
       await supabase.from('ordini').insert([ordineForm]);
@@ -160,20 +162,17 @@ const handleSaveOrdine = async (e) => {
       const fileName = `${Date.now()}.${fileExt}`;
       const filePath = `contratti/${fileName}`;
 
-      // Carica il file nel bucket "documenti-clienti" creato su Supabase
       const { error: uploadError } = await supabase.storage
         .from('documenti-clienti')
         .upload(filePath, file);
 
       if (uploadError) throw uploadError;
 
-      // Genera URL pubblico per scaricare il file
       const { data: { publicUrl } } = supabase.storage
         .from('documenti-clienti')
         .getPublicUrl(filePath);
 
       if (type === 'ordine') {
-        // Aggiorna l'url del file nell'ordine
         await supabase.from('ordini').update({ file_url: publicUrl }).eq('id', relatedId);
       }
       
@@ -197,19 +196,19 @@ const handleSaveOrdine = async (e) => {
     }
   };
 
-  // Calcoli Finanziari per Grafici e Statistiche (Fatturato)
+  // Calcoli Finanziari
   const totaleFatturato = ordini.reduce((acc, curr) => acc + parseFloat(curr.importo_totale || 0), 0);
   const totalePreventiviInviati = preventivi.reduce((acc, curr) => acc + (curr.stato === 'Inviato' ? parseFloat(curr.importo || 0) : 0), 0);
   const totalePreventiviAccettati = preventivi.reduce((acc, curr) => acc + (curr.stato === 'Accettato' ? parseFloat(curr.importo || 0) : 0), 0);
 
-  // Filtra i clienti in base a ricerca e azienda selezionata
   const filteredClienti = clienti.filter(c => {
     const matchesSearch = c.nome.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           c.email.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesAzienda = filterAzienda ? c.azienda_mandante_id === filterAzienda : true;
     return matchesSearch && matchesAzienda;
   });
-return (
+
+  return (
     <div className="flex h-screen bg-slate-50 text-slate-800 font-sans overflow-hidden">
       
       {/* MENU LATERALE DI NAVIGAZIONE */}
@@ -365,7 +364,7 @@ return (
                     attivita.slice(0, 5).map(act => {
                       const cli = clienti.find(c => c.id === act.cliente_id);
                       return (
-                        <div key={act.id} className="flex justify-between items-start p-3 hover:bg-slate-550 rounded-xl transition border border-transparent hover:border-slate-100">
+                        <div key={act.id} className="flex justify-between items-start p-3 hover:bg-slate-50 rounded-xl transition border border-transparent hover:border-slate-100">
                           <div>
                             <div className="flex items-center space-x-2">
                               <span className={`px-2 py-0.5 rounded text-xs font-semibold ${act.tipo === 'Visita' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>{act.tipo}</span>
@@ -612,7 +611,7 @@ return (
                       <p className="text-slate-400 text-sm py-4">Nessuna visita o telefonata registrata.</p>
                     ) : (
                       attivita.filter(act => act.cliente_id === selectedCliente.id).map(act => (
-                        <div key={act.id} className="flex justify-between items-start p-4 bg-slate-550 rounded-xl">
+                        <div key={act.id} className="flex justify-between items-start p-4 bg-slate-50 rounded-xl">
                           <div>
                             <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${act.tipo === 'Visita' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>{act.tipo}</span>
                             <p className="text-sm text-slate-700 mt-2">{act.note}</p>
