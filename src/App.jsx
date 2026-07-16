@@ -1123,7 +1123,7 @@ const CLASSIFICAZIONI = [
   "Privato",
 ];
 
-function ClientiAnagrafica({ session }) {
+function ClientiAnagrafica({ session, onApriPreventivo }) {
   const [list, setList] = useState([]);
   const [aziendeOptions, setAziendeOptions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1304,6 +1304,7 @@ function ClientiAnagrafica({ session }) {
         clienteId={clienteApertoId}
         session={session}
         aziendeOptions={aziendeOptions}
+        onApriPreventivo={onApriPreventivo}
         onBack={() => {
           setClienteApertoId(null);
           load();
@@ -1600,7 +1601,7 @@ async function registraAttivita(session, clienteId, tipo, descrizione) {
   }
 }
 
-function SchedaCliente({ clienteId, session, aziendeOptions, onBack }) {
+function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreventivo }) {
   const [cliente, setCliente] = useState(null);
   const [visite, setVisite] = useState([]);
   const [preventivi, setPreventivi] = useState([]);
@@ -1819,9 +1820,25 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack }) {
             const tot = calcolaTotaliPreventivo(p, p.righe || []);
             const infoStato = STATI_PREVENTIVO.find((s) => s.valore === p.stato) || STATI_PREVENTIVO[0];
             return (
-              <div key={p.id} style={{ fontSize: 12, padding: "8px 0", borderBottom: "1px solid #f0f5f9", display: "flex", justifyContent: "space-between" }}>
+              <div
+                key={p.id}
+                onClick={() => onApriPreventivo && onApriPreventivo(p)}
+                style={{
+                  fontSize: 12,
+                  padding: "10px 6px",
+                  borderBottom: "1px solid #f0f5f9",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  cursor: onApriPreventivo ? "pointer" : "default",
+                }}
+                title={onApriPreventivo ? "Apri il preventivo per vederlo o modificarlo" : undefined}
+              >
                 <span>
-                  <span style={{ color: infoStato.colore, fontWeight: 700 }}>●</span> {p.rif || "senza rif."} — {new Date(p.data).toLocaleDateString("it-IT")}
+                  <span style={{ color: infoStato.colore, fontWeight: 700 }}>●</span>{" "}
+                  <span style={{ color: infoStato.colore, fontWeight: 600 }}>{infoStato.label}</span>
+                  {" — "}
+                  {p.rif || "senza rif."} — {new Date(p.data).toLocaleDateString("it-IT")} — {nomeAzienda(p.azienda_id)}
                 </span>
                 <strong>{formattaEuro(tot.totaleFinale)}</strong>
               </div>
@@ -2643,7 +2660,7 @@ function SelettoreVoce({ label, modalita, percentuale, valoreEuro, onChange, inp
   );
 }
 
-function PreventiviOfferte({ session }) {
+function PreventiviOfferte({ session, preventivoDaAprire, onPreventivoAperto }) {
   const [clienti, setClienti] = useState([]);
   const [aziende, setAziende] = useState([]);
   const [lista, setLista] = useState([]);
@@ -2674,6 +2691,7 @@ function PreventiviOfferte({ session }) {
   const [header, setHeader] = useState(emptyHeader);
   const [righe, setRighe] = useState([nuovaRiga()]);
   const [suggerimenti, setSuggerimenti] = useState({});
+  const formRef = useRef(null);
 
   const headers = () => ({
     "Content-Type": "application/json",
@@ -2840,6 +2858,19 @@ function PreventiviOfferte({ session }) {
     setRighe(p.righe && p.righe.length ? p.righe : [nuovaRiga()]);
   };
 
+  // Se arriviamo qui da "Scheda cliente" con un preventivo da aprire,
+  // lo carichiamo automaticamente nel form di modifica.
+  useEffect(() => {
+    if (preventivoDaAprire) {
+      modifica(preventivoDaAprire);
+      if (formRef.current) {
+        formRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      if (onPreventivoAperto) onPreventivoAperto();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preventivoDaAprire]);
+
   const elimina = async (id) => {
     if (!window.confirm("Eliminare questo preventivo?")) return;
     try {
@@ -2890,6 +2921,7 @@ function PreventiviOfferte({ session }) {
       </h2>
 
       <div
+        ref={formRef}
         style={{
           background: COLORS.card,
           border: `1px solid ${COLORS.border}`,
@@ -3361,6 +3393,7 @@ function AppShell({ session, onLogout }) {
   const [menuOpen, setMenuOpen] = useState(true);
   const [page, setPage] = useState("dashboard");
   const [role, setRole] = useState("user");
+  const [preventivoDaAprire, setPreventivoDaAprire] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -3381,6 +3414,11 @@ function AppShell({ session, onLogout }) {
       }
     })();
   }, [session]);
+
+  const apriPreventivoDaCliente = (p) => {
+    setPreventivoDaAprire(p);
+    setPage("preventivi");
+  };
 
   const menuItems = [
     { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -3490,9 +3528,17 @@ function AppShell({ session, onLogout }) {
           {page === "dashboard" && <Dashboard session={session} goTo={setPage} />}
           {page === "admin" && role === "admin" && <AdminPanel session={session} />}
           {page === "aziende" && <AziendeMandanti session={session} />}
-          {page === "clienti" && <ClientiAnagrafica session={session} />}
+          {page === "clienti" && (
+            <ClientiAnagrafica session={session} onApriPreventivo={apriPreventivoDaCliente} />
+          )}
           {page === "visite" && <CalendarioVisite session={session} />}
-          {page === "preventivi" && <PreventiviOfferte session={session} />}
+          {page === "preventivi" && (
+            <PreventiviOfferte
+              session={session}
+              preventivoDaAprire={preventivoDaAprire}
+              onPreventivoAperto={() => setPreventivoDaAprire(null)}
+            />
+          )}
           {page === "mappa" && <MappaClienti session={session} />}
         </main>
       </div>
