@@ -26,6 +26,7 @@ import {
   Map as MapIcon,
   Upload,
   TrendingUp,
+  Wallet,
 } from "lucide-react";
 
 // ============================================================
@@ -1802,6 +1803,182 @@ function Statistiche({ session }) {
                 </tbody>
               </table>
             )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// FATTURATO — vista temporale (annuale/mensile) e per azienda/cliente
+// ============================================================
+const MESI_BREVI = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
+
+function Fatturato({ session }) {
+  const [ordini, setOrdini] = useState([]);
+  const [clienti, setClienti] = useState([]);
+  const [aziende, setAziende] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [annoSelezionato, setAnnoSelezionato] = useState(new Date().getFullYear());
+
+  const headers = () => ({
+    "Content-Type": "application/json",
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${session.access_token}`,
+  });
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const [rOrdini, rClienti, rAziende] = await Promise.all([
+          fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati?select=*`, { headers: headers() }),
+          fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale`, { headers: headers() }),
+          fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?select=id,nome`, { headers: headers() }),
+        ]);
+        const [dOrdini, dClienti, dAziende] = await Promise.all([rOrdini.json(), rClienti.json(), rAziende.json()]);
+        setOrdini(Array.isArray(dOrdini) ? dOrdini : []);
+        setClienti(Array.isArray(dClienti) ? dClienti : []);
+        setAziende(Array.isArray(dAziende) ? dAziende : []);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [session]);
+
+  const nomeCliente = (id) => clienti.find((c) => c.id === id)?.ragione_sociale || "Sconosciuto";
+  const nomeAzienda = (id) => aziende.find((a) => a.id === id)?.nome || "Sconosciuta";
+
+  const fatturatoTotale = ordini.reduce((s, o) => s + (Number(o.importo) || 0), 0);
+
+  const perAnno = {};
+  ordini.forEach((o) => {
+    const anno = new Date(o.data_ordine).getFullYear();
+    perAnno[anno] = (perAnno[anno] || 0) + (Number(o.importo) || 0);
+  });
+  const datiAnnuali = Object.entries(perAnno)
+    .map(([anno, totale]) => ({ anno, totale }))
+    .sort((a, b) => a.anno - b.anno);
+  const anniDisponibili = Object.keys(perAnno).map(Number).sort((a, b) => b - a);
+
+  const perMese = Array(12).fill(0);
+  ordini.forEach((o) => {
+    const d = new Date(o.data_ordine);
+    if (d.getFullYear() === annoSelezionato) perMese[d.getMonth()] += Number(o.importo) || 0;
+  });
+  const datiMensili = MESI_BREVI.map((m, i) => ({ mese: m, totale: perMese[i] }));
+
+  const perAzienda = {};
+  ordini.forEach((o) => {
+    const key = nomeAzienda(o.azienda_id);
+    perAzienda[key] = (perAzienda[key] || 0) + (Number(o.importo) || 0);
+  });
+  const datiAziende = Object.entries(perAzienda).map(([nome, totale]) => ({ nome, totale })).sort((a, b) => b.totale - a.totale);
+
+  const perCliente = {};
+  ordini.forEach((o) => {
+    const key = nomeCliente(o.cliente_id);
+    perCliente[key] = (perCliente[key] || 0) + (Number(o.importo) || 0);
+  });
+  const topClienti = Object.entries(perCliente).map(([nome, totale]) => ({ nome, totale })).sort((a, b) => b.totale - a.totale).slice(0, 8);
+
+  const cardStyle = {
+    background: COLORS.card,
+    border: `1px solid ${COLORS.border}`,
+    borderRadius: 14,
+    padding: 20,
+    boxShadow: "0 4px 14px rgba(20,40,60,0.05)",
+  };
+
+  return (
+    <div style={{ fontFamily: "Arial, sans-serif" }}>
+      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 4 }}>Fatturato</h2>
+      <p style={{ color: COLORS.muted, fontSize: 13, marginBottom: 20 }}>
+        Andamento del fatturato nel tempo, per azienda e per cliente
+      </p>
+
+      {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 14 }}>{error}</div>}
+      {loading ? (
+        <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
+      ) : (
+        <>
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 20 }}>
+            <div style={{ ...cardStyle, maxWidth: 260 }}>
+              <div style={{ fontSize: 12, color: COLORS.muted }}>Fatturato totale</div>
+              <div style={{ fontSize: 26, fontWeight: 700, color: COLORS.text }}>{formattaEuro(fatturatoTotale)}</div>
+            </div>
+            {datiAnnuali.slice(-3).map((a) => (
+              <div key={a.anno} style={{ ...cardStyle, maxWidth: 200 }}>
+                <div style={{ fontSize: 12, color: COLORS.muted }}>Anno {a.anno}</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: COLORS.text }}>{formattaEuro(a.totale)}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ ...cardStyle, marginBottom: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <h3 style={{ fontSize: 14, color: COLORS.text }}>Riepilogo mensile</h3>
+              <select
+                value={annoSelezionato}
+                onChange={(e) => setAnnoSelezionato(Number(e.target.value))}
+                style={{ padding: "6px 10px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 12 }}
+              >
+                {(anniDisponibili.length ? anniDisponibili : [new Date().getFullYear()]).map((a) => (
+                  <option key={a} value={a}>{a}</option>
+                ))}
+              </select>
+            </div>
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={datiMensili}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#eef3f7" />
+                <XAxis dataKey="mese" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(v) => formattaEuro(v)} />
+                <Bar dataKey="totale" fill={COLORS.primary} radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+            <div style={{ ...cardStyle, flex: "1 1 380px" }}>
+              <h3 style={{ fontSize: 14, color: COLORS.text, marginBottom: 12 }}>Suddivisione per azienda mandante</h3>
+              {datiAziende.length === 0 ? (
+                <p style={{ fontSize: 12, color: COLORS.muted }}>Nessun dato ancora.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <PieChart>
+                    <Pie data={datiAziende} dataKey="totale" nameKey="nome" outerRadius={80} label>
+                      {datiAziende.map((_, i) => (
+                        <Cell key={i} fill={["#0b7bc4", "#0e9488", "#c77d0b", "#7c4dbd", "#c0392b", "#1a7a3c"][i % 6]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(v) => formattaEuro(v)} />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            <div style={{ ...cardStyle, flex: "1 1 380px" }}>
+              <h3 style={{ fontSize: 14, color: COLORS.text, marginBottom: 12 }}>Andamento clienti (top 8)</h3>
+              {topClienti.length === 0 ? (
+                <p style={{ fontSize: 12, color: COLORS.muted }}>Nessun dato ancora.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={topClienti} layout="vertical" margin={{ left: 40 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#eef3f7" />
+                    <XAxis type="number" tick={{ fontSize: 11 }} />
+                    <YAxis type="category" dataKey="nome" tick={{ fontSize: 11 }} width={100} />
+                    <Tooltip formatter={(v) => formattaEuro(v)} />
+                    <Bar dataKey="totale" fill={COLORS.primary} radius={[0, 6, 6, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
           </div>
         </>
       )}
@@ -3670,6 +3847,7 @@ function AppShell({ session, onLogout }) {
     { key: "preventivi", label: "Preventivi", icon: FileText },
     { key: "mappa", label: "Mappa", icon: MapIcon },
     { key: "statistiche", label: "Statistiche", icon: TrendingUp },
+    { key: "fatturato", label: "Fatturato", icon: Wallet },
     ...(role === "admin" ? [{ key: "admin", label: "Pannello Admin", icon: ShieldCheck }] : []),
   ];
 
@@ -3782,6 +3960,7 @@ function AppShell({ session, onLogout }) {
           )}
           {page === "mappa" && <MappaClienti session={session} />}
           {page === "statistiche" && <Statistiche session={session} />}
+          {page === "fatturato" && <Fatturato session={session} />}
         </main>
       </div>
     </div>
