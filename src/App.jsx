@@ -502,6 +502,46 @@ function Dashboard({ session, goTo }) {
         Riepilogo generale della tua attività
       </p>
 
+      <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+        <button
+          onClick={() => goTo("visite")}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "12px 20px",
+            background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.primaryDark})`,
+            color: "#fff",
+            border: "none",
+            borderRadius: 12,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: "pointer",
+            boxShadow: "0 4px 14px rgba(11,123,196,0.25)",
+          }}
+        >
+          <CalendarDays size={16} /> Vai al Calendario
+        </button>
+        <button
+          onClick={() => goTo("preventivi")}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "12px 20px",
+            background: "#fff",
+            color: COLORS.primary,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: 12,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          <FileText size={16} /> Nuovo Preventivo
+        </button>
+      </div>
+
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
         {cards.map((c) => {
           const Icon = c.icon;
@@ -1123,7 +1163,7 @@ const CLASSIFICAZIONI = [
   "Privato",
 ];
 
-function ClientiAnagrafica({ session, onApriPreventivo }) {
+function ClientiAnagrafica({ session, apriPreventivo }) {
   const [list, setList] = useState([]);
   const [aziendeOptions, setAziendeOptions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1304,7 +1344,7 @@ function ClientiAnagrafica({ session, onApriPreventivo }) {
         clienteId={clienteApertoId}
         session={session}
         aziendeOptions={aziendeOptions}
-        onApriPreventivo={onApriPreventivo}
+        onApriPreventivo={apriPreventivo}
         onBack={() => {
           setClienteApertoId(null);
           load();
@@ -1822,23 +1862,19 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
             return (
               <div
                 key={p.id}
-                onClick={() => onApriPreventivo && onApriPreventivo(p)}
+                onClick={() => onApriPreventivo && onApriPreventivo(p.id)}
                 style={{
                   fontSize: 12,
-                  padding: "10px 6px",
+                  padding: "8px 0",
                   borderBottom: "1px solid #f0f5f9",
                   display: "flex",
                   justifyContent: "space-between",
-                  alignItems: "center",
                   cursor: onApriPreventivo ? "pointer" : "default",
                 }}
-                title={onApriPreventivo ? "Apri il preventivo per vederlo o modificarlo" : undefined}
               >
                 <span>
-                  <span style={{ color: infoStato.colore, fontWeight: 700 }}>●</span>{" "}
-                  <span style={{ color: infoStato.colore, fontWeight: 600 }}>{infoStato.label}</span>
-                  {" — "}
-                  {p.rif || "senza rif."} — {new Date(p.data).toLocaleDateString("it-IT")} — {nomeAzienda(p.azienda_id)}
+                  <span style={{ color: infoStato.colore, fontWeight: 700 }}>● {infoStato.label}</span>
+                  {" — "}{nomeAzienda(p.azienda_id)} — {p.rif || "senza rif."} — {new Date(p.data).toLocaleDateString("it-IT")}
                 </span>
                 <strong>{formattaEuro(tot.totaleFinale)}</strong>
               </div>
@@ -2660,7 +2696,7 @@ function SelettoreVoce({ label, modalita, percentuale, valoreEuro, onChange, inp
   );
 }
 
-function PreventiviOfferte({ session, preventivoDaAprire, onPreventivoAperto }) {
+function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) {
   const [clienti, setClienti] = useState([]);
   const [aziende, setAziende] = useState([]);
   const [lista, setLista] = useState([]);
@@ -2691,7 +2727,6 @@ function PreventiviOfferte({ session, preventivoDaAprire, onPreventivoAperto }) 
   const [header, setHeader] = useState(emptyHeader);
   const [righe, setRighe] = useState([nuovaRiga()]);
   const [suggerimenti, setSuggerimenti] = useState({});
-  const formRef = useRef(null);
 
   const headers = () => ({
     "Content-Type": "application/json",
@@ -2858,18 +2893,22 @@ function PreventiviOfferte({ session, preventivoDaAprire, onPreventivoAperto }) 
     setRighe(p.righe && p.righe.length ? p.righe : [nuovaRiga()]);
   };
 
-  // Se arriviamo qui da "Scheda cliente" con un preventivo da aprire,
-  // lo carichiamo automaticamente nel form di modifica.
   useEffect(() => {
-    if (preventivoDaAprire) {
-      modifica(preventivoDaAprire);
-      if (formRef.current) {
-        formRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (!preventivoIniziale) return;
+    (async () => {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/preventivi?id=eq.${preventivoIniziale}&select=*`, {
+          headers: headers(),
+        });
+        const data = await res.json();
+        if (res.ok && data && data[0]) modifica(data[0]);
+      } catch (e) {
+        // silenzioso
       }
       if (onPreventivoAperto) onPreventivoAperto();
-    }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preventivoDaAprire]);
+  }, [preventivoIniziale]);
 
   const elimina = async (id) => {
     if (!window.confirm("Eliminare questo preventivo?")) return;
@@ -2921,7 +2960,6 @@ function PreventiviOfferte({ session, preventivoDaAprire, onPreventivoAperto }) 
       </h2>
 
       <div
-        ref={formRef}
         style={{
           background: COLORS.card,
           border: `1px solid ${COLORS.border}`,
@@ -3393,7 +3431,12 @@ function AppShell({ session, onLogout }) {
   const [menuOpen, setMenuOpen] = useState(true);
   const [page, setPage] = useState("dashboard");
   const [role, setRole] = useState("user");
-  const [preventivoDaAprire, setPreventivoDaAprire] = useState(null);
+  const [preventivoAprireId, setPreventivoAprireId] = useState(null);
+
+  const apriPreventivoCliente = (id) => {
+    setPreventivoAprireId(id);
+    setPage("preventivi");
+  };
 
   useEffect(() => {
     (async () => {
@@ -3414,11 +3457,6 @@ function AppShell({ session, onLogout }) {
       }
     })();
   }, [session]);
-
-  const apriPreventivoDaCliente = (p) => {
-    setPreventivoDaAprire(p);
-    setPage("preventivi");
-  };
 
   const menuItems = [
     { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -3528,15 +3566,13 @@ function AppShell({ session, onLogout }) {
           {page === "dashboard" && <Dashboard session={session} goTo={setPage} />}
           {page === "admin" && role === "admin" && <AdminPanel session={session} />}
           {page === "aziende" && <AziendeMandanti session={session} />}
-          {page === "clienti" && (
-            <ClientiAnagrafica session={session} onApriPreventivo={apriPreventivoDaCliente} />
-          )}
+          {page === "clienti" && <ClientiAnagrafica session={session} apriPreventivo={apriPreventivoCliente} />}
           {page === "visite" && <CalendarioVisite session={session} />}
           {page === "preventivi" && (
             <PreventiviOfferte
               session={session}
-              preventivoDaAprire={preventivoDaAprire}
-              onPreventivoAperto={() => setPreventivoDaAprire(null)}
+              preventivoIniziale={preventivoAprireId}
+              onPreventivoAperto={() => setPreventivoAprireId(null)}
             />
           )}
           {page === "mappa" && <MappaClienti session={session} />}
