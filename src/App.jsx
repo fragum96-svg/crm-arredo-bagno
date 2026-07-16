@@ -1819,21 +1819,9 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack }) {
             const tot = calcolaTotaliPreventivo(p, p.righe || []);
             const infoStato = STATI_PREVENTIVO.find((s) => s.valore === p.stato) || STATI_PREVENTIVO[0];
             return (
-              <div
-                key={p.id}
-                onClick={() => onApriPreventivo && onApriPreventivo(p.id)}
-                style={{
-                  fontSize: 12,
-                  padding: "8px 0",
-                  borderBottom: "1px solid #f0f5f9",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  cursor: onApriPreventivo ? "pointer" : "default",
-                }}
-              >
+              <div key={p.id} style={{ fontSize: 12, padding: "8px 0", borderBottom: "1px solid #f0f5f9", display: "flex", justifyContent: "space-between" }}>
                 <span>
-                  <span style={{ color: infoStato.colore, fontWeight: 700 }}>● {infoStato.label}</span>
-                  {" — "}{nomeAzienda(p.azienda_id)} — {p.rif || "senza rif."} — {new Date(p.data).toLocaleDateString("it-IT")}
+                  <span style={{ color: infoStato.colore, fontWeight: 700 }}>●</span> {p.rif || "senza rif."} — {new Date(p.data).toLocaleDateString("it-IT")}
                 </span>
                 <strong>{formattaEuro(tot.totaleFinale)}</strong>
               </div>
