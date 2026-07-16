@@ -837,6 +837,15 @@ function AziendeMandanti({ session }) {
       }
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Errore nel salvataggio");
+      const idSalvato = editingId || (data && data[0] && data[0].id);
+      if (idSalvato) {
+        await registraAttivita(
+          session,
+          idSalvato,
+          "modifica",
+          editingId ? "Scheda anagrafica aggiornata" : "Cliente creato"
+        );
+      }
       resetForm();
       load();
     } catch (err) {
@@ -1134,6 +1143,7 @@ function ClientiAnagrafica({ session }) {
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [filtroClassificazione, setFiltroClassificazione] = useState("");
+  const [clienteApertoId, setClienteApertoId] = useState(null);
 
   const headers = () => ({
     "Content-Type": "application/json",
@@ -1287,6 +1297,20 @@ function ClientiAnagrafica({ session }) {
   const filteredList = filtroClassificazione
     ? list.filter((c) => c.classificazione === filtroClassificazione)
     : list;
+
+  if (clienteApertoId) {
+    return (
+      <SchedaCliente
+        clienteId={clienteApertoId}
+        session={session}
+        aziendeOptions={aziendeOptions}
+        onBack={() => {
+          setClienteApertoId(null);
+          load();
+        }}
+      />
+    );
+  }
 
   return (
     <div style={{ fontFamily: "Arial, sans-serif" }}>
@@ -1493,7 +1517,12 @@ function ClientiAnagrafica({ session }) {
                 {filteredList.map((c) => (
                   <tr key={c.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
                     <td style={{ padding: "8px 6px", fontWeight: 600 }}>
-                      {c.ragione_sociale}
+                      <span
+                        onClick={() => setClienteApertoId(c.id)}
+                        style={{ cursor: "pointer", color: COLORS.primary }}
+                      >
+                        {c.ragione_sociale}
+                      </span>
                     </td>
                     <td style={{ padding: "8px 6px" }}>{c.classificazione || "-"}</td>
                     <td style={{ padding: "8px 6px" }}>{c.telefono || "-"}</td>
@@ -1535,9 +1564,394 @@ function ClientiAnagrafica({ session }) {
   );
 }
 
-// ============================================================
-// CALENDARIO VISITE — vista mensile / settimanale / giornaliera
-// ============================================================
+async function caricaFileStorage(session, bucket, path, file) {
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: file,
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.message || "Errore nel caricamento del file");
+  }
+  return path;
+}
+
+function urlPubblicoStorage(bucket, path) {
+  return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+}
+
+async function registraAttivita(session, clienteId, tipo, descrizione) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/attivita_cliente`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ cliente_id: clienteId, tipo, descrizione }),
+    });
+  } catch (e) {
+    // silenzioso
+  }
+}
+
+function SchedaCliente({ clienteId, session, aziendeOptions, onBack }) {
+  const [cliente, setCliente] = useState(null);
+  const [visite, setVisite] = useState([]);
+  const [preventivi, setPreventivi] = useState([]);
+  const [documenti, setDocumenti] = useState([]);
+  const [ordini, setOrdini] = useState([]);
+  const [attivita, setAttivita] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [nota, setNota] = useState("");
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [formOrdine, setFormOrdine] = useState({ azienda_id: "", importo: "", data_ordine: new Date().toISOString().slice(0, 10), note: "" });
+  const [fileOrdine, setFileOrdine] = useState(null);
+  const [savingOrdine, setSavingOrdine] = useState(false);
+
+  const headers = () => ({
+    "Content-Type": "application/json",
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${session.access_token}`,
+  });
+
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [rCliente, rVisite, rPreventivi, rDocumenti, rOrdini, rAttivita] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/clienti?id=eq.${clienteId}&select=*`, { headers: headers() }),
+        fetch(`${SUPABASE_URL}/rest/v1/visite?cliente_id=eq.${clienteId}&select=*&order=data_visita.desc`, { headers: headers() }),
+        fetch(`${SUPABASE_URL}/rest/v1/preventivi?cliente_id=eq.${clienteId}&select=*&order=data.desc`, { headers: headers() }),
+        fetch(`${SUPABASE_URL}/rest/v1/documenti_cliente?cliente_id=eq.${clienteId}&select=*&order=created_at.desc`, { headers: headers() }),
+        fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati?cliente_id=eq.${clienteId}&select=*&order=data_ordine.desc`, { headers: headers() }),
+        fetch(`${SUPABASE_URL}/rest/v1/attivita_cliente?cliente_id=eq.${clienteId}&select=*&order=data.desc`, { headers: headers() }),
+      ]);
+      const [dCliente, dVisite, dPreventivi, dDocumenti, dOrdini, dAttivita] = await Promise.all([
+        rCliente.json(), rVisite.json(), rPreventivi.json(), rDocumenti.json(), rOrdini.json(), rAttivita.json(),
+      ]);
+      setCliente(dCliente && dCliente[0]);
+      setVisite(Array.isArray(dVisite) ? dVisite : []);
+      setPreventivi(Array.isArray(dPreventivi) ? dPreventivi : []);
+      setDocumenti(Array.isArray(dDocumenti) ? dDocumenti : []);
+      setOrdini(Array.isArray(dOrdini) ? dOrdini : []);
+      setAttivita(Array.isArray(dAttivita) ? dAttivita : []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clienteId]);
+
+  const aggiungiNota = async () => {
+    if (!nota.trim()) return;
+    await registraAttivita(session, clienteId, "nota", nota.trim());
+    setNota("");
+    load();
+  };
+
+  const caricaDocumento = async (file) => {
+    setUploadingDoc(true);
+    setError("");
+    try {
+      const path = `${clienteId}/${Date.now()}_${file.name}`;
+      await caricaFileStorage(session, "documenti-clienti", path, file);
+      await fetch(`${SUPABASE_URL}/rest/v1/documenti_cliente`, {
+        method: "POST",
+        headers: { ...headers(), Prefer: "return=representation" },
+        body: JSON.stringify({ cliente_id: clienteId, nome_file: file.name, tipo_documento: "documento", storage_path: path }),
+      });
+      await registraAttivita(session, clienteId, "documento", `Caricato documento: ${file.name}`);
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
+
+  const salvaOrdine = async () => {
+    if (!formOrdine.azienda_id || !formOrdine.importo) {
+      setError("Seleziona azienda e importo per registrare l'ordine.");
+      return;
+    }
+    setSavingOrdine(true);
+    setError("");
+    try {
+      let path = null;
+      if (fileOrdine) {
+        path = `${clienteId}/ordini/${Date.now()}_${fileOrdine.name}`;
+        await caricaFileStorage(session, "documenti-clienti", path, fileOrdine);
+      }
+      await fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati`, {
+        method: "POST",
+        headers: { ...headers(), Prefer: "return=representation" },
+        body: JSON.stringify({
+          cliente_id: clienteId,
+          azienda_id: formOrdine.azienda_id,
+          importo: Number(formOrdine.importo) || 0,
+          data_ordine: formOrdine.data_ordine,
+          note: formOrdine.note || null,
+          storage_path: path,
+        }),
+      });
+      await registraAttivita(session, clienteId, "ordine", `Registrato ordine confermato di ${formattaEuro(formOrdine.importo)}`);
+      setFormOrdine({ azienda_id: "", importo: "", data_ordine: new Date().toISOString().slice(0, 10), note: "" });
+      setFileOrdine(null);
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingOrdine(false);
+    }
+  };
+
+  const nomeAzienda = (id) => aziendeOptions.find((a) => a.id === id)?.nome || "—";
+
+  const inputStyle = {
+    width: "100%",
+    padding: "8px 10px",
+    marginBottom: 10,
+    border: `1px solid ${COLORS.border}`,
+    borderRadius: 8,
+    fontSize: 13,
+    boxSizing: "border-box",
+  };
+
+  const sezione = (titolo, contenuto) => (
+    <div
+      style={{
+        background: COLORS.card,
+        border: `1px solid ${COLORS.border}`,
+        borderRadius: 14,
+        boxShadow: "0 4px 14px rgba(20,40,60,0.05)",
+        padding: 20,
+        marginBottom: 20,
+      }}
+    >
+      <h3 style={{ fontSize: 15, color: COLORS.text, marginBottom: 12 }}>{titolo}</h3>
+      {contenuto}
+    </div>
+  );
+
+  if (loading) return <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento scheda cliente...</p>;
+  if (!cliente) return <p style={{ color: COLORS.danger, fontSize: 13 }}>Cliente non trovato.</p>;
+
+  return (
+    <div style={{ fontFamily: "Arial, sans-serif" }}>
+      <button
+        onClick={onBack}
+        style={{ background: "none", border: "none", color: COLORS.primary, cursor: "pointer", fontSize: 13, marginBottom: 14 }}
+      >
+        ‹ Torna all'elenco clienti
+      </button>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+        <div
+          style={{
+            width: 10, height: 10, borderRadius: "50%",
+            background: cliente.colore || COLORS.primary,
+          }}
+        />
+        <h2 style={{ color: COLORS.text, fontSize: 22 }}>{cliente.ragione_sociale}</h2>
+        {cliente.classificazione && (
+          <span style={{ fontSize: 12, color: COLORS.muted, background: COLORS.bg, padding: "3px 10px", borderRadius: 12 }}>
+            {cliente.classificazione}
+          </span>
+        )}
+      </div>
+
+      {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 14 }}>{error}</div>}
+
+      {sezione(
+        "Dati anagrafici",
+        <div style={{ fontSize: 13, color: COLORS.text, lineHeight: 1.8 }}>
+          <div><strong>Indirizzo:</strong> {cliente.indirizzo || "-"}</div>
+          <div><strong>Telefono:</strong> {cliente.telefono || "-"}</div>
+          <div><strong>Email:</strong> {cliente.email || "-"}</div>
+          <div><strong>Aziende collaborate:</strong> {(cliente.aziende_collaborate || []).join(", ") || "-"}</div>
+          {cliente.condizioni_per_azienda && Object.keys(cliente.condizioni_per_azienda).length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <strong>Condizioni commerciali:</strong>
+              <ul style={{ margin: "4px 0 0 18px" }}>
+                {Object.entries(cliente.condizioni_per_azienda).map(([az, cond]) => (
+                  <li key={az} style={{ fontSize: 12 }}>{az}: {cond}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div style={{ marginTop: 8 }}><strong>Competitor:</strong> {(cliente.competitor || []).join(", ") || "-"}</div>
+          <div style={{ marginTop: 8 }}><strong>Note generali:</strong> {cliente.note || "-"}</div>
+        </div>
+      )}
+
+      {sezione(
+        "Storico visite",
+        visite.length === 0 ? (
+          <p style={{ fontSize: 12, color: COLORS.muted }}>Nessuna visita registrata.</p>
+        ) : (
+          visite.map((v) => (
+            <div key={v.id} style={{ fontSize: 12, padding: "8px 0", borderBottom: "1px solid #f0f5f9" }}>
+              <strong>{new Date(v.data_visita).toLocaleDateString("it-IT")}</strong>
+              {v.argomenti_trattati ? ` — ${v.argomenti_trattati}` : ""}
+            </div>
+          ))
+        )
+      )}
+
+      {sezione(
+        "Preventivi collegati",
+        preventivi.length === 0 ? (
+          <p style={{ fontSize: 12, color: COLORS.muted }}>Nessun preventivo per questo cliente.</p>
+        ) : (
+          preventivi.map((p) => {
+            const tot = calcolaTotaliPreventivo(p, p.righe || []);
+            const infoStato = STATI_PREVENTIVO.find((s) => s.valore === p.stato) || STATI_PREVENTIVO[0];
+            return (
+              <div key={p.id} style={{ fontSize: 12, padding: "8px 0", borderBottom: "1px solid #f0f5f9", display: "flex", justifyContent: "space-between" }}>
+                <span>
+                  <span style={{ color: infoStato.colore, fontWeight: 700 }}>●</span> {p.rif || "senza rif."} — {new Date(p.data).toLocaleDateString("it-IT")}
+                </span>
+                <strong>{formattaEuro(tot.totaleFinale)}</strong>
+              </div>
+            );
+          })
+        )
+      )}
+
+      {sezione(
+        "Ordini confermati",
+        <div>
+          {ordini.length === 0 ? (
+            <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 12 }}>Nessun ordine confermato ancora.</p>
+          ) : (
+            ordini.map((o) => (
+              <div key={o.id} style={{ fontSize: 12, padding: "8px 0", borderBottom: "1px solid #f0f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>{nomeAzienda(o.azienda_id)} — {new Date(o.data_ordine).toLocaleDateString("it-IT")}</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <strong>{formattaEuro(o.importo)}</strong>
+                  {o.storage_path && (
+                    <a href={urlPubblicoStorage("documenti-clienti", o.storage_path)} target="_blank" rel="noreferrer" style={{ color: COLORS.primary, fontSize: 11 }}>
+                      PDF
+                    </a>
+                  )}
+                </span>
+              </div>
+            ))
+          )}
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${COLORS.border}` }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <select
+                value={formOrdine.azienda_id}
+                onChange={(e) => setFormOrdine({ ...formOrdine, azienda_id: e.target.value })}
+                style={{ ...inputStyle, width: 160, marginBottom: 0 }}
+              >
+                <option value="">-- Azienda --</option>
+                {aziendeOptions.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
+              </select>
+              <input
+                type="number"
+                placeholder="Importo €"
+                value={formOrdine.importo}
+                onChange={(e) => setFormOrdine({ ...formOrdine, importo: e.target.value })}
+                style={{ ...inputStyle, width: 110, marginBottom: 0 }}
+              />
+              <input
+                type="date"
+                value={formOrdine.data_ordine}
+                onChange={(e) => setFormOrdine({ ...formOrdine, data_ordine: e.target.value })}
+                style={{ ...inputStyle, width: 140, marginBottom: 0 }}
+              />
+              <label style={{ ...inputStyle, width: "auto", marginBottom: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, color: COLORS.primary }}>
+                <Upload size={13} /> {fileOrdine ? fileOrdine.name.slice(0, 16) : "PDF ordine"}
+                <input type="file" accept="application/pdf" style={{ display: "none" }} onChange={(e) => setFileOrdine(e.target.files?.[0] || null)} />
+              </label>
+              <button
+                onClick={salvaOrdine}
+                disabled={savingOrdine}
+                style={{ padding: "8px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+              >
+                {savingOrdine ? "Salvataggio..." : "Registra ordine"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {sezione(
+        "Documenti",
+        <div>
+          {documenti.length === 0 ? (
+            <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 12 }}>Nessun documento caricato.</p>
+          ) : (
+            documenti.map((d) => (
+              <div key={d.id} style={{ fontSize: 12, padding: "6px 0", borderBottom: "1px solid #f0f5f9" }}>
+                <a href={urlPubblicoStorage("documenti-clienti", d.storage_path)} target="_blank" rel="noreferrer" style={{ color: COLORS.primary }}>
+                  {d.nome_file}
+                </a>
+                <span style={{ color: COLORS.muted, marginLeft: 8 }}>
+                  {new Date(d.created_at).toLocaleDateString("it-IT")}
+                </span>
+              </div>
+            ))
+          )}
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: COLORS.primary, cursor: "pointer", marginTop: 10 }}>
+            <Upload size={13} /> {uploadingDoc ? "Caricamento..." : "Carica documento"}
+            <input
+              type="file"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) caricaDocumento(file);
+                e.target.value = "";
+              }}
+            />
+          </label>
+        </div>
+      )}
+
+      {sezione(
+        "Cronologia attività",
+        <div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            <input
+              placeholder="Aggiungi una nota rapida..."
+              value={nota}
+              onChange={(e) => setNota(e.target.value)}
+              style={{ ...inputStyle, marginBottom: 0, flex: 1 }}
+            />
+            <button
+              onClick={aggiungiNota}
+              style={{ padding: "8px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+            >
+              Aggiungi
+            </button>
+          </div>
+          {attivita.length === 0 ? (
+            <p style={{ fontSize: 12, color: COLORS.muted }}>Nessuna attività registrata.</p>
+          ) : (
+            attivita.map((a) => (
+              <div key={a.id} style={{ fontSize: 12, padding: "6px 0", borderBottom: "1px solid #f0f5f9" }}>
+                <span style={{ color: COLORS.muted }}>{new Date(a.data).toLocaleDateString("it-IT")}</span> — {a.descrizione}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 const GIORNI_SETTIMANA = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
 const MESI = [
   "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
