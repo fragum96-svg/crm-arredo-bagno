@@ -2,6 +2,18 @@ import { useState, useEffect, useRef } from "react";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
+import {
   Users,
   Building2,
   CalendarDays,
@@ -13,6 +25,7 @@ import {
   Printer,
   Map as MapIcon,
   Upload,
+  TrendingUp,
 } from "lucide-react";
 
 // ============================================================
@@ -1601,6 +1614,197 @@ function ClientiAnagrafica({ session, apriPreventivo }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ============================================================
+// STATISTICHE
+// ============================================================
+function Statistiche({ session }) {
+  const [ordini, setOrdini] = useState([]);
+  const [preventivi, setPreventivi] = useState([]);
+  const [clienti, setClienti] = useState([]);
+  const [aziende, setAziende] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const headers = () => ({
+    "Content-Type": "application/json",
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${session.access_token}`,
+  });
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const [rOrdini, rPreventivi, rClienti, rAziende] = await Promise.all([
+          fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati?select=*`, { headers: headers() }),
+          fetch(`${SUPABASE_URL}/rest/v1/preventivi?select=id,stato,righe,imballo_modalita,imballo_percentuale,imballo_valore,trasporto_modalita,trasporto_percentuale,trasporto_valore,iva_modalita,iva_percentuale,iva_valore`, { headers: headers() }),
+          fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale`, { headers: headers() }),
+          fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?select=id,nome`, { headers: headers() }),
+        ]);
+        const [dOrdini, dPreventivi, dClienti, dAziende] = await Promise.all([
+          rOrdini.json(), rPreventivi.json(), rClienti.json(), rAziende.json(),
+        ]);
+        setOrdini(Array.isArray(dOrdini) ? dOrdini : []);
+        setPreventivi(Array.isArray(dPreventivi) ? dPreventivi : []);
+        setClienti(Array.isArray(dClienti) ? dClienti : []);
+        setAziende(Array.isArray(dAziende) ? dAziende : []);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [session]);
+
+  const nomeCliente = (id) => clienti.find((c) => c.id === id)?.ragione_sociale || "Sconosciuto";
+  const nomeAzienda = (id) => aziende.find((a) => a.id === id)?.nome || "Sconosciuta";
+
+  const fatturatoPerCliente = {};
+  ordini.forEach((o) => {
+    const key = nomeCliente(o.cliente_id);
+    fatturatoPerCliente[key] = (fatturatoPerCliente[key] || 0) + (Number(o.importo) || 0);
+  });
+  const classificaClienti = Object.entries(fatturatoPerCliente)
+    .map(([nome, totale]) => ({ nome, totale }))
+    .sort((a, b) => b.totale - a.totale);
+
+  const fatturatoPerAzienda = {};
+  ordini.forEach((o) => {
+    const key = nomeAzienda(o.azienda_id);
+    fatturatoPerAzienda[key] = (fatturatoPerAzienda[key] || 0) + (Number(o.importo) || 0);
+  });
+  const datiAziende = Object.entries(fatturatoPerAzienda)
+    .map(([nome, totale]) => ({ nome, totale }))
+    .sort((a, b) => b.totale - a.totale);
+
+  const conteggioStati = { bozza: 0, inviato: 0, accettato: 0, rifiutato: 0 };
+  preventivi.forEach((p) => {
+    if (conteggioStati[p.stato] !== undefined) conteggioStati[p.stato]++;
+  });
+  const datiStati = STATI_PREVENTIVO.map((s) => ({
+    name: s.label,
+    value: conteggioStati[s.valore],
+    color: s.colore,
+  }));
+
+  const fatturatoTotale = ordini.reduce((s, o) => s + (Number(o.importo) || 0), 0);
+
+  return (
+    <div style={{ fontFamily: "Arial, sans-serif" }}>
+      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 4 }}>Statistiche</h2>
+      <p style={{ color: COLORS.muted, fontSize: 13, marginBottom: 20 }}>
+        Basate sugli ordini confermati e sui preventivi registrati
+      </p>
+
+      {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 14 }}>{error}</div>}
+      {loading ? (
+        <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
+      ) : (
+        <>
+          <div
+            style={{
+              background: COLORS.card,
+              border: `1px solid ${COLORS.border}`,
+              borderRadius: 14,
+              padding: 20,
+              marginBottom: 20,
+              maxWidth: 300,
+              boxShadow: "0 4px 14px rgba(20,40,60,0.05)",
+            }}
+          >
+            <div style={{ fontSize: 12, color: COLORS.muted }}>Fatturato totale</div>
+            <div style={{ fontSize: 28, fontWeight: 700, color: COLORS.text }}>{formattaEuro(fatturatoTotale)}</div>
+          </div>
+
+          <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 20 }}>
+            <div
+              style={{
+                flex: "1 1 380px",
+                background: COLORS.card,
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: 14,
+                padding: 20,
+                boxShadow: "0 4px 14px rgba(20,40,60,0.05)",
+              }}
+            >
+              <h3 style={{ fontSize: 14, color: COLORS.text, marginBottom: 12 }}>Fatturato per azienda mandante</h3>
+              {datiAziende.length === 0 ? (
+                <p style={{ fontSize: 12, color: COLORS.muted }}>Nessun ordine ancora registrato.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={datiAziende}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#eef3f7" />
+                    <XAxis dataKey="nome" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip formatter={(v) => formattaEuro(v)} />
+                    <Bar dataKey="totale" fill={COLORS.primary} radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            <div
+              style={{
+                flex: "1 1 280px",
+                background: COLORS.card,
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: 14,
+                padding: 20,
+                boxShadow: "0 4px 14px rgba(20,40,60,0.05)",
+              }}
+            >
+              <h3 style={{ fontSize: 14, color: COLORS.text, marginBottom: 12 }}>Preventivi per stato</h3>
+              <ResponsiveContainer width="100%" height={240}>
+                <PieChart>
+                  <Pie data={datiStati} dataKey="value" nameKey="name" outerRadius={80} label>
+                    {datiStati.map((s, i) => (
+                      <Cell key={i} fill={s.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div
+            style={{
+              background: COLORS.card,
+              border: `1px solid ${COLORS.border}`,
+              borderRadius: 14,
+              padding: 20,
+              boxShadow: "0 4px 14px rgba(20,40,60,0.05)",
+            }}
+          >
+            <h3 style={{ fontSize: 14, color: COLORS.text, marginBottom: 12 }}>Fatturato per cliente</h3>
+            {classificaClienti.length === 0 ? (
+              <p style={{ fontSize: 12, color: COLORS.muted }}>Nessun ordine ancora registrato.</p>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
+                    <th style={{ padding: "6px 4px" }}>Cliente</th>
+                    <th style={{ padding: "6px 4px" }}>Fatturato</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {classificaClienti.map((c) => (
+                    <tr key={c.nome} style={{ borderBottom: "1px solid #f0f5f9" }}>
+                      <td style={{ padding: "6px 4px" }}>{c.nome}</td>
+                      <td style={{ padding: "6px 4px", fontWeight: 600 }}>{formattaEuro(c.totale)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -3465,6 +3669,7 @@ function AppShell({ session, onLogout }) {
     { key: "visite", label: "Visite", icon: CalendarDays },
     { key: "preventivi", label: "Preventivi", icon: FileText },
     { key: "mappa", label: "Mappa", icon: MapIcon },
+    { key: "statistiche", label: "Statistiche", icon: TrendingUp },
     ...(role === "admin" ? [{ key: "admin", label: "Pannello Admin", icon: ShieldCheck }] : []),
   ];
 
@@ -3576,6 +3781,7 @@ function AppShell({ session, onLogout }) {
             />
           )}
           {page === "mappa" && <MappaClienti session={session} />}
+          {page === "statistiche" && <Statistiche session={session} />}
         </main>
       </div>
     </div>
