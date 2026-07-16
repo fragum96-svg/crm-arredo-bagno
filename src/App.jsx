@@ -3908,6 +3908,7 @@ function AppShell({ session, onLogout }) {
       <div style={{ display: "flex" }}>
         {menuOpen && (
           <nav
+            className="app-sidebar"
             style={{
               width: 210,
               background: COLORS.card,
@@ -3970,12 +3971,37 @@ function AppShell({ session, onLogout }) {
 // ============================================================
 // COMPONENTE RADICE
 // ============================================================
+function StileGlobaleResponsive() {
+  return (
+    <style>{`
+      @media (max-width: 768px) {
+        .app-sidebar {
+          position: fixed !important;
+          top: 61px;
+          left: 0;
+          height: calc(100vh - 61px) !important;
+          z-index: 40;
+          box-shadow: 4px 0 16px rgba(0,0,0,0.15);
+        }
+        table { display: block; overflow-x: auto; white-space: nowrap; }
+        input, select, textarea { font-size: 16px !important; }
+        main { padding: 16px !important; }
+      }
+    `}</style>
+  );
+}
+
 export default function App() {
   const [session, setSession] = useState(null);
 
-  if (!session) {
-    return <LoginScreen onLogin={(data) => setSession(data)} />;
-  }
-
-  return <AppShell session={session} onLogout={() => setSession(null)} />;
+  return (
+    <>
+      <StileGlobaleResponsive />
+      {!session ? (
+        <LoginScreen onLogin={(data) => setSession(data)} />
+      ) : (
+        <AppShell session={session} onLogout={() => setSession(null)} />
+      )}
+    </>
+  );
 }
