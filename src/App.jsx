@@ -2156,20 +2156,19 @@ function generaStampaHTML(p, clienti, aziende) {
     p.rif || ""
   }</title>
   <style>
-    body{font-family:Arial, sans-serif; padding:40px; color:#233242;}
-    h1{color:#0b7bc4; font-size:20px; margin-bottom:4px;}
-    p{font-size:13px; margin:2px 0;}
+    body{font-family:Arial, sans-serif; padding:40px; color:#1a1a1a;}
+    h1{color:#1a1a1a; font-size:22px; margin-bottom:2px; font-weight:700; letter-spacing:0.3px;}
+    p{font-size:13px; margin:2px 0; color:#1a1a1a;}
     table{width:100%; border-collapse:collapse; margin-top:20px;}
-    th,td{border-bottom:1px solid #e2edf5; padding:8px; text-align:left; font-size:12px;}
+    th,td{border-bottom:1px solid #ddd; padding:8px; text-align:left; font-size:12px; color:#1a1a1a;}
+    th{color:#555; font-weight:600;}
     .totali{margin-top:20px; text-align:right; font-size:13px;}
-    .totali strong{font-size:16px; color:#0b7bc4;}
+    .totali strong{font-size:16px; color:#1a1a1a; border-top:2px solid #1a1a1a; padding-top:6px; display:inline-block;}
   </style></head>
   <body>
-    <h1>Preventivo${p.rif ? " — RIF " + p.rif : ""}</h1>
-    <p>Stato: ${infoStato.label}</p>
+    <h1>${azienda ? azienda.nome : ""}</h1>
     <p>Data: ${p.data ? new Date(p.data).toLocaleDateString("it-IT") : ""}</p>
-    <p>Spettabile: ${cliente ? cliente.ragione_sociale : ""}</p>
-    <p>${azienda ? azienda.nome : ""}</p>
+    <p>Spettabile: ${cliente ? cliente.ragione_sociale : ""}${p.rif ? ` — Rif. ${p.rif}` : ""}</p>
     <table>
       <thead><tr>${intestazioneColonne}</tr></thead>
       <tbody>${righeHtml}</tbody>
