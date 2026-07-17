@@ -517,7 +517,7 @@ function Dashboard({ session, goTo }) {
         Riepilogo generale della tua attività
       </p>
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
         <button
           onClick={() => goTo("visite")}
           style={{
@@ -4215,7 +4215,7 @@ function AppShell({ session, onLogout }) {
         </button>
         <span style={{ fontWeight: 700, color: "#fff", fontSize: 16 }}>CRM Arredo Bagno</span>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 14 }}>
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.85)" }}>
+          <span className="email-utente" style={{ fontSize: 12, color: "rgba(255,255,255,0.85)" }}>
             {session.user.email}
           </span>
           <button
@@ -4374,6 +4374,8 @@ function StileGlobaleResponsive() {
         }
         input, select, textarea { font-size: 16px !important; }
         main { padding: 16px !important; }
+        .email-utente { display: none; }
+        header { padding: 12px 14px !important; }
       }
     `}</style>
   );
