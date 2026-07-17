@@ -3354,7 +3354,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
           {editingId ? "Modifica preventivo" : "Nuovo preventivo"}
         </h3>
 
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
+        <div className="form-header-preventivo" style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
           <select
             value={header.azienda_id}
             onChange={(e) => setHeader({ ...header, azienda_id: e.target.value })}
@@ -3393,7 +3393,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
           />
         </div>
 
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 12 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 12 }} className="tabella-righe-preventivo">
           <thead>
             <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
               <th style={{ padding: 6 }}>Art.</th>
@@ -3413,7 +3413,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
               const { netto } = calcolaRigaNetto(r);
               return (
                 <tr key={r.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
-                  <td style={{ padding: 4, position: "relative" }}>
+                  <td style={{ padding: 4, position: "relative" }} data-label="Articolo">
                     <input
                       value={r.articolo}
                       onChange={(e) => {
@@ -3457,21 +3457,21 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
                       </div>
                     )}
                   </td>
-                  <td style={{ padding: 4 }}>
+                  <td style={{ padding: 4 }} data-label="Descrizione">
                     <input
                       value={r.descrizione}
                       onChange={(e) => aggiornaRiga(r.id, "descrizione", e.target.value)}
                       style={{ ...inputStyle, width: 150 }}
                     />
                   </td>
-                  <td style={{ padding: 4 }}>
+                  <td style={{ padding: 4 }} data-label="Finitura">
                     <input
                       value={r.finitura}
                       onChange={(e) => aggiornaRiga(r.id, "finitura", e.target.value)}
                       style={{ ...inputStyle, width: 70 }}
                     />
                   </td>
-                  <td style={{ padding: 4 }}>
+                  <td style={{ padding: 4 }} data-label="Qtà">
                     <input
                       type="number"
                       value={r.quantita}
@@ -3479,7 +3479,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
                       style={{ ...inputStyle, width: 45 }}
                     />
                   </td>
-                  <td style={{ padding: 4 }}>
+                  <td style={{ padding: 4 }} data-label="Prezzo un.">
                     <input
                       type="number"
                       value={r.prezzo_unitario}
@@ -3487,7 +3487,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
                       style={{ ...inputStyle, width: 65 }}
                     />
                   </td>
-                  <td style={{ padding: 4 }}>
+                  <td style={{ padding: 4 }} data-label="Sc.1 %">
                     <input
                       type="number"
                       value={r.sconto1}
@@ -3495,7 +3495,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
                       style={{ ...inputStyle, width: 50 }}
                     />
                   </td>
-                  <td style={{ padding: 4 }}>
+                  <td style={{ padding: 4 }} data-label="Sc.2 %">
                     <input
                       type="number"
                       value={r.sconto2}
@@ -3503,7 +3503,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
                       style={{ ...inputStyle, width: 50 }}
                     />
                   </td>
-                  <td style={{ padding: 4 }}>
+                  <td style={{ padding: 4 }} data-label="Netto manuale">
                     <input
                       type="number"
                       placeholder="opz."
@@ -3512,10 +3512,10 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
                       style={{ ...inputStyle, width: 65 }}
                     />
                   </td>
-                  <td style={{ padding: 4, fontWeight: 600 }}>
+                  <td style={{ padding: 4, fontWeight: 600 }} data-label="Netto">
                     {formattaEuro(netto)}
                   </td>
-                  <td style={{ padding: 4 }}>
+                  <td style={{ padding: 4 }} data-label="">
                     <button
                       onClick={() => rimuoviRiga(r.id)}
                       style={{
@@ -3526,7 +3526,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
                         fontSize: 14,
                       }}
                     >
-                      ✕
+                      ✕ Rimuovi riga
                     </button>
                   </td>
                 </tr>
@@ -4004,6 +4004,40 @@ function StileGlobaleResponsive() {
           z-index: 35;
         }
         table { display: block; overflow-x: auto; white-space: nowrap; }
+        .tabella-righe-preventivo { white-space: normal; }
+        .tabella-righe-preventivo thead { display: none; }
+        .tabella-righe-preventivo, .tabella-righe-preventivo tbody, .tabella-righe-preventivo tr, .tabella-righe-preventivo td {
+          display: block;
+          width: 100%;
+        }
+        .tabella-righe-preventivo tr {
+          border: 1px solid #e2edf5;
+          border-radius: 10px;
+          margin-bottom: 12px;
+          padding: 8px;
+        }
+        .tabella-righe-preventivo td {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          padding: 6px 4px;
+          border: none;
+        }
+        .tabella-righe-preventivo td::before {
+          content: attr(data-label);
+          font-size: 11px;
+          color: #7c8b98;
+          flex-shrink: 0;
+        }
+        .tabella-righe-preventivo td input, .tabella-righe-preventivo td select {
+          width: auto;
+          flex: 1;
+        }
+        .form-header-preventivo select, .form-header-preventivo input {
+          max-width: none !important;
+          width: 100% !important;
+        }
         input, select, textarea { font-size: 16px !important; }
         main { padding: 16px !important; }
       }
