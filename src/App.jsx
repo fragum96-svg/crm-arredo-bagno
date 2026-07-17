@@ -27,6 +27,7 @@ import {
   Upload,
   TrendingUp,
   Wallet,
+  ClipboardList,
 } from "lucide-react";
 
 // ============================================================
@@ -2017,6 +2018,141 @@ function Fatturato({ session }) {
   );
 }
 
+// ============================================================
+// REGISTRO ORDINI — ordini manuali + preventivi, filtrabili
+// ============================================================
+function RegistroOrdini({ session }) {
+  const [ordini, setOrdini] = useState([]);
+  const [preventivi, setPreventivi] = useState([]);
+  const [clienti, setClienti] = useState([]);
+  const [aziende, setAziende] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [filtroCliente, setFiltroCliente] = useState("");
+  const [filtroAzienda, setFiltroAzienda] = useState("");
+
+  const headers = () => ({
+    "Content-Type": "application/json",
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${session.access_token}`,
+  });
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const [rOrdini, rPreventivi, rClienti, rAziende] = await Promise.all([
+          fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati?select=*`, { headers: headers() }),
+          fetch(`${SUPABASE_URL}/rest/v1/preventivi?select=*`, { headers: headers() }),
+          fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale`, { headers: headers() }),
+          fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?select=id,nome`, { headers: headers() }),
+        ]);
+        const [dOrdini, dPreventivi, dClienti, dAziende] = await Promise.all([
+          rOrdini.json(), rPreventivi.json(), rClienti.json(), rAziende.json(),
+        ]);
+        setOrdini(Array.isArray(dOrdini) ? dOrdini : []);
+        setPreventivi(Array.isArray(dPreventivi) ? dPreventivi : []);
+        setClienti(Array.isArray(dClienti) ? dClienti : []);
+        setAziende(Array.isArray(dAziende) ? dAziende : []);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [session]);
+
+  const nomeCliente = (id) => clienti.find((c) => c.id === id)?.ragione_sociale || "Sconosciuto";
+  const nomeAzienda = (id) => aziende.find((a) => a.id === id)?.nome || "Sconosciuta";
+
+  const righeOrdini = ordini.map((o) => ({
+    id: `ordine-${o.id}`,
+    tipo: "Ordine confermato",
+    cliente_id: o.cliente_id,
+    azienda_id: o.azienda_id,
+    data: o.data_ordine,
+    statoLabel: "Confermato",
+    statoColore: COLORS.success,
+    importo: Number(o.importo) || 0,
+  }));
+
+  const righePreventivi = preventivi.map((p) => {
+    const infoStato = STATI_PREVENTIVO.find((s) => s.valore === p.stato) || STATI_PREVENTIVO[0];
+    return {
+      id: `preventivo-${p.id}`,
+      tipo: "Preventivo" + (p.rif ? ` (${p.rif})` : ""),
+      cliente_id: p.cliente_id,
+      azienda_id: p.azienda_id,
+      data: p.data,
+      statoLabel: infoStato.label,
+      statoColore: infoStato.colore,
+      importo: calcolaTotaliPreventivo(p, p.righe || []).totaleFinale,
+    };
+  });
+
+  const tutteLeRighe = [...righeOrdini, ...righePreventivi]
+    .filter((r) => !filtroCliente || r.cliente_id === filtroCliente)
+    .filter((r) => !filtroAzienda || r.azienda_id === filtroAzienda)
+    .sort((a, b) => new Date(b.data) - new Date(a.data));
+
+  const selectStyle = { padding: "8px 12px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13 };
+
+  return (
+    <div style={{ fontFamily: "Arial, sans-serif" }}>
+      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 4 }}>Registro ordini</h2>
+      <p style={{ color: COLORS.muted, fontSize: 13, marginBottom: 16 }}>
+        Ordini confermati e preventivi, tutti insieme
+      </p>
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
+        <select value={filtroCliente} onChange={(e) => setFiltroCliente(e.target.value)} style={{ ...selectStyle, maxWidth: 220 }}>
+          <option value="">Tutti i clienti</option>
+          {clienti.map((c) => <option key={c.id} value={c.id}>{c.ragione_sociale}</option>)}
+        </select>
+        <select value={filtroAzienda} onChange={(e) => setFiltroAzienda(e.target.value)} style={{ ...selectStyle, maxWidth: 220 }}>
+          <option value="">Tutte le aziende</option>
+          {aziende.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
+        </select>
+      </div>
+
+      {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 14 }}>{error}</div>}
+      {loading ? (
+        <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
+      ) : tutteLeRighe.length === 0 ? (
+        <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun ordine o preventivo trovato.</p>
+      ) : (
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead>
+            <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
+              <th style={{ padding: "8px 6px" }}>Tipo</th>
+              <th style={{ padding: "8px 6px" }}>Cliente</th>
+              <th style={{ padding: "8px 6px" }}>Azienda</th>
+              <th style={{ padding: "8px 6px" }}>Data</th>
+              <th style={{ padding: "8px 6px" }}>Stato</th>
+              <th style={{ padding: "8px 6px" }}>Importo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tutteLeRighe.map((r) => (
+              <tr key={r.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
+                <td style={{ padding: "8px 6px" }}>{r.tipo}</td>
+                <td style={{ padding: "8px 6px" }}>{nomeCliente(r.cliente_id)}</td>
+                <td style={{ padding: "8px 6px" }}>{nomeAzienda(r.azienda_id)}</td>
+                <td style={{ padding: "8px 6px" }}>{r.data ? new Date(r.data).toLocaleDateString("it-IT") : "-"}</td>
+                <td style={{ padding: "8px 6px" }}>
+                  <span style={{ color: r.statoColore, fontWeight: 700 }}>● {r.statoLabel}</span>
+                </td>
+                <td style={{ padding: "8px 6px", fontWeight: 600 }}>{formattaEuro(r.importo)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 async function caricaFileStorage(session, bucket, path, file) {
   const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
     method: "POST",
@@ -3896,6 +4032,7 @@ function AppShell({ session, onLogout }) {
     { key: "aziende", label: "Aziende mandanti", icon: Building2 },
     { key: "visite", label: "Visite", icon: CalendarDays },
     { key: "preventivi", label: "Preventivi", icon: FileText },
+    { key: "ordini", label: "Registro ordini", icon: ClipboardList },
     { key: "mappa", label: "Mappa", icon: MapIcon },
     { key: "statistiche", label: "Statistiche", icon: TrendingUp },
     { key: "fatturato", label: "Fatturato", icon: Wallet },
@@ -4020,6 +4157,7 @@ function AppShell({ session, onLogout }) {
             />
           )}
           {page === "mappa" && <MappaClienti session={session} />}
+          {page === "ordini" && <RegistroOrdini session={session} />}
           {page === "statistiche" && <Statistiche session={session} />}
           {page === "fatturato" && <Fatturato session={session} />}
         </main>
