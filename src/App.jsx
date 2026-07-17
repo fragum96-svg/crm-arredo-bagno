@@ -1124,7 +1124,7 @@ function AziendeMandanti({ session }) {
               Nessuna azienda ancora inserita.
             </p>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }} className="tabella-responsive">
               <thead>
                 <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
                   <th style={{ padding: "8px 6px" }}>Nome</th>
@@ -1138,17 +1138,17 @@ function AziendeMandanti({ session }) {
               <tbody>
                 {list.map((a) => (
                   <tr key={a.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
-                    <td style={{ padding: "8px 6px", fontWeight: 600 }}>{a.nome}</td>
-                    <td style={{ padding: "8px 6px" }}>
+                    <td style={{ padding: "8px 6px", fontWeight: 600 }} data-label="Nome">{a.nome}</td>
+                    <td style={{ padding: "8px 6px" }} data-label="Sc. 1">
                       {a.sconto1 != null ? `${a.sconto1}%` : "-"}
                     </td>
-                    <td style={{ padding: "8px 6px" }}>
+                    <td style={{ padding: "8px 6px" }} data-label="Sc. 2">
                       {a.sconto2 != null ? `${a.sconto2}%` : "-"}
                     </td>
-                    <td style={{ padding: "8px 6px" }}>
+                    <td style={{ padding: "8px 6px" }} data-label="Imballo">
                       {a.imballo_percentuale != null ? `${a.imballo_percentuale}%` : "-"}
                     </td>
-                    <td style={{ padding: "8px 6px" }}>
+                    <td style={{ padding: "8px 6px" }} data-label="Listino">
                       <label
                         style={{
                           display: "inline-flex",
@@ -1173,7 +1173,7 @@ function AziendeMandanti({ session }) {
                         />
                       </label>
                     </td>
-                    <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }}>
+                    <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }} data-label="">
                       <button
                         onClick={() => edit(a)}
                         style={{
@@ -1612,7 +1612,7 @@ function ClientiAnagrafica({ session, apriPreventivo }) {
           ) : filteredList.length === 0 ? (
             <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun cliente trovato.</p>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }} className="tabella-responsive">
               <thead>
                 <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
                   <th style={{ padding: "8px 6px" }}>Ragione sociale</th>
@@ -1624,7 +1624,7 @@ function ClientiAnagrafica({ session, apriPreventivo }) {
               <tbody>
                 {filteredList.map((c) => (
                   <tr key={c.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
-                    <td style={{ padding: "8px 6px", fontWeight: 600 }}>
+                    <td style={{ padding: "8px 6px", fontWeight: 600 }} data-label="Cliente">
                       <span
                         onClick={() => setClienteApertoId(c.id)}
                         style={{ cursor: "pointer", color: COLORS.primary }}
@@ -1632,9 +1632,9 @@ function ClientiAnagrafica({ session, apriPreventivo }) {
                         {c.ragione_sociale}
                       </span>
                     </td>
-                    <td style={{ padding: "8px 6px" }}>{c.classificazione || "-"}</td>
-                    <td style={{ padding: "8px 6px" }}>{c.telefono || "-"}</td>
-                    <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }}>
+                    <td style={{ padding: "8px 6px" }} data-label="Classificazione">{c.classificazione || "-"}</td>
+                    <td style={{ padding: "8px 6px" }} data-label="Telefono">{c.telefono || "-"}</td>
+                    <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }} data-label="">
                       <button
                         onClick={() => edit(c)}
                         style={{
@@ -2243,7 +2243,7 @@ function RegistroOrdini({ session, apriPreventivo }) {
       ) : tutteLeRighe.length === 0 ? (
         <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun ordine o preventivo trovato.</p>
       ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }} className="tabella-responsive">
           <thead>
             <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
               <th style={{ padding: "8px 6px" }}>Tipo</th>
@@ -2258,15 +2258,15 @@ function RegistroOrdini({ session, apriPreventivo }) {
           <tbody>
             {tutteLeRighe.map((r) => (
               <tr key={r.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
-                <td style={{ padding: "8px 6px" }}>{r.tipo}</td>
-                <td style={{ padding: "8px 6px" }}>{nomeCliente(r.cliente_id)}</td>
-                <td style={{ padding: "8px 6px" }}>{nomeAzienda(r.azienda_id)}</td>
-                <td style={{ padding: "8px 6px" }}>{r.data ? new Date(r.data).toLocaleDateString("it-IT") : "-"}</td>
-                <td style={{ padding: "8px 6px" }}>
+                <td style={{ padding: "8px 6px" }} data-label="Tipo">{r.tipo}</td>
+                <td style={{ padding: "8px 6px" }} data-label="Cliente">{nomeCliente(r.cliente_id)}</td>
+                <td style={{ padding: "8px 6px" }} data-label="Azienda">{nomeAzienda(r.azienda_id)}</td>
+                <td style={{ padding: "8px 6px" }} data-label="Data">{r.data ? new Date(r.data).toLocaleDateString("it-IT") : "-"}</td>
+                <td style={{ padding: "8px 6px" }} data-label="Stato">
                   <span style={{ color: r.statoColore, fontWeight: 700 }}>● {r.statoLabel}</span>
                 </td>
-                <td style={{ padding: "8px 6px", fontWeight: 600 }}>{formattaEuro(r.importo)}</td>
-                <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }}>
+                <td style={{ padding: "8px 6px", fontWeight: 600 }} data-label="Importo">{formattaEuro(r.importo)}</td>
+                <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }} data-label="">
                   {r.tipoOriginale === "preventivo" ? (
                     <button
                       onClick={() => apriPreventivo && apriPreventivo(r.idOriginale)}
@@ -4059,7 +4059,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
       ) : lista.length === 0 ? (
         <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun preventivo salvato.</p>
       ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }} className="tabella-responsive">
           <thead>
             <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
               <th style={{ padding: "8px 6px" }}>Stato</th>
@@ -4075,18 +4075,18 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
               const infoStato = STATI_PREVENTIVO.find((s) => s.valore === p.stato) || STATI_PREVENTIVO[0];
               return (
               <tr key={p.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
-                <td style={{ padding: "8px 6px" }}>
+                <td style={{ padding: "8px 6px" }} data-label="Stato">
                   <span style={{ color: infoStato.colore, fontSize: 12, fontWeight: 700 }}>
                     ● {infoStato.label}
                   </span>
                 </td>
-                <td style={{ padding: "8px 6px" }}>{p.rif || "-"}</td>
-                <td style={{ padding: "8px 6px" }}>
+                <td style={{ padding: "8px 6px" }} data-label="RIF">{p.rif || "-"}</td>
+                <td style={{ padding: "8px 6px" }} data-label="Data">
                   {p.data ? new Date(p.data).toLocaleDateString("it-IT") : "-"}
                 </td>
-                <td style={{ padding: "8px 6px" }}>{nomeCliente(p.cliente_id)}</td>
-                <td style={{ padding: "8px 6px" }}>{nomeAzienda(p.azienda_id)}</td>
-                <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }}>
+                <td style={{ padding: "8px 6px" }} data-label="Cliente">{nomeCliente(p.cliente_id)}</td>
+                <td style={{ padding: "8px 6px" }} data-label="Azienda">{nomeAzienda(p.azienda_id)}</td>
+                <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }} data-label="">
                   <button
                     onClick={() => stampaPreventivo(p, clienti, aziende)}
                     style={{
@@ -4344,19 +4344,20 @@ function StileGlobaleResponsive() {
           z-index: 35;
         }
         table { display: block; overflow-x: auto; white-space: nowrap; }
-        .tabella-righe-preventivo { white-space: normal; }
-        .tabella-righe-preventivo thead { display: none; }
-        .tabella-righe-preventivo, .tabella-righe-preventivo tbody, .tabella-righe-preventivo tr, .tabella-righe-preventivo td {
+        .tabella-righe-preventivo, .tabella-responsive { white-space: normal; }
+        .tabella-righe-preventivo thead, .tabella-responsive thead { display: none; }
+        .tabella-righe-preventivo, .tabella-righe-preventivo tbody, .tabella-righe-preventivo tr, .tabella-righe-preventivo td,
+        .tabella-responsive, .tabella-responsive tbody, .tabella-responsive tr, .tabella-responsive td {
           display: block;
           width: 100%;
         }
-        .tabella-righe-preventivo tr {
+        .tabella-righe-preventivo tr, .tabella-responsive tr {
           border: 1px solid #e2edf5;
           border-radius: 10px;
           margin-bottom: 12px;
           padding: 8px;
         }
-        .tabella-righe-preventivo td {
+        .tabella-righe-preventivo td, .tabella-responsive td {
           display: flex;
           align-items: center;
           justify-content: space-between;
@@ -4364,7 +4365,7 @@ function StileGlobaleResponsive() {
           padding: 6px 4px;
           border: none;
         }
-        .tabella-righe-preventivo td::before {
+        .tabella-righe-preventivo td::before, .tabella-responsive td::before {
           content: attr(data-label);
           font-size: 11px;
           color: #7c8b98;
@@ -4373,6 +4374,9 @@ function StileGlobaleResponsive() {
         .tabella-righe-preventivo td input, .tabella-righe-preventivo td select {
           width: auto;
           flex: 1;
+        }
+        .tabella-responsive td {
+          text-align: right;
         }
         .form-header-preventivo select, .form-header-preventivo input {
           max-width: none !important;
