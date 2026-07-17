@@ -3907,6 +3907,12 @@ function AppShell({ session, onLogout }) {
 
       <div style={{ display: "flex" }}>
         {menuOpen && (
+          <div
+            className="app-sidebar-backdrop"
+            onClick={() => setMenuOpen(false)}
+          />
+        )}
+        {menuOpen && (
           <nav
             className="app-sidebar"
             style={{
@@ -3923,7 +3929,10 @@ function AppShell({ session, onLogout }) {
               return (
                 <div
                   key={item.key}
-                  onClick={() => setPage(item.key)}
+                  onClick={() => {
+                    setPage(item.key);
+                    if (window.innerWidth < 768) setMenuOpen(false);
+                  }}
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -3974,6 +3983,7 @@ function AppShell({ session, onLogout }) {
 function StileGlobaleResponsive() {
   return (
     <style>{`
+      .app-sidebar-backdrop { display: none; }
       @media (max-width: 768px) {
         .app-sidebar {
           position: fixed !important;
@@ -3982,6 +3992,16 @@ function StileGlobaleResponsive() {
           height: calc(100vh - 61px) !important;
           z-index: 40;
           box-shadow: 4px 0 16px rgba(0,0,0,0.15);
+        }
+        .app-sidebar-backdrop {
+          display: block !important;
+          position: fixed;
+          top: 61px;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0,0,0,0.35);
+          z-index: 35;
         }
         table { display: block; overflow-x: auto; white-space: nowrap; }
         input, select, textarea { font-size: 16px !important; }
