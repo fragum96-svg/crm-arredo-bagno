@@ -2021,7 +2021,7 @@ function Fatturato({ session }) {
 // ============================================================
 // REGISTRO ORDINI — ordini manuali + preventivi, filtrabili
 // ============================================================
-function RegistroOrdini({ session }) {
+function RegistroOrdini({ session, apriPreventivo }) {
   const [ordini, setOrdini] = useState([]);
   const [preventivi, setPreventivi] = useState([]);
   const [clienti, setClienti] = useState([]);
@@ -2030,6 +2030,9 @@ function RegistroOrdini({ session }) {
   const [error, setError] = useState("");
   const [filtroCliente, setFiltroCliente] = useState("");
   const [filtroAzienda, setFiltroAzienda] = useState("");
+  const [ordineInModifica, setOrdineInModifica] = useState(null);
+  const [formOrdine, setFormOrdine] = useState({ azienda_id: "", importo: "", data_ordine: "", note: "" });
+  const [salvandoOrdine, setSalvandoOrdine] = useState(false);
 
   const headers = () => ({
     "Content-Type": "application/json",
@@ -2038,36 +2041,41 @@ function RegistroOrdini({ session }) {
   });
 
   useEffect(() => {
-    (async () => {
-      setLoading(true);
-      setError("");
-      try {
-        const [rOrdini, rPreventivi, rClienti, rAziende] = await Promise.all([
-          fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati?select=*`, { headers: headers() }),
-          fetch(`${SUPABASE_URL}/rest/v1/preventivi?select=*`, { headers: headers() }),
-          fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale`, { headers: headers() }),
-          fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?select=id,nome`, { headers: headers() }),
-        ]);
-        const [dOrdini, dPreventivi, dClienti, dAziende] = await Promise.all([
-          rOrdini.json(), rPreventivi.json(), rClienti.json(), rAziende.json(),
-        ]);
-        setOrdini(Array.isArray(dOrdini) ? dOrdini : []);
-        setPreventivi(Array.isArray(dPreventivi) ? dPreventivi : []);
-        setClienti(Array.isArray(dClienti) ? dClienti : []);
-        setAziende(Array.isArray(dAziende) ? dAziende : []);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    })();
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
+
+  async function load() {
+    setLoading(true);
+    setError("");
+    try {
+      const [rOrdini, rPreventivi, rClienti, rAziende] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati?select=*`, { headers: headers() }),
+        fetch(`${SUPABASE_URL}/rest/v1/preventivi?select=*`, { headers: headers() }),
+        fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale`, { headers: headers() }),
+        fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?select=id,nome`, { headers: headers() }),
+      ]);
+      const [dOrdini, dPreventivi, dClienti, dAziende] = await Promise.all([
+        rOrdini.json(), rPreventivi.json(), rClienti.json(), rAziende.json(),
+      ]);
+      setOrdini(Array.isArray(dOrdini) ? dOrdini : []);
+      setPreventivi(Array.isArray(dPreventivi) ? dPreventivi : []);
+      setClienti(Array.isArray(dClienti) ? dClienti : []);
+      setAziende(Array.isArray(dAziende) ? dAziende : []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const nomeCliente = (id) => clienti.find((c) => c.id === id)?.ragione_sociale || "Sconosciuto";
   const nomeAzienda = (id) => aziende.find((a) => a.id === id)?.nome || "Sconosciuta";
 
   const righeOrdini = ordini.map((o) => ({
     id: `ordine-${o.id}`,
+    idOriginale: o.id,
+    tipoOriginale: "ordine",
     tipo: "Ordine confermato",
     cliente_id: o.cliente_id,
     azienda_id: o.azienda_id,
@@ -2081,6 +2089,8 @@ function RegistroOrdini({ session }) {
     const infoStato = STATI_PREVENTIVO.find((s) => s.valore === p.stato) || STATI_PREVENTIVO[0];
     return {
       id: `preventivo-${p.id}`,
+      idOriginale: p.id,
+      tipoOriginale: "preventivo",
       tipo: "Preventivo" + (p.rif ? ` (${p.rif})` : ""),
       cliente_id: p.cliente_id,
       azienda_id: p.azienda_id,
@@ -2090,6 +2100,54 @@ function RegistroOrdini({ session }) {
       importo: calcolaTotaliPreventivo(p, p.righe || []).totaleFinale,
     };
   });
+
+  const modificaOrdine = (idOrdine) => {
+    const o = ordini.find((x) => x.id === idOrdine);
+    if (!o) return;
+    setOrdineInModifica(idOrdine);
+    setFormOrdine({
+      azienda_id: o.azienda_id || "",
+      importo: o.importo ?? "",
+      data_ordine: o.data_ordine || "",
+      note: o.note || "",
+    });
+  };
+
+  const salvaModificaOrdine = async () => {
+    setSalvandoOrdine(true);
+    setError("");
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati?id=eq.${ordineInModifica}`, {
+        method: "PATCH",
+        headers: { ...headers(), Prefer: "return=representation" },
+        body: JSON.stringify({
+          azienda_id: formOrdine.azienda_id,
+          importo: Number(formOrdine.importo) || 0,
+          data_ordine: formOrdine.data_ordine,
+          note: formOrdine.note || null,
+        }),
+      });
+      setOrdineInModifica(null);
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSalvandoOrdine(false);
+    }
+  };
+
+  const eliminaOrdine = async (idOrdine) => {
+    if (!window.confirm("Eliminare questo ordine confermato?")) return;
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati?id=eq.${idOrdine}`, {
+        method: "DELETE",
+        headers: headers(),
+      });
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
 
   const tutteLeRighe = [...righeOrdini, ...righePreventivi]
     .filter((r) => !filtroCliente || r.cliente_id === filtroCliente)
@@ -2117,6 +2175,67 @@ function RegistroOrdini({ session }) {
       </div>
 
       {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 14 }}>{error}</div>}
+
+      {ordineInModifica && (
+        <div
+          style={{
+            background: COLORS.card,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: 14,
+            padding: 20,
+            marginBottom: 20,
+            maxWidth: 500,
+            boxShadow: "0 4px 14px rgba(20,40,60,0.05)",
+          }}
+        >
+          <h3 style={{ fontSize: 14, color: COLORS.text, marginBottom: 12 }}>Modifica ordine confermato</h3>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+            <select
+              value={formOrdine.azienda_id}
+              onChange={(e) => setFormOrdine({ ...formOrdine, azienda_id: e.target.value })}
+              style={{ ...selectStyle, width: 160 }}
+            >
+              <option value="">-- Azienda --</option>
+              {aziende.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
+            </select>
+            <input
+              type="number"
+              placeholder="Importo €"
+              value={formOrdine.importo}
+              onChange={(e) => setFormOrdine({ ...formOrdine, importo: e.target.value })}
+              style={{ ...selectStyle, width: 110 }}
+            />
+            <input
+              type="date"
+              value={formOrdine.data_ordine}
+              onChange={(e) => setFormOrdine({ ...formOrdine, data_ordine: e.target.value })}
+              style={{ ...selectStyle, width: 140 }}
+            />
+            <input
+              placeholder="Note"
+              value={formOrdine.note}
+              onChange={(e) => setFormOrdine({ ...formOrdine, note: e.target.value })}
+              style={{ ...selectStyle, width: 160 }}
+            />
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={salvaModificaOrdine}
+              disabled={salvandoOrdine}
+              style={{ padding: "8px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+            >
+              {salvandoOrdine ? "Salvataggio..." : "Salva modifiche"}
+            </button>
+            <button
+              onClick={() => setOrdineInModifica(null)}
+              style={{ padding: "8px 16px", background: "#fff", color: COLORS.primary, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 12, cursor: "pointer" }}
+            >
+              Annulla
+            </button>
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
       ) : tutteLeRighe.length === 0 ? (
@@ -2131,6 +2250,7 @@ function RegistroOrdini({ session }) {
               <th style={{ padding: "8px 6px" }}>Data</th>
               <th style={{ padding: "8px 6px" }}>Stato</th>
               <th style={{ padding: "8px 6px" }}>Importo</th>
+              <th style={{ padding: "8px 6px" }}></th>
             </tr>
           </thead>
           <tbody>
@@ -2144,6 +2264,31 @@ function RegistroOrdini({ session }) {
                   <span style={{ color: r.statoColore, fontWeight: 700 }}>● {r.statoLabel}</span>
                 </td>
                 <td style={{ padding: "8px 6px", fontWeight: 600 }}>{formattaEuro(r.importo)}</td>
+                <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }}>
+                  {r.tipoOriginale === "preventivo" ? (
+                    <button
+                      onClick={() => apriPreventivo && apriPreventivo(r.idOriginale)}
+                      style={{ background: "none", border: "none", color: COLORS.primary, cursor: "pointer", fontSize: 12 }}
+                    >
+                      Apri / Modifica stato
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => modificaOrdine(r.idOriginale)}
+                        style={{ background: "none", border: "none", color: COLORS.primary, cursor: "pointer", fontSize: 12, marginRight: 10 }}
+                      >
+                        Modifica
+                      </button>
+                      <button
+                        onClick={() => eliminaOrdine(r.idOriginale)}
+                        style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 12 }}
+                      >
+                        Elimina
+                      </button>
+                    </>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -4157,7 +4302,7 @@ function AppShell({ session, onLogout }) {
             />
           )}
           {page === "mappa" && <MappaClienti session={session} />}
-          {page === "ordini" && <RegistroOrdini session={session} />}
+          {page === "ordini" && <RegistroOrdini session={session} apriPreventivo={apriPreventivoCliente} />}
           {page === "statistiche" && <Statistiche session={session} />}
           {page === "fatturato" && <Fatturato session={session} />}
         </main>
