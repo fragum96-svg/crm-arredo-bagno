@@ -767,6 +767,8 @@ function MappaClienti({ session }) {
           borderRadius: 14,
           border: `1px solid ${COLORS.border}`,
           overflow: "hidden",
+          position: "relative",
+          zIndex: 0,
         }}
       />
       {senzaCoordinate.length > 0 && (
@@ -4193,6 +4195,8 @@ function AppShell({ session, onLogout }) {
           padding: "14px 22px",
           background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.primaryDark})`,
           boxShadow: "0 2px 12px rgba(11,123,196,0.2)",
+          position: "relative",
+          zIndex: 1000,
         }}
       >
         <button
@@ -4319,6 +4323,8 @@ function StileGlobaleResponsive() {
     <style>{`
       .app-sidebar-backdrop { display: none; }
       @media (max-width: 768px) {
+        main * { min-width: 0; }
+        body { overflow-x: hidden; }
         .app-sidebar {
           position: fixed !important;
           top: 61px;
