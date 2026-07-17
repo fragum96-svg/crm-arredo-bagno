@@ -554,6 +554,42 @@ function Dashboard({ session, goTo }) {
         >
           <FileText size={16} /> Nuovo Preventivo
         </button>
+        <button
+          onClick={() => goTo("statistiche")}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "12px 20px",
+            background: "#fff",
+            color: COLORS.primary,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: 12,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          <TrendingUp size={16} /> Statistiche
+        </button>
+        <button
+          onClick={() => goTo("fatturato")}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "12px 20px",
+            background: "#fff",
+            color: COLORS.primary,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: 12,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          <Wallet size={16} /> Fatturato
+        </button>
       </div>
 
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
@@ -603,6 +639,20 @@ function Dashboard({ session, goTo }) {
 
 function formattaEuro(n) {
   return (Number(n) || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+}
+
+function combinaRicaviPerAzienda(ordini, preventivi, aziendaId) {
+  const daOrdini = ordini
+    .filter((o) => o.azienda_id === aziendaId)
+    .map((o) => ({ cliente_id: o.cliente_id, importo: Number(o.importo) || 0, data: o.data_ordine }));
+  const daPreventivi = preventivi
+    .filter((p) => p.azienda_id === aziendaId && p.stato === "accettato")
+    .map((p) => ({
+      cliente_id: p.cliente_id,
+      importo: calcolaTotaliPreventivo(p, p.righe || []).totaleFinale,
+      data: p.data,
+    }));
+  return [...daOrdini, ...daPreventivi];
 }
 
 async function geocodificaIndirizzo(indirizzo) {
@@ -1629,6 +1679,7 @@ function Statistiche({ session }) {
   const [aziende, setAziende] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [aziendaSelezionata, setAziendaSelezionata] = useState("");
 
   const headers = () => ({
     "Content-Type": "application/json",
@@ -1643,7 +1694,7 @@ function Statistiche({ session }) {
       try {
         const [rOrdini, rPreventivi, rClienti, rAziende] = await Promise.all([
           fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati?select=*`, { headers: headers() }),
-          fetch(`${SUPABASE_URL}/rest/v1/preventivi?select=id,stato,righe,imballo_modalita,imballo_percentuale,imballo_valore,trasporto_modalita,trasporto_percentuale,trasporto_valore,iva_modalita,iva_percentuale,iva_valore`, { headers: headers() }),
+          fetch(`${SUPABASE_URL}/rest/v1/preventivi?select=id,cliente_id,azienda_id,data,stato,righe,imballo_modalita,imballo_percentuale,imballo_valore,trasporto_modalita,trasporto_percentuale,trasporto_valore,iva_modalita,iva_percentuale,iva_valore`, { headers: headers() }),
           fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale`, { headers: headers() }),
           fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?select=id,nome`, { headers: headers() }),
         ]);
@@ -1653,7 +1704,9 @@ function Statistiche({ session }) {
         setOrdini(Array.isArray(dOrdini) ? dOrdini : []);
         setPreventivi(Array.isArray(dPreventivi) ? dPreventivi : []);
         setClienti(Array.isArray(dClienti) ? dClienti : []);
-        setAziende(Array.isArray(dAziende) ? dAziende : []);
+        const listaAziende = Array.isArray(dAziende) ? dAziende : [];
+        setAziende(listaAziende);
+        setAziendaSelezionata((prev) => prev || (listaAziende[0] ? listaAziende[0].id : ""));
       } catch (err) {
         setError(err.message);
       } finally {
@@ -1663,48 +1716,61 @@ function Statistiche({ session }) {
   }, [session]);
 
   const nomeCliente = (id) => clienti.find((c) => c.id === id)?.ragione_sociale || "Sconosciuto";
-  const nomeAzienda = (id) => aziende.find((a) => a.id === id)?.nome || "Sconosciuta";
+
+  const ricavi = aziendaSelezionata ? combinaRicaviPerAzienda(ordini, preventivi, aziendaSelezionata) : [];
 
   const fatturatoPerCliente = {};
-  ordini.forEach((o) => {
-    const key = nomeCliente(o.cliente_id);
-    fatturatoPerCliente[key] = (fatturatoPerCliente[key] || 0) + (Number(o.importo) || 0);
+  ricavi.forEach((r) => {
+    const key = nomeCliente(r.cliente_id);
+    fatturatoPerCliente[key] = (fatturatoPerCliente[key] || 0) + r.importo;
   });
   const classificaClienti = Object.entries(fatturatoPerCliente)
     .map(([nome, totale]) => ({ nome, totale }))
     .sort((a, b) => b.totale - a.totale);
 
-  const fatturatoPerAzienda = {};
-  ordini.forEach((o) => {
-    const key = nomeAzienda(o.azienda_id);
-    fatturatoPerAzienda[key] = (fatturatoPerAzienda[key] || 0) + (Number(o.importo) || 0);
-  });
-  const datiAziende = Object.entries(fatturatoPerAzienda)
-    .map(([nome, totale]) => ({ nome, totale }))
-    .sort((a, b) => b.totale - a.totale);
-
   const conteggioStati = { bozza: 0, inviato: 0, accettato: 0, rifiutato: 0 };
-  preventivi.forEach((p) => {
-    if (conteggioStati[p.stato] !== undefined) conteggioStati[p.stato]++;
-  });
+  preventivi
+    .filter((p) => p.azienda_id === aziendaSelezionata)
+    .forEach((p) => {
+      if (conteggioStati[p.stato] !== undefined) conteggioStati[p.stato]++;
+    });
   const datiStati = STATI_PREVENTIVO.map((s) => ({
     name: s.label,
     value: conteggioStati[s.valore],
     color: s.colore,
   }));
 
-  const fatturatoTotale = ordini.reduce((s, o) => s + (Number(o.importo) || 0), 0);
+  const fatturatoTotale = ricavi.reduce((s, r) => s + r.importo, 0);
+
+  const inputStyle = {
+    padding: "8px 12px",
+    border: `1px solid ${COLORS.border}`,
+    borderRadius: 8,
+    fontSize: 13,
+  };
 
   return (
     <div style={{ fontFamily: "Arial, sans-serif" }}>
       <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 4 }}>Statistiche</h2>
-      <p style={{ color: COLORS.muted, fontSize: 13, marginBottom: 20 }}>
-        Basate sugli ordini confermati e sui preventivi registrati
+      <p style={{ color: COLORS.muted, fontSize: 13, marginBottom: 16 }}>
+        Basate sugli ordini confermati e sui preventivi accettati, per singola azienda mandante
       </p>
+
+      <select
+        value={aziendaSelezionata}
+        onChange={(e) => setAziendaSelezionata(e.target.value)}
+        style={{ ...inputStyle, marginBottom: 20, maxWidth: 260 }}
+      >
+        {aziende.map((a) => (
+          <option key={a.id} value={a.id}>{a.nome}</option>
+        ))}
+      </select>
 
       {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 14 }}>{error}</div>}
       {loading ? (
         <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
+      ) : !aziendaSelezionata ? (
+        <p style={{ color: COLORS.muted, fontSize: 13 }}>Aggiungi prima un'azienda mandante.</p>
       ) : (
         <>
           <div
@@ -1725,33 +1791,7 @@ function Statistiche({ session }) {
           <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 20 }}>
             <div
               style={{
-                flex: "1 1 380px",
-                background: COLORS.card,
-                border: `1px solid ${COLORS.border}`,
-                borderRadius: 14,
-                padding: 20,
-                boxShadow: "0 4px 14px rgba(20,40,60,0.05)",
-              }}
-            >
-              <h3 style={{ fontSize: 14, color: COLORS.text, marginBottom: 12 }}>Fatturato per azienda mandante</h3>
-              {datiAziende.length === 0 ? (
-                <p style={{ fontSize: 12, color: COLORS.muted }}>Nessun ordine ancora registrato.</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={datiAziende}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#eef3f7" />
-                    <XAxis dataKey="nome" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip formatter={(v) => formattaEuro(v)} />
-                    <Bar dataKey="totale" fill={COLORS.primary} radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-
-            <div
-              style={{
-                flex: "1 1 280px",
+                flex: "1 1 320px",
                 background: COLORS.card,
                 border: `1px solid ${COLORS.border}`,
                 borderRadius: 14,
@@ -1784,7 +1824,7 @@ function Statistiche({ session }) {
           >
             <h3 style={{ fontSize: 14, color: COLORS.text, marginBottom: 12 }}>Fatturato per cliente</h3>
             {classificaClienti.length === 0 ? (
-              <p style={{ fontSize: 12, color: COLORS.muted }}>Nessun ordine ancora registrato.</p>
+              <p style={{ fontSize: 12, color: COLORS.muted }}>Nessun dato ancora per questa azienda.</p>
             ) : (
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
@@ -1817,11 +1857,13 @@ const MESI_BREVI = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set
 
 function Fatturato({ session }) {
   const [ordini, setOrdini] = useState([]);
+  const [preventivi, setPreventivi] = useState([]);
   const [clienti, setClienti] = useState([]);
   const [aziende, setAziende] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [annoSelezionato, setAnnoSelezionato] = useState(new Date().getFullYear());
+  const [aziendaSelezionata, setAziendaSelezionata] = useState("");
 
   const headers = () => ({
     "Content-Type": "application/json",
@@ -1834,15 +1876,19 @@ function Fatturato({ session }) {
       setLoading(true);
       setError("");
       try {
-        const [rOrdini, rClienti, rAziende] = await Promise.all([
+        const [rOrdini, rPreventivi, rClienti, rAziende] = await Promise.all([
           fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati?select=*`, { headers: headers() }),
+          fetch(`${SUPABASE_URL}/rest/v1/preventivi?select=id,cliente_id,azienda_id,data,stato,righe,imballo_modalita,imballo_percentuale,imballo_valore,trasporto_modalita,trasporto_percentuale,trasporto_valore,iva_modalita,iva_percentuale,iva_valore`, { headers: headers() }),
           fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale`, { headers: headers() }),
           fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?select=id,nome`, { headers: headers() }),
         ]);
-        const [dOrdini, dClienti, dAziende] = await Promise.all([rOrdini.json(), rClienti.json(), rAziende.json()]);
+        const [dOrdini, dPreventivi, dClienti, dAziende] = await Promise.all([rOrdini.json(), rPreventivi.json(), rClienti.json(), rAziende.json()]);
         setOrdini(Array.isArray(dOrdini) ? dOrdini : []);
+        setPreventivi(Array.isArray(dPreventivi) ? dPreventivi : []);
         setClienti(Array.isArray(dClienti) ? dClienti : []);
-        setAziende(Array.isArray(dAziende) ? dAziende : []);
+        const listaAziende = Array.isArray(dAziende) ? dAziende : [];
+        setAziende(listaAziende);
+        setAziendaSelezionata((prev) => prev || (listaAziende[0] ? listaAziende[0].id : ""));
       } catch (err) {
         setError(err.message);
       } finally {
@@ -1852,38 +1898,30 @@ function Fatturato({ session }) {
   }, [session]);
 
   const nomeCliente = (id) => clienti.find((c) => c.id === id)?.ragione_sociale || "Sconosciuto";
-  const nomeAzienda = (id) => aziende.find((a) => a.id === id)?.nome || "Sconosciuta";
 
-  const fatturatoTotale = ordini.reduce((s, o) => s + (Number(o.importo) || 0), 0);
+  const ricavi = aziendaSelezionata ? combinaRicaviPerAzienda(ordini, preventivi, aziendaSelezionata) : [];
+
+  const fatturatoTotale = ricavi.reduce((s, r) => s + r.importo, 0);
 
   const perAnno = {};
-  ordini.forEach((o) => {
-    const anno = new Date(o.data_ordine).getFullYear();
-    perAnno[anno] = (perAnno[anno] || 0) + (Number(o.importo) || 0);
+  ricavi.forEach((r) => {
+    const anno = new Date(r.data).getFullYear();
+    perAnno[anno] = (perAnno[anno] || 0) + r.importo;
   });
-  const datiAnnuali = Object.entries(perAnno)
-    .map(([anno, totale]) => ({ anno, totale }))
-    .sort((a, b) => a.anno - b.anno);
+  const datiAnnuali = Object.entries(perAnno).map(([anno, totale]) => ({ anno, totale })).sort((a, b) => a.anno - b.anno);
   const anniDisponibili = Object.keys(perAnno).map(Number).sort((a, b) => b - a);
 
   const perMese = Array(12).fill(0);
-  ordini.forEach((o) => {
-    const d = new Date(o.data_ordine);
-    if (d.getFullYear() === annoSelezionato) perMese[d.getMonth()] += Number(o.importo) || 0;
+  ricavi.forEach((r) => {
+    const d = new Date(r.data);
+    if (d.getFullYear() === annoSelezionato) perMese[d.getMonth()] += r.importo;
   });
   const datiMensili = MESI_BREVI.map((m, i) => ({ mese: m, totale: perMese[i] }));
 
-  const perAzienda = {};
-  ordini.forEach((o) => {
-    const key = nomeAzienda(o.azienda_id);
-    perAzienda[key] = (perAzienda[key] || 0) + (Number(o.importo) || 0);
-  });
-  const datiAziende = Object.entries(perAzienda).map(([nome, totale]) => ({ nome, totale })).sort((a, b) => b.totale - a.totale);
-
   const perCliente = {};
-  ordini.forEach((o) => {
-    const key = nomeCliente(o.cliente_id);
-    perCliente[key] = (perCliente[key] || 0) + (Number(o.importo) || 0);
+  ricavi.forEach((r) => {
+    const key = nomeCliente(r.cliente_id);
+    perCliente[key] = (perCliente[key] || 0) + r.importo;
   });
   const topClienti = Object.entries(perCliente).map(([nome, totale]) => ({ nome, totale })).sort((a, b) => b.totale - a.totale).slice(0, 8);
 
@@ -1894,17 +1932,30 @@ function Fatturato({ session }) {
     padding: 20,
     boxShadow: "0 4px 14px rgba(20,40,60,0.05)",
   };
+  const selectStyle = { padding: "8px 12px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13 };
 
   return (
     <div style={{ fontFamily: "Arial, sans-serif" }}>
       <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 4 }}>Fatturato</h2>
-      <p style={{ color: COLORS.muted, fontSize: 13, marginBottom: 20 }}>
-        Andamento del fatturato nel tempo, per azienda e per cliente
+      <p style={{ color: COLORS.muted, fontSize: 13, marginBottom: 16 }}>
+        Andamento del fatturato nel tempo, per singola azienda mandante
       </p>
+
+      <select
+        value={aziendaSelezionata}
+        onChange={(e) => setAziendaSelezionata(e.target.value)}
+        style={{ ...selectStyle, marginBottom: 20, maxWidth: 260 }}
+      >
+        {aziende.map((a) => (
+          <option key={a.id} value={a.id}>{a.nome}</option>
+        ))}
+      </select>
 
       {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 14 }}>{error}</div>}
       {loading ? (
         <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
+      ) : !aziendaSelezionata ? (
+        <p style={{ color: COLORS.muted, fontSize: 13 }}>Aggiungi prima un'azienda mandante.</p>
       ) : (
         <>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 20 }}>
@@ -1926,7 +1977,7 @@ function Fatturato({ session }) {
               <select
                 value={annoSelezionato}
                 onChange={(e) => setAnnoSelezionato(Number(e.target.value))}
-                style={{ padding: "6px 10px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 12 }}
+                style={{ ...selectStyle, padding: "6px 10px" }}
               >
                 {(anniDisponibili.length ? anniDisponibili : [new Date().getFullYear()]).map((a) => (
                   <option key={a} value={a}>{a}</option>
@@ -1944,41 +1995,21 @@ function Fatturato({ session }) {
             </ResponsiveContainer>
           </div>
 
-          <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-            <div style={{ ...cardStyle, flex: "1 1 380px" }}>
-              <h3 style={{ fontSize: 14, color: COLORS.text, marginBottom: 12 }}>Suddivisione per azienda mandante</h3>
-              {datiAziende.length === 0 ? (
-                <p style={{ fontSize: 12, color: COLORS.muted }}>Nessun dato ancora.</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={220}>
-                  <PieChart>
-                    <Pie data={datiAziende} dataKey="totale" nameKey="nome" outerRadius={80} label>
-                      {datiAziende.map((_, i) => (
-                        <Cell key={i} fill={["#0b7bc4", "#0e9488", "#c77d0b", "#7c4dbd", "#c0392b", "#1a7a3c"][i % 6]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(v) => formattaEuro(v)} />
-                  </PieChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-
-            <div style={{ ...cardStyle, flex: "1 1 380px" }}>
-              <h3 style={{ fontSize: 14, color: COLORS.text, marginBottom: 12 }}>Andamento clienti (top 8)</h3>
-              {topClienti.length === 0 ? (
-                <p style={{ fontSize: 12, color: COLORS.muted }}>Nessun dato ancora.</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={topClienti} layout="vertical" margin={{ left: 40 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#eef3f7" />
-                    <XAxis type="number" tick={{ fontSize: 11 }} />
-                    <YAxis type="category" dataKey="nome" tick={{ fontSize: 11 }} width={100} />
-                    <Tooltip formatter={(v) => formattaEuro(v)} />
-                    <Bar dataKey="totale" fill={COLORS.primary} radius={[0, 6, 6, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
+          <div style={{ ...cardStyle }}>
+            <h3 style={{ fontSize: 14, color: COLORS.text, marginBottom: 12 }}>Andamento clienti (top 8)</h3>
+            {topClienti.length === 0 ? (
+              <p style={{ fontSize: 12, color: COLORS.muted }}>Nessun dato ancora per questa azienda.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={topClienti} layout="vertical" margin={{ left: 40 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#eef3f7" />
+                  <XAxis type="number" tick={{ fontSize: 11 }} />
+                  <YAxis type="category" dataKey="nome" tick={{ fontSize: 11 }} width={100} />
+                  <Tooltip formatter={(v) => formattaEuro(v)} />
+                  <Bar dataKey="totale" fill={COLORS.primary} radius={[0, 6, 6, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </>
       )}
@@ -2141,6 +2172,20 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
 
   const nomeAzienda = (id) => aziendeOptions.find((a) => a.id === id)?.nome || "—";
 
+  const rimuoviOrdine = async (id) => {
+    if (!window.confirm("Eliminare questo ordine confermato?")) return;
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati?id=eq.${id}`, {
+        method: "DELETE",
+        headers: headers(),
+      });
+      await registraAttivita(session, clienteId, "ordine", "Ordine confermato eliminato");
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const inputStyle = {
     width: "100%",
     padding: "8px 10px",
@@ -2280,6 +2325,12 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
                       PDF
                     </a>
                   )}
+                  <button
+                    onClick={() => rimuoviOrdine(o.id)}
+                    style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 11 }}
+                  >
+                    Elimina
+                  </button>
                 </span>
               </div>
             ))
