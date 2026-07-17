@@ -4360,8 +4360,8 @@ function StileGlobaleResponsive() {
         .tabella-righe-preventivo td, .tabella-responsive td {
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          gap: 6px;
+          justify-content: flex-start;
+          gap: 8px;
           padding: 4px 2px;
           border: none;
           font-size: 12.5px;
@@ -4371,13 +4371,15 @@ function StileGlobaleResponsive() {
           font-size: 11px;
           color: #7c8b98;
           flex-shrink: 0;
+          min-width: 78px;
         }
         .tabella-righe-preventivo td input, .tabella-righe-preventivo td select {
           width: auto;
-          flex: 1;
+          flex: none;
+          max-width: 130px;
         }
         .tabella-responsive td {
-          text-align: right;
+          text-align: left;
         }
         .form-header-preventivo select, .form-header-preventivo input {
           max-width: none !important;
