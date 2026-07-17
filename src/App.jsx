@@ -4353,17 +4353,18 @@ function StileGlobaleResponsive() {
         }
         .tabella-righe-preventivo tr, .tabella-responsive tr {
           border: 1px solid #e2edf5;
-          border-radius: 10px;
-          margin-bottom: 12px;
-          padding: 8px;
+          border-radius: 8px;
+          margin-bottom: 8px;
+          padding: 6px;
         }
         .tabella-righe-preventivo td, .tabella-responsive td {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 8px;
-          padding: 6px 4px;
+          gap: 6px;
+          padding: 4px 2px;
           border: none;
+          font-size: 12.5px;
         }
         .tabella-righe-preventivo td::before, .tabella-responsive td::before {
           content: attr(data-label);
@@ -4383,9 +4384,13 @@ function StileGlobaleResponsive() {
           width: 100% !important;
         }
         input, select, textarea { font-size: 16px !important; }
-        main { padding: 16px !important; }
+        main { padding: 10px !important; }
+        main > div { padding-left: 0 !important; padding-right: 0 !important; }
         .email-utente { display: none; }
-        header { padding: 12px 14px !important; }
+        header { padding: 10px 12px !important; }
+        h2 { font-size: 17px !important; margin-bottom: 8px !important; }
+        h3 { font-size: 13px !important; }
+        [style*="border-radius: 14px"], [style*="borderRadius:14px"] { padding: 12px !important; }
       }
     `}</style>
   );
