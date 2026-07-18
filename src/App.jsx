@@ -1152,6 +1152,7 @@ function AziendeMandanti({ session }) {
                   <th style={{ padding: "8px 6px" }}>Sc. 1</th>
                   <th style={{ padding: "8px 6px" }}>Sc. 2</th>
                   <th style={{ padding: "8px 6px" }}>Imballo</th>
+                  <th style={{ padding: "8px 6px" }}>Trasporto</th>
                   <th style={{ padding: "8px 6px" }}>Listino</th>
                   <th style={{ padding: "8px 6px" }}></th>
                 </tr>
@@ -1168,6 +1169,9 @@ function AziendeMandanti({ session }) {
                     </td>
                     <td style={{ padding: "8px 6px" }} data-label="Imballo">
                       {a.imballo_percentuale != null ? `${a.imballo_percentuale}%` : "-"}
+                    </td>
+                    <td style={{ padding: "8px 6px" }} data-label="Trasporto">
+                      {a.trasporto || "-"}
                     </td>
                     <td style={{ padding: "8px 6px" }} data-label="Listino">
                       <label
@@ -3458,7 +3462,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
     azienda_id: "",
     rif: "",
     data: new Date().toISOString().slice(0, 10),
-    imballo_modalita: "percentuale",
+    imballo_modalita: "escluso",
     imballo_percentuale: 0,
     imballo_valore: 0,
     trasporto_modalita: "escluso",
