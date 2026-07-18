@@ -459,6 +459,7 @@ function AdminPanel({ session }) {
 // ============================================================
 function Dashboard({ session, goTo }) {
   const [counts, setCounts] = useState({ clienti: 0, aziende: 0, visiteMese: 0, preventivi: 0 });
+  const [portafoglio, setPortafoglio] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const headers = () => ({
@@ -481,7 +482,7 @@ function Dashboard({ session, goTo }) {
           fetch(`${SUPABASE_URL}/rest/v1/visite?select=id&data_visita=gte.${inizioMeseStr}`, {
             headers: headers(),
           }),
-          fetch(`${SUPABASE_URL}/rest/v1/preventivi?select=id`, { headers: headers() }),
+          fetch(`${SUPABASE_URL}/rest/v1/preventivi?select=id,stato,fatturato,righe,imballo_modalita,imballo_percentuale,imballo_valore,trasporto_modalita,trasporto_percentuale,trasporto_valore,iva_modalita,iva_percentuale,iva_valore`, { headers: headers() }),
         ]);
         const [dClienti, dAziende, dVisite, dPreventivi] = await Promise.all([
           rClienti.json(),
@@ -495,6 +496,14 @@ function Dashboard({ session, goTo }) {
           visiteMese: Array.isArray(dVisite) ? dVisite.length : 0,
           preventivi: Array.isArray(dPreventivi) ? dPreventivi.length : 0,
         });
+        const accettatiNonFatturati = (Array.isArray(dPreventivi) ? dPreventivi : []).filter(
+          (p) => p.stato === "accettato" && !p.fatturato
+        );
+        const totalePortafoglio = accettatiNonFatturati.reduce(
+          (s, p) => s + calcolaTotaliPreventivo(p, p.righe || []).totaleFinale,
+          0
+        );
+        setPortafoglio(totalePortafoglio);
       } catch (e) {
         // in caso di errore lasciamo i contatori a 0
       } finally {
@@ -593,6 +602,25 @@ function Dashboard({ session, goTo }) {
         </button>
       </div>
 
+      <div
+        className="dashboard-card"
+        style={{
+          background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.primaryDark})`,
+          borderRadius: 14,
+          padding: 20,
+          marginBottom: 20,
+          maxWidth: 320,
+          boxShadow: "0 6px 20px rgba(11,123,196,0.25)",
+          cursor: "pointer",
+        }}
+        onClick={() => goTo("preventivi")}
+      >
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.85)" }}>Portafoglio ordini (accettati, non ancora fatturati)</div>
+        <div style={{ fontSize: 26, fontWeight: 700, color: "#fff" }}>
+          {loading ? "…" : formattaEuro(portafoglio)}
+        </div>
+      </div>
+
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
         {cards.map((c) => {
           const Icon = c.icon;
@@ -644,17 +672,9 @@ function formattaEuro(n) {
 }
 
 function combinaRicaviPerAzienda(ordini, preventivi, aziendaId) {
-  const daOrdini = ordini
+  return ordini
     .filter((o) => o.azienda_id === aziendaId)
     .map((o) => ({ cliente_id: o.cliente_id, importo: Number(o.importo) || 0, data: o.data_ordine }));
-  const daPreventivi = preventivi
-    .filter((p) => p.azienda_id === aziendaId && p.stato === "accettato")
-    .map((p) => ({
-      cliente_id: p.cliente_id,
-      importo: calcolaTotaliPreventivo(p, p.righe || []).totaleFinale,
-      data: p.data,
-    }));
-  return [...daOrdini, ...daPreventivi];
 }
 
 async function geocodificaIndirizzo(indirizzo) {
@@ -1175,6 +1195,18 @@ function AziendeMandanti({ session }) {
                       </label>
                     </td>
                     <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }} data-label="">
+                  {p.stato === "accettato" && (
+                    p.fatturato ? (
+                      <span style={{ color: COLORS.success, fontSize: 12, marginRight: 10 }}>✓ Fatturato</span>
+                    ) : (
+                      <button
+                        onClick={() => segnaComeFatturato(p)}
+                        style={{ background: "none", border: "none", color: COLORS.success, cursor: "pointer", fontSize: 12, marginRight: 10 }}
+                      >
+                        Segna come fatturato
+                      </button>
+                    )
+                  )}
                       <button
                         onClick={() => edit(a)}
                         style={{
@@ -3634,6 +3666,32 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
         headers: headers(),
       });
       if (!res.ok) throw new Error("Errore nell'eliminazione");
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const segnaComeFatturato = async (p) => {
+    if (!window.confirm("Creare un ordine confermato da questo preventivo e spostarlo dal portafoglio al fatturato?")) return;
+    try {
+      const tot = calcolaTotaliPreventivo(p, p.righe || []);
+      await fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati`, {
+        method: "POST",
+        headers: { ...headers(), Prefer: "return=representation" },
+        body: JSON.stringify({
+          cliente_id: p.cliente_id,
+          azienda_id: p.azienda_id,
+          importo: tot.totaleFinale,
+          data_ordine: new Date().toISOString().slice(0, 10),
+          note: p.rif ? `Da preventivo ${p.rif}` : "Da preventivo",
+        }),
+      });
+      await fetch(`${SUPABASE_URL}/rest/v1/preventivi?id=eq.${p.id}`, {
+        method: "PATCH",
+        headers: headers(),
+        body: JSON.stringify({ fatturato: true }),
+      });
       load();
     } catch (err) {
       setError(err.message);
