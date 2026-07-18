@@ -4196,7 +4196,8 @@ function AppShell({ session, onLogout }) {
           padding: "14px 22px",
           background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.primaryDark})`,
           boxShadow: "0 2px 12px rgba(11,123,196,0.2)",
-          position: "relative",
+          position: "sticky",
+          top: 0,
           zIndex: 1000,
         }}
       >
