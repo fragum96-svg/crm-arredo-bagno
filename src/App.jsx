@@ -599,6 +599,7 @@ function Dashboard({ session, goTo }) {
           return (
             <div
               key={c.key}
+              className="dashboard-card"
               onClick={() => goTo(c.key)}
               style={{
                 flex: "1 1 200px",
@@ -4266,6 +4267,7 @@ function AppShell({ session, onLogout }) {
               return (
                 <div
                   key={item.key}
+                  className="nav-item"
                   onClick={() => {
                     setPage(item.key);
                     if (window.innerWidth < 768) setMenuOpen(false);
@@ -4292,7 +4294,7 @@ function AppShell({ session, onLogout }) {
           </nav>
         )}
 
-        <main style={{ flex: 1, padding: 28 }}>
+        <main key={page} className="page-content" style={{ flex: 1, padding: 28 }}>
           {page === "dashboard" && <Dashboard session={session} goTo={setPage} />}
           {page === "admin" && role === "admin" && <AdminPanel session={session} />}
           {page === "aziende" && <AziendeMandanti session={session} />}
@@ -4321,6 +4323,40 @@ function AppShell({ session, onLogout }) {
 function StileGlobaleResponsive() {
   return (
     <style>{`
+      * { box-sizing: border-box; }
+      body { transition: background 0.2s ease; }
+      button { transition: all 0.18s ease; }
+      button:hover { filter: brightness(0.96); }
+      button:active { transform: scale(0.98); }
+      input, select, textarea {
+        transition: border-color 0.18s ease, box-shadow 0.18s ease;
+      }
+      input:focus, select:focus, textarea:focus {
+        outline: none;
+        border-color: #0b7bc4 !important;
+        box-shadow: 0 0 0 3px rgba(11,123,196,0.12);
+      }
+      .dashboard-card {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+      .dashboard-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 10px 28px rgba(11,123,196,0.14) !important;
+      }
+      .nav-item {
+        transition: background 0.15s ease, color 0.15s ease, padding-left 0.15s ease;
+      }
+      .nav-item:hover {
+        background: #f2f8fc !important;
+        padding-left: 18px !important;
+      }
+      @keyframes fadeSlideIn {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .page-content {
+        animation: fadeSlideIn 0.25s ease;
+      }
       .app-sidebar-backdrop { display: none; }
       @media (max-width: 768px) {
         main * { min-width: 0; }
@@ -4398,6 +4434,7 @@ function StileGlobaleResponsive() {
   );
 }
 
+// Componente radice dell'app
 export default function App() {
   const [session, setSession] = useState(null);
 
