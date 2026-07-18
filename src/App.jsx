@@ -28,6 +28,7 @@ import {
   TrendingUp,
   Wallet,
   ClipboardList,
+  Briefcase,
 } from "lucide-react";
 
 // ============================================================
@@ -2337,6 +2338,144 @@ function RegistroOrdini({ session, apriPreventivo }) {
   );
 }
 
+// ============================================================
+// PORTAFOGLIO ORDINI — preventivi accettati non ancora fatturati
+// ============================================================
+function PortafoglioOrdini({ session }) {
+  const [preventivi, setPreventivi] = useState([]);
+  const [clienti, setClienti] = useState([]);
+  const [aziende, setAziende] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const headers = () => ({
+    "Content-Type": "application/json",
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${session.access_token}`,
+  });
+
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [rPreventivi, rClienti, rAziende] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/preventivi?stato=eq.accettato&fatturato=eq.false&select=*`, { headers: headers() }),
+        fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale`, { headers: headers() }),
+        fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?select=id,nome`, { headers: headers() }),
+      ]);
+      const [dPreventivi, dClienti, dAziende] = await Promise.all([rPreventivi.json(), rClienti.json(), rAziende.json()]);
+      setPreventivi(Array.isArray(dPreventivi) ? dPreventivi : []);
+      setClienti(Array.isArray(dClienti) ? dClienti : []);
+      setAziende(Array.isArray(dAziende) ? dAziende : []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
+
+  const nomeCliente = (id) => clienti.find((c) => c.id === id)?.ragione_sociale || "Sconosciuto";
+  const nomeAzienda = (id) => aziende.find((a) => a.id === id)?.nome || "Sconosciuta";
+
+  const segnaComeFatturato = async (p) => {
+    if (!window.confirm("Creare un ordine confermato da questo preventivo?")) return;
+    try {
+      const tot = calcolaTotaliPreventivo(p, p.righe || []);
+      await fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati`, {
+        method: "POST",
+        headers: { ...headers(), Prefer: "return=representation" },
+        body: JSON.stringify({
+          cliente_id: p.cliente_id,
+          azienda_id: p.azienda_id,
+          importo: tot.totaleFinale,
+          data_ordine: new Date().toISOString().slice(0, 10),
+          note: p.rif ? `Da preventivo ${p.rif}` : "Da preventivo",
+        }),
+      });
+      await fetch(`${SUPABASE_URL}/rest/v1/preventivi?id=eq.${p.id}`, {
+        method: "PATCH",
+        headers: headers(),
+        body: JSON.stringify({ fatturato: true }),
+      });
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const totale = preventivi.reduce((s, p) => s + calcolaTotaliPreventivo(p, p.righe || []).totaleFinale, 0);
+
+  return (
+    <div style={{ fontFamily: "Arial, sans-serif" }}>
+      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 4 }}>Portafoglio ordini</h2>
+      <p style={{ color: COLORS.muted, fontSize: 13, marginBottom: 16 }}>
+        Preventivi accettati, in attesa di diventare fatturato
+      </p>
+
+      <div
+        style={{
+          background: COLORS.card,
+          border: `1px solid ${COLORS.border}`,
+          borderRadius: 14,
+          padding: 20,
+          marginBottom: 20,
+          maxWidth: 300,
+          boxShadow: "0 4px 14px rgba(20,40,60,0.05)",
+        }}
+      >
+        <div style={{ fontSize: 12, color: COLORS.muted }}>Totale in portafoglio</div>
+        <div style={{ fontSize: 26, fontWeight: 700, color: COLORS.text }}>{formattaEuro(totale)}</div>
+      </div>
+
+      {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 14 }}>{error}</div>}
+      {loading ? (
+        <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
+      ) : preventivi.length === 0 ? (
+        <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun preventivo accettato in attesa di fatturazione.</p>
+      ) : (
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }} className="tabella-responsive">
+          <thead>
+            <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
+              <th style={{ padding: "8px 6px" }}>RIF</th>
+              <th style={{ padding: "8px 6px" }}>Data</th>
+              <th style={{ padding: "8px 6px" }}>Cliente</th>
+              <th style={{ padding: "8px 6px" }}>Azienda</th>
+              <th style={{ padding: "8px 6px" }}>Importo</th>
+              <th style={{ padding: "8px 6px" }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {preventivi.map((p) => (
+              <tr key={p.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
+                <td style={{ padding: "8px 6px" }} data-label="RIF">{p.rif || "-"}</td>
+                <td style={{ padding: "8px 6px" }} data-label="Data">{p.data ? new Date(p.data).toLocaleDateString("it-IT") : "-"}</td>
+                <td style={{ padding: "8px 6px" }} data-label="Cliente">{nomeCliente(p.cliente_id)}</td>
+                <td style={{ padding: "8px 6px" }} data-label="Azienda">{nomeAzienda(p.azienda_id)}</td>
+                <td style={{ padding: "8px 6px", fontWeight: 600 }} data-label="Importo">
+                  {formattaEuro(calcolaTotaliPreventivo(p, p.righe || []).totaleFinale)}
+                </td>
+                <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }} data-label="">
+                  <button
+                    onClick={() => segnaComeFatturato(p)}
+                    style={{ background: "none", border: "none", color: COLORS.success, cursor: "pointer", fontSize: 12 }}
+                  >
+                    Segna come fatturato
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 async function caricaFileStorage(session, bucket, path, file) {
   const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
     method: "POST",
@@ -4242,6 +4381,7 @@ function AppShell({ session, onLogout }) {
     { key: "aziende", label: "Aziende mandanti", icon: Building2 },
     { key: "visite", label: "Visite", icon: CalendarDays },
     { key: "preventivi", label: "Preventivi", icon: FileText },
+    { key: "portafoglio", label: "Portafoglio ordini", icon: Briefcase },
     { key: "ordini", label: "Registro ordini", icon: ClipboardList },
     { key: "mappa", label: "Mappa", icon: MapIcon },
     { key: "statistiche", label: "Statistiche", icon: TrendingUp },
@@ -4372,6 +4512,7 @@ function AppShell({ session, onLogout }) {
           )}
           {page === "mappa" && <MappaClienti session={session} />}
           {page === "ordini" && <RegistroOrdini session={session} apriPreventivo={apriPreventivoCliente} />}
+          {page === "portafoglio" && <PortafoglioOrdini session={session} />}
           {page === "statistiche" && <Statistiche session={session} />}
           {page === "fatturato" && <Fatturato session={session} />}
         </main>
