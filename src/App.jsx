@@ -29,6 +29,7 @@ import {
   Wallet,
   ClipboardList,
   Briefcase,
+  Users2,
 } from "lucide-react";
 
 // ============================================================
@@ -63,6 +64,10 @@ const STATI_PREVENTIVO = [
 
 function formattaEuro(n) {
   return (Number(n) || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+}
+
+function formattaNumero(n) {
+  return (Number(n) || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function makeSupabaseClient(url, key) {
@@ -258,16 +263,19 @@ function generaStampaHTML(preventivo, clienti, aziende) {
       const qta = Number(riga.quantita) || 0;
       const nettoUnitario = qta > 0 ? netto / qta : netto;
       if (soloNetto) {
-        return `<tr><td>${riga.articolo || ""}</td><td>${riga.descrizione || ""}</td><td>${riga.finitura || ""}</td><td>${riga.quantita || ""}</td><td>${formattaEuro(nettoUnitario)}</td><td>${formattaEuro(netto)}</td></tr>`;
+        return `<tr><td>${riga.articolo || ""}</td><td>${riga.descrizione || ""}</td><td>${riga.finitura || ""}</td><td>${riga.quantita || ""}</td><td>${formattaNumero(nettoUnitario)}</td><td>${formattaNumero(netto)}</td></tr>`;
       }
-      return `<tr><td>${riga.articolo || ""}</td><td>${riga.descrizione || ""}</td><td>${riga.finitura || ""}</td><td>${riga.quantita || ""}</td><td>${formattaEuro(riga.prezzo_unitario)}</td><td>${riga.sconto1 || 0}%</td><td>${riga.sconto2 || 0}%</td><td>${formattaEuro(nettoUnitario)}</td><td>${formattaEuro(netto)}</td></tr>`;
+      return `<tr><td>${riga.articolo || ""}</td><td>${riga.descrizione || ""}</td><td>${riga.finitura || ""}</td><td>${riga.quantita || ""}</td><td>${formattaNumero(riga.prezzo_unitario)}</td><td>${riga.sconto1 || 0}%</td><td>${riga.sconto2 || 0}%</td><td>${formattaNumero(nettoUnitario)}</td><td>${formattaNumero(netto)}</td></tr>`;
     })
     .join("");
 
-  const rigaVoce = (label, modalita, valore) => {
+  const rigaVoce = (label, modalita, valore, valoreGrezzo) => {
     if (modalita === "nascosto") return "";
     if (modalita === "escluso") return `<div>${label}: escluso</div>`;
-    return `<div>${label}: ${formattaEuro(valore)}</div>`;
+    if (modalita === "euro" && valoreGrezzo !== undefined && valoreGrezzo !== "" && isNaN(parseFloat(String(valoreGrezzo).replace(",", ".")))) {
+      return `<div>${label}: ${valoreGrezzo}</div>`;
+    }
+    return `<div>${label}: ${formattaNumero(valore)}</div>`;
   };
 
   return `<!doctype html><html><head><meta charset="utf-8"><title>Preventivo ${preventivo.rif || ""}</title>
@@ -284,16 +292,16 @@ function generaStampaHTML(preventivo, clienti, aziende) {
   <body>
     <h1>${azienda ? azienda.nome : ""}</h1>
     <p>Data: ${preventivo.data ? new Date(preventivo.data).toLocaleDateString("it-IT") : ""}</p>
-    <p>Spettabile: ${cliente ? cliente.ragione_sociale : ""}${preventivo.rif ? ` — Rif. ${preventivo.rif}` : ""}</p>
+    <p>Spettabile: ${cliente ? cliente.ragione_sociale : (preventivo.cliente_manuale || "")}${preventivo.rif ? ` — Rif. ${preventivo.rif}` : ""}</p>
     <table>
       <thead><tr>${intestazioneColonne}</tr></thead>
       <tbody>${righeHtml}</tbody>
     </table>
     <div class="totali">
-      ${rigaVoce("Imballo", preventivo.imballo_modalita, tot.valoreImballo)}
-      ${rigaVoce("Trasporto", preventivo.trasporto_modalita, tot.valoreTrasporto)}
-      ${rigaVoce("IVA", preventivo.iva_modalita, tot.valoreIva)}
-      <div><strong>Totale: ${formattaEuro(tot.totaleFinale)}</strong></div>
+      ${rigaVoce("Imballo", preventivo.imballo_modalita, tot.valoreImballo, preventivo.imballo_valore)}
+      ${rigaVoce("Trasporto", preventivo.trasporto_modalita, tot.valoreTrasporto, preventivo.trasporto_valore)}
+      ${rigaVoce("IVA", preventivo.iva_modalita, tot.valoreIva, preventivo.iva_valore)}
+      <div><strong>Totale: ${formattaNumero(tot.totaleFinale)}</strong></div>
     </div>
     ${preventivo.modalita_pagamento ? `<p style="margin-top:20px;"><strong>Modalità di pagamento:</strong> ${preventivo.modalita_pagamento}</p>` : ""}
     ${preventivo.note ? `<p style="margin-top:10px;"><strong>Note:</strong> ${preventivo.note}</p>` : ""}
@@ -541,7 +549,7 @@ function AziendeMandanti({ session }) {
   const [error, setError] = useState("");
   const [uploadMsg, setUploadMsg] = useState(null);
   const [uploadingId, setUploadingId] = useState(null);
-  const emptyForm = { nome: "", sconto1: "", sconto2: "", imballo_percentuale: "", trasporto: "", resi: "", note: "" };
+  const emptyForm = { nome: "", sconto1: "", sconto2: "", imballo_percentuale: "", trasporto: "", resi: "", note: "", colore: "#0b7bc4" };
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -638,6 +646,7 @@ function AziendeMandanti({ session }) {
         trasporto: form.trasporto || null,
         resi: form.resi || null,
         note: form.note || null,
+        colore: form.colore || "#0b7bc4",
       };
       let res;
       if (editingId) {
@@ -666,6 +675,7 @@ function AziendeMandanti({ session }) {
       trasporto: azienda.trasporto || "",
       resi: azienda.resi || "",
       note: azienda.note || "",
+      colore: azienda.colore || "#0b7bc4",
     });
   };
 
@@ -695,6 +705,10 @@ function AziendeMandanti({ session }) {
           <input placeholder="Trasporto (policy)" value={form.trasporto} onChange={(e) => setForm({ ...form, trasporto: e.target.value })} style={inputStyle} />
           <input placeholder="Resi (policy)" value={form.resi} onChange={(e) => setForm({ ...form, resi: e.target.value })} style={inputStyle} />
           <textarea placeholder="Note" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} style={{ ...inputStyle, minHeight: 60 }} />
+          <label style={{ fontSize: 12, color: "#333", display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            Colore identificativo
+            <input type="color" value={form.colore} onChange={(e) => setForm({ ...form, colore: e.target.value })} style={{ width: 40, height: 28, border: "none", padding: 0, cursor: "pointer" }} />
+          </label>
           {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 10 }}>{error}</div>}
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={save} disabled={saving} style={{ padding: "9px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
@@ -727,7 +741,12 @@ function AziendeMandanti({ session }) {
               <tbody>
                 {list.map((azienda) => (
                   <tr key={azienda.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
-                    <td style={{ padding: "8px 6px", fontWeight: 600 }} data-label="Nome">{azienda.nome}</td>
+                    <td style={{ padding: "8px 6px", fontWeight: 600 }} data-label="Nome">
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ width: 9, height: 9, borderRadius: "50%", background: azienda.colore || COLORS.primary, display: "inline-block" }} />
+                        {azienda.nome}
+                      </span>
+                    </td>
                     <td style={{ padding: "8px 6px" }} data-label="Sc. 1">{azienda.sconto1 != null ? `${azienda.sconto1}%` : "-"}</td>
                     <td style={{ padding: "8px 6px" }} data-label="Sc. 2">{azienda.sconto2 != null ? `${azienda.sconto2}%` : "-"}</td>
                     <td style={{ padding: "8px 6px" }} data-label="Imballo">{azienda.imballo_percentuale != null ? `${azienda.imballo_percentuale}%` : "-"}</td>
@@ -764,8 +783,9 @@ function AziendeMandanti({ session }) {
 // ============================================================
 // SCHEDA CLIENTE
 // ============================================================
-function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreventivo }) {
+function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreventivo, onApriGruppo }) {
   const [cliente, setCliente] = useState(null);
+  const [gruppo, setGruppo] = useState(null);
   const [visite, setVisite] = useState([]);
   const [preventivi, setPreventivi] = useState([]);
   const [documenti, setDocumenti] = useState([]);
@@ -795,6 +815,17 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
       ]);
       const [dCliente, dVisite, dPreventivi, dDocumenti, dOrdini, dAttivita] = await Promise.all([rCliente.json(), rVisite.json(), rPreventivi.json(), rDocumenti.json(), rOrdini.json(), rAttivita.json()]);
       setCliente(dCliente && dCliente[0]);
+      if (dCliente && dCliente[0] && dCliente[0].gruppo_id) {
+        try {
+          const rGruppo = await fetch(`${SUPABASE_URL}/rest/v1/gruppi_acquisto?id=eq.${dCliente[0].gruppo_id}&select=*`, { headers: headers() });
+          const dGruppo = await rGruppo.json();
+          setGruppo(dGruppo && dGruppo[0]);
+        } catch (e) {
+          setGruppo(null);
+        }
+      } else {
+        setGruppo(null);
+      }
       setVisite(Array.isArray(dVisite) ? dVisite : []);
       setPreventivi(Array.isArray(dPreventivi) ? dPreventivi : []);
       setDocumenti(Array.isArray(dDocumenti) ? dDocumenti : []);
@@ -901,6 +932,14 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
           <div><strong>Telefono:</strong> {cliente.telefono || "-"}</div>
           <div><strong>Email:</strong> {cliente.email || "-"}</div>
           <div><strong>Aziende collaborate:</strong> {(cliente.aziende_collaborate || []).join(", ") || "-"}</div>
+          {gruppo && (
+            <div style={{ marginTop: 8 }}>
+              <strong>Gruppo d'acquisto:</strong>{" "}
+              <span onClick={() => onApriGruppo && onApriGruppo(gruppo.id)} style={{ color: COLORS.primary, cursor: onApriGruppo ? "pointer" : "default" }}>
+                {gruppo.nome}
+              </span>
+            </div>
+          )}
           {cliente.condizioni_per_azienda && Object.keys(cliente.condizioni_per_azienda).length > 0 && (
             <div style={{ marginTop: 8 }}>
               <strong>Condizioni commerciali:</strong>
@@ -1018,7 +1057,7 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
 // ============================================================
 // ANAGRAFICA CLIENTI
 // ============================================================
-function ClientiAnagrafica({ session, apriPreventivo }) {
+function ClientiAnagrafica({ session, apriPreventivo, apriGruppo }) {
   const [list, setList] = useState([]);
   const [aziendeOptions, setAziendeOptions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1144,6 +1183,7 @@ function ClientiAnagrafica({ session, apriPreventivo }) {
         session={session}
         aziendeOptions={aziendeOptions}
         onApriPreventivo={apriPreventivo}
+        onApriGruppo={apriGruppo}
         onBack={() => { setClienteApertoId(null); load(); }}
       />
     );
@@ -1308,6 +1348,7 @@ function CalendarioVisite({ session }) {
 
   const inputStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
   const nomeCliente = (id) => clienti.find((c) => c.id === id)?.ragione_sociale || "—";
+  const nomeClientePreventivo = (p) => (p.cliente_id ? nomeCliente(p.cliente_id) : (p.cliente_manuale || "—"));
   const visitePerGiorno = (isoDate) => visite.filter((v) => v.data_visita === isoDate);
 
   const cambiaPeriodo = (direzione) => {
@@ -1443,7 +1484,7 @@ function CalendarioVisite({ session }) {
 // ============================================================
 // SELETTORE VOCE (Imballo/Trasporto/IVA)
 // ============================================================
-function SelettoreVoce({ label, modalita, percentuale, valoreEuro, onChange, inputStyle }) {
+function SelettoreVoce({ label, modalita, percentuale, valoreEuro, onChange, inputStyle, permettiTesto }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
       <label style={{ fontSize: 12, minWidth: 80 }}>{label}</label>
@@ -1454,7 +1495,9 @@ function SelettoreVoce({ label, modalita, percentuale, valoreEuro, onChange, inp
         <option value="nascosto">Non mostrare</option>
       </select>
       {modalita === "percentuale" && <input type="number" value={percentuale} onChange={(e) => onChange({ percentuale: e.target.value })} style={{ ...inputStyle, width: 70 }} placeholder="%" />}
-      {modalita === "euro" && <input type="number" value={valoreEuro} onChange={(e) => onChange({ valoreEuro: e.target.value })} style={{ ...inputStyle, width: 80 }} placeholder="€" />}
+      {modalita === "euro" && (
+        <input type={permettiTesto ? "text" : "number"} value={valoreEuro} onChange={(e) => onChange({ valoreEuro: e.target.value })} style={{ ...inputStyle, width: permettiTesto ? 160 : 80 }} placeholder={permettiTesto ? "es. 50€ o a carico cliente" : "€"} />
+      )}
     </div>
   );
 }
@@ -1477,7 +1520,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
     imballo_modalita: "escluso", imballo_percentuale: 0, imballo_valore: 0,
     trasporto_modalita: "escluso", trasporto_percentuale: 0, trasporto_valore: 0,
     iva_modalita: "escluso", iva_percentuale: 22, iva_valore: 0,
-    modalita_pagamento: "", modalita_prezzi_pdf: "dettagliato", stato: "bozza", note: "",
+    modalita_pagamento: "", modalita_prezzi_pdf: "dettagliato", stato: "bozza", note: "", cliente_manuale: "",
   };
   const [header, setHeader] = useState(emptyHeader);
   const [righe, setRighe] = useState([nuovaRiga()]);
@@ -1531,12 +1574,13 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
   const tot = calcolaTotaliPreventivo(header, righe);
 
   const salva = async () => {
-    if (!header.cliente_id || !header.azienda_id) { setError("Seleziona cliente e azienda."); return; }
+    if (!header.azienda_id || (!header.cliente_id && !header.cliente_manuale.trim())) { setError("Seleziona un'azienda e un cliente (dall'elenco o scritto manualmente)."); return; }
     setSaving(true);
     setError("");
     try {
       const body = {
-        cliente_id: header.cliente_id, azienda_id: header.azienda_id, rif: header.rif || null, data: header.data,
+        cliente_id: header.cliente_id || null, cliente_manuale: header.cliente_id ? null : (header.cliente_manuale || null),
+        azienda_id: header.azienda_id, rif: header.rif || null, data: header.data,
         righe: righe,
         imballo_modalita: header.imballo_modalita, imballo_percentuale: Number(header.imballo_percentuale) || 0, imballo_valore: Number(header.imballo_valore) || 0,
         trasporto_modalita: header.trasporto_modalita, trasporto_percentuale: Number(header.trasporto_percentuale) || 0, trasporto_valore: Number(header.trasporto_valore) || 0,
@@ -1569,7 +1613,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
       trasporto_modalita: p.trasporto_modalita || "escluso", trasporto_percentuale: p.trasporto_percentuale || 0, trasporto_valore: p.trasporto_valore || 0,
       iva_modalita: p.iva_modalita || "escluso", iva_percentuale: p.iva_percentuale ?? 22, iva_valore: p.iva_valore || 0,
       modalita_pagamento: p.modalita_pagamento || "", modalita_prezzi_pdf: p.modalita_prezzi_pdf || "dettagliato",
-      stato: p.stato || "bozza", note: p.note || "",
+      stato: p.stato || "bozza", note: p.note || "", cliente_manuale: p.cliente_manuale || "",
     });
     setRighe(p.righe && p.righe.length ? p.righe : [nuovaRiga()]);
   };
@@ -1638,6 +1682,9 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
             <option value="">-- Cliente (Spettabile) --</option>
             {clienti.map((c) => <option key={c.id} value={c.id}>{c.ragione_sociale}</option>)}
           </select>
+          {!header.cliente_id && (
+            <input placeholder="...oppure scrivi il nome cliente manualmente" value={header.cliente_manuale} onChange={(e) => setHeader({ ...header, cliente_manuale: e.target.value })} style={{ ...fieldStyle, maxWidth: 260 }} />
+          )}
           <input type="date" value={header.data} onChange={(e) => setHeader({ ...header, data: e.target.value })} style={{ ...fieldStyle, maxWidth: 160 }} />
           <input placeholder="RIF" value={header.rif} onChange={(e) => setHeader({ ...header, rif: e.target.value })} style={{ ...fieldStyle, maxWidth: 160 }} />
         </div>
@@ -1686,7 +1733,8 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
 
         <div style={{ background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 16, marginBottom: 16, display: "flex", flexDirection: "column", gap: 12 }}>
           <SelettoreVoce label="Imballo" modalita={header.imballo_modalita} percentuale={header.imballo_percentuale} valoreEuro={header.imballo_valore} inputStyle={inputStyle} onChange={(patch) => setHeader({ ...header, imballo_modalita: patch.modalita ?? header.imballo_modalita, imballo_percentuale: patch.percentuale ?? header.imballo_percentuale, imballo_valore: patch.valoreEuro ?? header.imballo_valore })} />
-          <SelettoreVoce label="Trasporto" modalita={header.trasporto_modalita} percentuale={header.trasporto_percentuale} valoreEuro={header.trasporto_valore} inputStyle={inputStyle} onChange={(patch) => setHeader({ ...header, trasporto_modalita: patch.modalita ?? header.trasporto_modalita, trasporto_percentuale: patch.percentuale ?? header.trasporto_percentuale, trasporto_valore: patch.valoreEuro ?? header.trasporto_valore })} />
+          <SelettoreVoce label="Trasporto" modalita={header.trasporto_modalita} percentuale={header.trasporto_percentuale} valoreEuro={header.trasporto_valore} inputStyle={inputStyle} permettiTesto
+            onChange={(patch) => setHeader({ ...header, trasporto_modalita: patch.modalita ?? header.trasporto_modalita, trasporto_percentuale: patch.percentuale ?? header.trasporto_percentuale, trasporto_valore: patch.valoreEuro ?? header.trasporto_valore })} />
           <SelettoreVoce label="IVA" modalita={header.iva_modalita} percentuale={header.iva_percentuale} valoreEuro={header.iva_valore} inputStyle={inputStyle} onChange={(patch) => setHeader({ ...header, iva_modalita: patch.modalita ?? header.iva_modalita, iva_percentuale: patch.percentuale ?? header.iva_percentuale, iva_valore: patch.valoreEuro ?? header.iva_valore })} />
           <div style={{ marginTop: 4 }}>
             <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 4 }}>Modalità di pagamento</label>
@@ -1716,9 +1764,9 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
         <div style={{ display: "flex", justifyContent: "flex-end", fontSize: 13, marginBottom: 16 }}>
           <div style={{ textAlign: "right", minWidth: 220 }}>
             <div style={{ color: COLORS.muted }}>Totale netto: {formattaEuro(tot.totaleNetto)}</div>
-            {rigaTotali("Imballo", header.imballo_modalita, tot.valoreImballo)}
-            {rigaTotali("Trasporto", header.trasporto_modalita, tot.valoreTrasporto)}
-            {rigaTotali("IVA", header.iva_modalita, tot.valoreIva)}
+            {rigaTotali("Imballo", header.imballo_modalita, tot.valoreImballo, header.imballo_valore)}
+            {rigaTotali("Trasporto", header.trasporto_modalita, tot.valoreTrasporto, header.trasporto_valore)}
+            {rigaTotali("IVA", header.iva_modalita, tot.valoreIva, header.iva_valore)}
             <div style={{ fontWeight: 700, color: COLORS.primary, fontSize: 16, marginTop: 4 }}>Totale: {formattaEuro(tot.totaleFinale)}</div>
           </div>
         </div>
@@ -1753,7 +1801,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
                   <td style={{ padding: "8px 6px" }} data-label="Stato"><span style={{ color: infoStato.colore, fontSize: 12, fontWeight: 700 }}>● {infoStato.label}</span></td>
                   <td style={{ padding: "8px 6px" }} data-label="RIF">{preventivoSalvato.rif || "-"}</td>
                   <td style={{ padding: "8px 6px" }} data-label="Data">{preventivoSalvato.data ? new Date(preventivoSalvato.data).toLocaleDateString("it-IT") : "-"}</td>
-                  <td style={{ padding: "8px 6px" }} data-label="Cliente">{nomeCliente(preventivoSalvato.cliente_id)}</td>
+                  <td style={{ padding: "8px 6px" }} data-label="Cliente">{nomeClientePreventivo(preventivoSalvato)}</td>
                   <td style={{ padding: "8px 6px" }} data-label="Azienda">{nomeAzienda(preventivoSalvato.azienda_id)}</td>
                   <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }} data-label="">
                     {preventivoSalvato.stato === "accettato" && (
@@ -2137,7 +2185,7 @@ function RegistroOrdini({ session, apriPreventivo }) {
     const infoStato = STATI_PREVENTIVO.find((s) => s.valore === pv.stato) || STATI_PREVENTIVO[0];
     return {
       id: `preventivo-${pv.id}`, idOriginale: pv.id, tipoOriginale: "preventivo", tipo: "Preventivo" + (pv.rif ? ` (${pv.rif})` : ""),
-      cliente_id: pv.cliente_id, azienda_id: pv.azienda_id, data: pv.data,
+      cliente_id: pv.cliente_id, cliente_manuale: pv.cliente_manuale, azienda_id: pv.azienda_id, data: pv.data,
       statoLabel: infoStato.label, statoColore: infoStato.colore, importo: calcolaTotaliPreventivo(pv, pv.righe || []).totaleFinale,
     };
   });
@@ -2232,7 +2280,7 @@ function RegistroOrdini({ session, apriPreventivo }) {
             {tutteLeRighe.map((r) => (
               <tr key={r.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
                 <td style={{ padding: "8px 6px" }} data-label="Tipo">{r.tipo}</td>
-                <td style={{ padding: "8px 6px" }} data-label="Cliente">{nomeCliente(r.cliente_id)}</td>
+                <td style={{ padding: "8px 6px" }} data-label="Cliente">{r.cliente_id ? nomeCliente(r.cliente_id) : (r.cliente_manuale || "—")}</td>
                 <td style={{ padding: "8px 6px" }} data-label="Azienda">{nomeAzienda(r.azienda_id)}</td>
                 <td style={{ padding: "8px 6px" }} data-label="Data">{r.data ? new Date(r.data).toLocaleDateString("it-IT") : "-"}</td>
                 <td style={{ padding: "8px 6px" }} data-label="Stato"><span style={{ color: r.statoColore, fontWeight: 700 }}>● {r.statoLabel}</span></td>
@@ -2336,7 +2384,7 @@ function PortafoglioOrdini({ session }) {
               <tr key={pv.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
                 <td style={{ padding: "8px 6px" }} data-label="RIF">{pv.rif || "-"}</td>
                 <td style={{ padding: "8px 6px" }} data-label="Data">{pv.data ? new Date(pv.data).toLocaleDateString("it-IT") : "-"}</td>
-                <td style={{ padding: "8px 6px" }} data-label="Cliente">{nomeCliente(pv.cliente_id)}</td>
+                <td style={{ padding: "8px 6px" }} data-label="Cliente">{pv.cliente_id ? nomeCliente(pv.cliente_id) : (pv.cliente_manuale || "—")}</td>
                 <td style={{ padding: "8px 6px" }} data-label="Azienda">{nomeAzienda(pv.azienda_id)}</td>
                 <td style={{ padding: "8px 6px", fontWeight: 600 }} data-label="Importo">{formattaEuro(calcolaTotaliPreventivo(pv, pv.righe || []).totaleFinale)}</td>
                 <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }} data-label="">
@@ -2352,17 +2400,227 @@ function PortafoglioOrdini({ session }) {
 }
 
 // ============================================================
-// SHELL PRINCIPALE APP
+// GRUPPI D'ACQUISTO
 // ============================================================
+function GruppiAcquisto({ session, gruppoIniziale, onGruppoAperto }) {
+  const [lista, setLista] = useState([]);
+  const [clienti, setClienti] = useState([]);
+  const [aziende, setAziende] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const emptyForm = { nome: "", note: "", condizioni_per_azienda: {} };
+  const [form, setForm] = useState(emptyForm);
+  const [aziendeSelezionate, setAziendeSelezionate] = useState([]);
+
+  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}` });
+
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [rGruppi, rClienti, rAziende] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/gruppi_acquisto?select=*&order=nome.asc`, { headers: headers() }),
+        fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale,gruppo_id&order=ragione_sociale.asc`, { headers: headers() }),
+        fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?select=id,nome&order=nome.asc`, { headers: headers() }),
+      ]);
+      const [dGruppi, dClienti, dAziende] = await Promise.all([rGruppi.json(), rClienti.json(), rAziende.json()]);
+      setLista(Array.isArray(dGruppi) ? dGruppi : []);
+      setClienti(Array.isArray(dClienti) ? dClienti : []);
+      setAziende(Array.isArray(dAziende) ? dAziende : []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, [session]);
+
+  const apriModifica = (gruppo) => {
+    setEditingId(gruppo.id);
+    setForm({ nome: gruppo.nome || "", note: gruppo.note || "", condizioni_per_azienda: gruppo.condizioni_per_azienda || {} });
+    setAziendeSelezionate(Object.keys(gruppo.condizioni_per_azienda || {}));
+  };
+
+  useEffect(() => {
+    if (!gruppoIniziale) return;
+    const g = lista.find((x) => x.id === gruppoIniziale);
+    if (g) {
+      apriModifica(g);
+      if (onGruppoAperto) onGruppoAperto();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gruppoIniziale, lista]);
+
+  const resetForm = () => { setForm(emptyForm); setEditingId(null); setAziendeSelezionate([]); };
+
+  const toggleAzienda = (nomeAz) => {
+    setAziendeSelezionate((prev) => {
+      const attiva = prev.includes(nomeAz);
+      const nuove = attiva ? prev.filter((n) => n !== nomeAz) : [...prev, nomeAz];
+      setForm((f) => {
+        const cond = { ...f.condizioni_per_azienda };
+        if (attiva) delete cond[nomeAz];
+        return { ...f, condizioni_per_azienda: cond };
+      });
+      return nuove;
+    });
+  };
+
+  const aggiornaCondizione = (nomeAz, testo) => {
+    setForm((f) => ({ ...f, condizioni_per_azienda: { ...f.condizioni_per_azienda, [nomeAz]: testo } }));
+  };
+
+  const salva = async () => {
+    if (!form.nome.trim()) { setError("Il nome del gruppo è obbligatorio."); return; }
+    setSaving(true);
+    setError("");
+    try {
+      const body = { nome: form.nome, note: form.note || null, condizioni_per_azienda: form.condizioni_per_azienda };
+      let res;
+      if (editingId) {
+        res = await fetch(`${SUPABASE_URL}/rest/v1/gruppi_acquisto?id=eq.${editingId}`, { method: "PATCH", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
+      } else {
+        res = await fetch(`${SUPABASE_URL}/rest/v1/gruppi_acquisto`, { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
+      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Errore nel salvataggio");
+      resetForm();
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const elimina = async (id) => {
+    if (!window.confirm("Eliminare questo gruppo d'acquisto? I clienti resteranno ma perderanno il collegamento al gruppo.")) return;
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/gruppi_acquisto?id=eq.${id}`, { method: "DELETE", headers: headers() });
+      if (!res.ok) throw new Error("Errore nell'eliminazione");
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const toggleClienteNelGruppo = async (clienteId, gruppoId, attualmenteDentro) => {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/clienti?id=eq.${clienteId}`, {
+        method: "PATCH",
+        headers: headers(),
+        body: JSON.stringify({ gruppo_id: attualmenteDentro ? null : gruppoId }),
+      });
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const inputStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
+
+  return (
+    <div style={{ fontFamily: "Arial, sans-serif" }}>
+      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16 }}>Gruppi d'acquisto</h2>
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 320px", background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, maxWidth: 420 }}>
+          <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>{editingId ? "Modifica gruppo" : "Nuovo gruppo"}</h3>
+          <input placeholder="Nome gruppo *" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} style={inputStyle} />
+          <textarea placeholder="Note" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} style={{ ...inputStyle, minHeight: 50 }} />
+
+          <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 6 }}>Condizioni commerciali riservate per azienda mandante</label>
+          <div style={{ marginBottom: 12, maxHeight: 220, overflowY: "auto", border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 8 }}>
+            {aziende.length === 0 && <span style={{ fontSize: 12, color: "#9aa7b2" }}>Nessuna azienda mandante inserita ancora</span>}
+            {aziende.map((a) => (
+              <div key={a.id} style={{ marginBottom: 8 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, marginBottom: 4 }}>
+                  <input type="checkbox" checked={aziendeSelezionate.includes(a.nome)} onChange={() => toggleAzienda(a.nome)} />
+                  {a.nome}
+                </label>
+                {aziendeSelezionate.includes(a.nome) && (
+                  <input placeholder={`Condizioni riservate con ${a.nome}`} value={form.condizioni_per_azienda[a.nome] || ""} onChange={(e) => aggiornaCondizione(a.nome, e.target.value)} style={{ ...inputStyle, marginBottom: 0, marginLeft: 22, width: "calc(100% - 22px)", fontSize: 11 }} />
+                )}
+              </div>
+            ))}
+          </div>
+
+          {editingId && (
+            <>
+              <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 6 }}>Clienti che fanno parte di questo gruppo</label>
+              <div style={{ marginBottom: 12, maxHeight: 180, overflowY: "auto", border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 8 }}>
+                {clienti.length === 0 && <span style={{ fontSize: 12, color: "#9aa7b2" }}>Nessun cliente ancora inserito</span>}
+                {clienti.map((c) => {
+                  const dentro = c.gruppo_id === editingId;
+                  const inAltroGruppo = c.gruppo_id && c.gruppo_id !== editingId;
+                  return (
+                    <label key={c.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, marginBottom: 4, opacity: inAltroGruppo ? 0.5 : 1 }}>
+                      <input type="checkbox" checked={dentro} disabled={inAltroGruppo} onChange={() => toggleClienteNelGruppo(c.id, editingId, dentro)} />
+                      {c.ragione_sociale} {inAltroGruppo && <span style={{ fontSize: 10 }}>(in un altro gruppo)</span>}
+                    </label>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 10 }}>{error}</div>}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={salva} disabled={saving} style={{ padding: "9px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+              {saving ? "Salvataggio..." : editingId ? "Salva modifiche" : "Crea gruppo"}
+            </button>
+            {editingId && <button onClick={resetForm} style={{ padding: "9px 16px", background: "#fff", color: COLORS.primary, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13, cursor: "pointer" }}>Annulla</button>}
+          </div>
+        </div>
+
+        <div style={{ flex: "2 1 400px" }}>
+          {loading ? (
+            <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
+          ) : lista.length === 0 ? (
+            <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun gruppo d'acquisto ancora creato.</p>
+          ) : (
+            lista.map((g) => {
+              const membri = clienti.filter((c) => c.gruppo_id === g.id);
+              return (
+                <div key={g.id} style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: "0 2px 8px rgba(20,40,60,0.04)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: COLORS.primary, fontSize: 14 }}>{g.nome}</div>
+                      <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 4 }}>{membri.length} cliente/i nel gruppo</div>
+                    </div>
+                    <div>
+                      <button onClick={() => apriModifica(g)} style={{ background: "none", border: "none", color: COLORS.primary, cursor: "pointer", fontSize: 12, marginRight: 10 }}>Modifica</button>
+                      <button onClick={() => elimina(g.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 12 }}>Elimina</button>
+                    </div>
+                  </div>
+                  {membri.length > 0 && <div style={{ fontSize: 12, marginTop: 8 }}>{membri.map((c) => c.ragione_sociale).join(", ")}</div>}
+                  {g.note && <div style={{ fontSize: 12, marginTop: 6, color: COLORS.muted }}>{g.note}</div>}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 function AppShell({ session, onLogout }) {
   const [menuOpen, setMenuOpen] = useState(true);
   const [page, setPage] = useState("dashboard");
   const [role, setRole] = useState("user");
   const [preventivoAprireId, setPreventivoAprireId] = useState(null);
+  const [gruppoAprireId, setGruppoAprireId] = useState(null);
 
   const apriPreventivoCliente = (id) => {
     setPreventivoAprireId(id);
     setPage("preventivi");
+  };
+
+  const apriGruppoCliente = (id) => {
+    setGruppoAprireId(id);
+    setPage("gruppi");
   };
 
   useEffect(() => {
@@ -2384,6 +2642,7 @@ function AppShell({ session, onLogout }) {
     { key: "visite", label: "Visite", icon: CalendarDays },
     { key: "preventivi", label: "Preventivi", icon: FileText },
     { key: "portafoglio", label: "Portafoglio ordini", icon: Briefcase },
+    { key: "gruppi", label: "Gruppi d'acquisto", icon: Users2 },
     { key: "ordini", label: "Registro ordini", icon: ClipboardList },
     { key: "mappa", label: "Mappa", icon: MapIcon },
     { key: "statistiche", label: "Statistiche", icon: TrendingUp },
@@ -2392,7 +2651,7 @@ function AppShell({ session, onLogout }) {
   ];
 
   return (
-    <div style={{ minHeight: "100vh", background: COLORS.bg, fontFamily: "Arial, sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: `linear-gradient(180deg, ${COLORS.bg} 0%, #eef5fa 100%)`, fontFamily: "Arial, sans-serif" }}>
       <header style={{ display: "flex", alignItems: "center", padding: "14px 22px", background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.primaryDark})`, boxShadow: "0 2px 12px rgba(11,123,196,0.2)", position: "sticky", top: 0, zIndex: 1000 }}>
         <button onClick={() => setMenuOpen((v) => !v)} style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 8, width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", cursor: "pointer", marginRight: 14 }}>
           <MenuIcon size={18} />
@@ -2413,7 +2672,7 @@ function AppShell({ session, onLogout }) {
               const Icon = item.icon;
               const active = page === item.key;
               return (
-                <div key={item.key} className="nav-item" onClick={() => { setPage(item.key); if (window.innerWidth < 768) setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", marginBottom: 4, borderRadius: 10, fontSize: 14, color: active ? COLORS.primary : COLORS.text, background: active ? "#eaf5fc" : "transparent", cursor: "pointer", fontWeight: active ? 600 : 400 }}>
+                <div key={item.key} className="nav-item" onClick={() => { setPage(item.key); if (window.innerWidth < 768) setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", marginBottom: 4, borderRadius: 10, fontSize: 14, color: active ? COLORS.primary : COLORS.text, background: active ? "#eaf5fc" : "transparent", cursor: "pointer", fontWeight: active ? 600 : 400, borderLeft: active ? `3px solid ${COLORS.primary}` : "3px solid transparent" }}>
                   <Icon size={17} />
                   {item.label}
                 </div>
@@ -2425,7 +2684,7 @@ function AppShell({ session, onLogout }) {
           {page === "dashboard" && <Dashboard session={session} goTo={setPage} />}
           {page === "admin" && role === "admin" && <AdminPanel session={session} />}
           {page === "aziende" && <AziendeMandanti session={session} />}
-          {page === "clienti" && <ClientiAnagrafica session={session} apriPreventivo={apriPreventivoCliente} />}
+          {page === "clienti" && <ClientiAnagrafica session={session} apriPreventivo={apriPreventivoCliente} apriGruppo={apriGruppoCliente} />}
           {page === "visite" && <CalendarioVisite session={session} />}
           {page === "preventivi" && (
             <PreventiviOfferte session={session} preventivoIniziale={preventivoAprireId} onPreventivoAperto={() => setPreventivoAprireId(null)} />
@@ -2435,6 +2694,9 @@ function AppShell({ session, onLogout }) {
           {page === "fatturato" && <Fatturato session={session} />}
           {page === "ordini" && <RegistroOrdini session={session} apriPreventivo={apriPreventivoCliente} />}
           {page === "portafoglio" && <PortafoglioOrdini session={session} />}
+          {page === "gruppi" && (
+            <GruppiAcquisto session={session} gruppoIniziale={gruppoAprireId} onGruppoAperto={() => setGruppoAprireId(null)} />
+          )}
         </main>
       </div>
     </div>
@@ -2455,8 +2717,10 @@ function StileGlobaleResponsive() {
       input:focus, select:focus, textarea:focus { outline: none; border-color: #0b7bc4 !important; box-shadow: 0 0 0 3px rgba(11,123,196,0.12); }
       .dashboard-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
       .dashboard-card:hover { transform: translateY(-4px); box-shadow: 0 10px 28px rgba(11,123,196,0.14) !important; }
-      .nav-item { transition: background 0.15s ease, color 0.15s ease; }
+      .nav-item { transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
       .nav-item:hover { background: #f2f8fc !important; }
+      table tbody tr { transition: background 0.15s ease; }
+      table tbody tr:hover { background: #f7fbfe; }
       @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
       .page-content { animation: fadeSlideIn 0.25s ease; }
       .app-sidebar-backdrop { display: none; }
