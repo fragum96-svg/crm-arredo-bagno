@@ -1673,9 +1673,9 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
   };
 
   return (
-    <div style={{ fontFamily: "Arial, sans-serif" }}>
+    <div style={{ fontFamily: "Arial, sans-serif", overflowX: "hidden", width: "100%" }}>
       <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16 }}>Preventivi / Offerte</h2>
-      <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, marginBottom: 24 }}>
+      <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, marginBottom: 24, overflowX: "hidden" }}>
         <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>{editingId ? "Modifica preventivo" : "Nuovo preventivo"}</h3>
         <div className="form-header-preventivo" style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
           <select value={header.azienda_id} onChange={(e) => setHeader({ ...header, azienda_id: e.target.value })} style={{ ...fieldStyle, maxWidth: 220 }}>
@@ -1709,7 +1709,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
                   <td style={{ padding: 4, position: "relative" }} data-label="Articolo">
                     <input value={riga.articolo} onChange={(e) => { aggiornaRiga(riga.id, "articolo", e.target.value); cercaSuggerimenti(riga.id, e.target.value); }} style={{ ...inputStyle, width: 70 }} autoComplete="off" />
                     {suggerimenti[riga.id] && suggerimenti[riga.id].length > 0 && (
-                      <div style={{ position: "absolute", top: "100%", left: 0, zIndex: 10, background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 8, boxShadow: "0 4px 14px rgba(20,40,60,0.12)", minWidth: 220, maxHeight: 160, overflowY: "auto" }}>
+                      <div style={{ position: "absolute", top: "100%", left: 0, zIndex: 10, background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 8, boxShadow: "0 4px 14px rgba(20,40,60,0.12)", width: "min(220px, 85vw)", maxHeight: 160, overflowY: "auto" }}>
                         {suggerimenti[riga.id].map((voce) => (
                           <div key={voce.id} onClick={() => selezionaSuggerimento(riga.id, voce)} style={{ padding: "6px 10px", fontSize: 11, cursor: "pointer", borderBottom: `1px solid ${COLORS.border}` }}>
                             <strong>{voce.codice_articolo}</strong> — {voce.descrizione} ({formattaEuro(voce.prezzo_unitario)})
