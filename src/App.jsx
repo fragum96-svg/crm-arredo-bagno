@@ -907,8 +907,11 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
   const nomeAzienda = (id) => aziendeOptions.find((a) => a.id === id)?.nome || "—";
   const inputStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
   const sezione = (titolo, contenuto) => (
-    <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, marginBottom: 20 }}>
-      <h3 style={{ fontSize: 15, color: COLORS.text, marginBottom: 12 }}>{titolo}</h3>
+    <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 16, boxShadow: "0 6px 20px rgba(20,40,60,0.06)", padding: 22, marginBottom: 20, transition: "box-shadow 0.2s ease" }}>
+      <h3 style={{ fontSize: 15, color: COLORS.text, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ width: 4, height: 16, borderRadius: 2, background: COLORS.primary, display: "inline-block" }} />
+        {titolo}
+      </h3>
       {contenuto}
     </div>
   );
@@ -2712,8 +2715,8 @@ function StileGlobaleResponsive() {
     <style>{`
       * { box-sizing: border-box; }
       button { transition: all 0.18s ease; }
-      button:hover { filter: brightness(0.96); }
-      button:active { transform: scale(0.98); }
+      button:hover:not(:disabled) { filter: brightness(0.96); transform: translateY(-1px); }
+      button:active:not(:disabled) { transform: translateY(0) scale(0.98); }
       input, select, textarea { transition: border-color 0.18s ease, box-shadow 0.18s ease; }
       input:focus, select:focus, textarea:focus { outline: none; border-color: #0b7bc4 !important; box-shadow: 0 0 0 3px rgba(11,123,196,0.12); }
       .dashboard-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
