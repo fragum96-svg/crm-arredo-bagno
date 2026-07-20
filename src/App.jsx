@@ -1662,6 +1662,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
   const nomeAzienda = (id) => aziende.find((a) => a.id === id)?.nome || "—";
   const inputStyle = { padding: "6px 8px", border: `1px solid ${COLORS.border}`, borderRadius: 6, fontSize: 12, boxSizing: "border-box" };
   const fieldStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
+  const nomeClientePreventivo = (p) => (p.cliente_id ? nomeCliente(p.cliente_id) : (p.cliente_manuale || "—"));
 
   const rigaTotali = (label, modalita, valore) => {
     if (modalita === "nascosto") return null;
