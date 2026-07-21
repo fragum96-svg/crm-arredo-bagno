@@ -1883,19 +1883,21 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
                   <td style={{ padding: "8px 6px" }} data-label="Data">{preventivoSalvato.data ? new Date(preventivoSalvato.data).toLocaleDateString("it-IT") : "-"}</td>
                   <td style={{ padding: "8px 6px" }} data-label="Cliente">{nomeClientePreventivo(preventivoSalvato)}</td>
                   <td style={{ padding: "8px 6px" }} data-label="Azienda">{nomeAzienda(preventivoSalvato.azienda_id)}</td>
-                  <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }} data-label="">
+                  <td style={{ padding: "8px 6px" }} data-label="">
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                     {preventivoSalvato.stato === "accettato" && (
                       preventivoSalvato.fatturato ? (
-                        <span style={{ color: COLORS.success, fontSize: 12, marginRight: 10 }}>✓ Fatturato</span>
+                        <span style={{ color: COLORS.success, fontSize: 12 }}>✓ Fatturato</span>
                       ) : (
-                        <button onClick={() => segnaComeFatturato(preventivoSalvato)} style={{ background: "none", border: "none", color: COLORS.success, cursor: "pointer", fontSize: 12, marginRight: 10 }}>Segna come fatturato</button>
+                        <button onClick={() => segnaComeFatturato(preventivoSalvato)} style={{ background: "none", border: "none", color: COLORS.success, cursor: "pointer", fontSize: 12 }}>Segna come fatturato</button>
                       )
                     )}
-                    <button onClick={() => stampaPreventivo(preventivoSalvato, clienti, aziende)} style={{ background: "none", border: "none", color: COLORS.success, cursor: "pointer", fontSize: 12, marginRight: 10, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                    <button onClick={() => stampaPreventivo(preventivoSalvato, clienti, aziende)} style={{ background: "none", border: "none", color: COLORS.success, cursor: "pointer", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}>
                       <Printer size={13} /> PDF
                     </button>
-                    <button onClick={() => modifica(preventivoSalvato)} style={{ background: "none", border: "none", color: COLORS.primary, cursor: "pointer", fontSize: 12, marginRight: 10 }}>Modifica</button>
+                    <button onClick={() => modifica(preventivoSalvato)} style={{ background: "none", border: "none", color: COLORS.primary, cursor: "pointer", fontSize: 12 }}>Modifica</button>
                     <button onClick={() => elimina(preventivoSalvato.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 12 }}>Elimina</button>
+                    </div>
                   </td>
                 </tr>
               );
