@@ -1487,19 +1487,19 @@ function CalendarioVisite({ session }) {
 // ============================================================
 // SELETTORE VOCE (Imballo/Trasporto/IVA)
 // ============================================================
-function SelettoreVoce({ label, modalita, percentuale, valoreEuro, onChange, inputStyle, permettiTesto }) {
+function SelettoreVoce({ label, modalita, percentuale, valoreEuro, onChange, inputStyle, permettiTesto, isMobile }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
       <label style={{ fontSize: 12, minWidth: 80 }}>{label}</label>
-      <select value={modalita} onChange={(e) => onChange({ modalita: e.target.value })} style={{ ...inputStyle, width: 130 }}>
+      <select value={modalita} onChange={(e) => onChange({ modalita: e.target.value })} style={{ ...inputStyle, width: isMobile ? "100%" : 130 }}>
         <option value="escluso">Escluso</option>
         <option value="percentuale">In %</option>
         <option value="euro">In €</option>
         <option value="nascosto">Non mostrare</option>
       </select>
-      {modalita === "percentuale" && <input type="number" value={percentuale} onChange={(e) => onChange({ percentuale: e.target.value })} style={{ ...inputStyle, width: 70 }} placeholder="%" />}
+      {modalita === "percentuale" && <input type="number" value={percentuale} onChange={(e) => onChange({ percentuale: e.target.value })} style={{ ...inputStyle, width: isMobile ? "100%" : 70 }} placeholder="%" />}
       {modalita === "euro" && (
-        <input type={permettiTesto ? "text" : "number"} value={valoreEuro} onChange={(e) => onChange({ valoreEuro: e.target.value })} style={{ ...inputStyle, width: permettiTesto ? 160 : 80 }} placeholder={permettiTesto ? "es. 50€ o a carico cliente" : "€"} />
+        <input type={permettiTesto ? "text" : "number"} value={valoreEuro} onChange={(e) => onChange({ valoreEuro: e.target.value })} style={{ ...inputStyle, width: isMobile ? "100%" : (permettiTesto ? 160 : 80) }} placeholder={permettiTesto ? "es. 50€ o a carico cliente" : "€"} />
       )}
     </div>
   );
@@ -1517,6 +1517,13 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [suggerimenti, setSuggerimenti] = useState({});
+  const [isMobile, setIsMobile] = useState(typeof window !== "undefined" && window.innerWidth < 768);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const emptyHeader = {
     cliente_id: "", azienda_id: "", rif: "", data: new Date().toISOString().slice(0, 10),
@@ -1678,21 +1685,87 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
       <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, marginBottom: 24, overflowX: "hidden" }}>
         <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>{editingId ? "Modifica preventivo" : "Nuovo preventivo"}</h3>
         <div className="form-header-preventivo" style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
-          <select value={header.azienda_id} onChange={(e) => setHeader({ ...header, azienda_id: e.target.value })} style={{ ...fieldStyle, maxWidth: 220 }}>
+          <select value={header.azienda_id} onChange={(e) => setHeader({ ...header, azienda_id: e.target.value })} style={{ ...fieldStyle, maxWidth: isMobile ? "100%" : 220 }}>
             <option value="">-- Azienda --</option>
             {aziende.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
           </select>
-          <select value={header.cliente_id} onChange={(e) => setHeader({ ...header, cliente_id: e.target.value })} style={{ ...fieldStyle, maxWidth: 220 }}>
+          <select value={header.cliente_id} onChange={(e) => setHeader({ ...header, cliente_id: e.target.value })} style={{ ...fieldStyle, maxWidth: isMobile ? "100%" : 220 }}>
             <option value="">-- Cliente (Spettabile) --</option>
             {clienti.map((c) => <option key={c.id} value={c.id}>{c.ragione_sociale}</option>)}
           </select>
           {!header.cliente_id && (
-            <input placeholder="...oppure scrivi il nome cliente manualmente" value={header.cliente_manuale} onChange={(e) => setHeader({ ...header, cliente_manuale: e.target.value })} style={{ ...fieldStyle, maxWidth: 260 }} />
+            <input placeholder="...oppure scrivi il nome cliente manualmente" value={header.cliente_manuale} onChange={(e) => setHeader({ ...header, cliente_manuale: e.target.value })} style={{ ...fieldStyle, maxWidth: isMobile ? "100%" : 260 }} />
           )}
-          <input type="date" value={header.data} onChange={(e) => setHeader({ ...header, data: e.target.value })} style={{ ...fieldStyle, maxWidth: 160 }} />
-          <input placeholder="RIF" value={header.rif} onChange={(e) => setHeader({ ...header, rif: e.target.value })} style={{ ...fieldStyle, maxWidth: 160 }} />
+          <input type="date" value={header.data} onChange={(e) => setHeader({ ...header, data: e.target.value })} style={{ ...fieldStyle, maxWidth: isMobile ? "100%" : 160 }} />
+          <input placeholder="RIF" value={header.rif} onChange={(e) => setHeader({ ...header, rif: e.target.value })} style={{ ...fieldStyle, maxWidth: isMobile ? "100%" : 160 }} />
         </div>
 
+        {isMobile ? (
+          <div style={{ marginBottom: 12 }}>
+            {righe.map((riga, idx) => {
+              const { netto } = calcolaRigaNetto(riga);
+              const campoMobile = { width: "100%", padding: "10px", marginBottom: 8, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 14, boxSizing: "border-box" };
+              const rigaLabel = { fontSize: 11, color: COLORS.muted, marginBottom: 3, display: "block" };
+              return (
+                <div key={riga.id} style={{ border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 12, marginBottom: 10, background: COLORS.bg }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: COLORS.primary }}>Articolo {idx + 1}</span>
+                    <button onClick={() => rimuoviRiga(riga.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 12 }}>✕ Rimuovi</button>
+                  </div>
+
+                  <label style={rigaLabel}>Articolo</label>
+                  <div style={{ position: "relative" }}>
+                    <input value={riga.articolo} onChange={(e) => { aggiornaRiga(riga.id, "articolo", e.target.value); cercaSuggerimenti(riga.id, e.target.value); }} style={campoMobile} autoComplete="off" />
+                    {suggerimenti[riga.id] && suggerimenti[riga.id].length > 0 && (
+                      <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10, background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 8, boxShadow: "0 4px 14px rgba(20,40,60,0.12)", maxHeight: 160, overflowY: "auto" }}>
+                        {suggerimenti[riga.id].map((voce) => (
+                          <div key={voce.id} onClick={() => selezionaSuggerimento(riga.id, voce)} style={{ padding: "8px 10px", fontSize: 12, cursor: "pointer", borderBottom: `1px solid ${COLORS.border}` }}>
+                            <strong>{voce.codice_articolo}</strong> — {voce.descrizione} ({formattaEuro(voce.prezzo_unitario)})
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <label style={rigaLabel}>Descrizione</label>
+                  <input value={riga.descrizione} onChange={(e) => aggiornaRiga(riga.id, "descrizione", e.target.value)} style={campoMobile} />
+
+                  <label style={rigaLabel}>Finitura</label>
+                  <input value={riga.finitura} onChange={(e) => aggiornaRiga(riga.id, "finitura", e.target.value)} style={campoMobile} />
+
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={rigaLabel}>Qtà</label>
+                      <input type="number" value={riga.quantita} onChange={(e) => aggiornaRiga(riga.id, "quantita", e.target.value)} style={campoMobile} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={rigaLabel}>Prezzo un.</label>
+                      <input type="number" value={riga.prezzo_unitario} onChange={(e) => aggiornaRiga(riga.id, "prezzo_unitario", e.target.value)} style={campoMobile} />
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={rigaLabel}>Sc.1 %</label>
+                      <input type="number" value={riga.sconto1} onChange={(e) => aggiornaRiga(riga.id, "sconto1", e.target.value)} style={campoMobile} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={rigaLabel}>Sc.2 %</label>
+                      <input type="number" value={riga.sconto2} onChange={(e) => aggiornaRiga(riga.id, "sconto2", e.target.value)} style={campoMobile} />
+                    </div>
+                  </div>
+
+                  <label style={rigaLabel}>Netto manuale (opzionale)</label>
+                  <input type="number" placeholder="lascia vuoto per calcolo automatico" value={riga.prezzo_netto_manuale} onChange={(e) => aggiornaRiga(riga.id, "prezzo_netto_manuale", e.target.value)} style={campoMobile} />
+
+                  <div style={{ textAlign: "right", fontWeight: 700, color: COLORS.text, fontSize: 15, marginTop: 4 }}>
+                    Netto: {formattaEuro(netto)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 12 }} className="tabella-righe-preventivo">
           <thead>
             <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
@@ -1709,7 +1782,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
                   <td style={{ padding: 4, position: "relative" }} data-label="Articolo">
                     <input value={riga.articolo} onChange={(e) => { aggiornaRiga(riga.id, "articolo", e.target.value); cercaSuggerimenti(riga.id, e.target.value); }} style={{ ...inputStyle, width: 70 }} autoComplete="off" />
                     {suggerimenti[riga.id] && suggerimenti[riga.id].length > 0 && (
-                      <div style={{ position: "absolute", top: "100%", left: 0, zIndex: 10, background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 8, boxShadow: "0 4px 14px rgba(20,40,60,0.12)", width: "min(220px, 85vw)", maxHeight: 160, overflowY: "auto" }}>
+                      <div style={{ position: "absolute", top: "100%", left: 0, zIndex: 10, background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 8, boxShadow: "0 4px 14px rgba(20,40,60,0.12)", minWidth: 220, maxHeight: 160, overflowY: "auto" }}>
                         {suggerimenti[riga.id].map((voce) => (
                           <div key={voce.id} onClick={() => selezionaSuggerimento(riga.id, voce)} style={{ padding: "6px 10px", fontSize: 11, cursor: "pointer", borderBottom: `1px solid ${COLORS.border}` }}>
                             <strong>{voce.codice_articolo}</strong> — {voce.descrizione} ({formattaEuro(voce.prezzo_unitario)})
@@ -1732,14 +1805,17 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
             })}
           </tbody>
         </table>
+        )}
         <p style={{ fontSize: 11, color: COLORS.muted, marginTop: -6, marginBottom: 16 }}>Compila "Netto manuale" per fissare direttamente il prezzo netto di una riga.</p>
         <button onClick={aggiungiRiga} style={{ padding: "6px 12px", background: "#fff", color: COLORS.primary, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 12, cursor: "pointer", marginBottom: 20 }}>+ Aggiungi riga</button>
 
         <div style={{ background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 16, marginBottom: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-          <SelettoreVoce label="Imballo" modalita={header.imballo_modalita} percentuale={header.imballo_percentuale} valoreEuro={header.imballo_valore} inputStyle={inputStyle} onChange={(patch) => setHeader({ ...header, imballo_modalita: patch.modalita ?? header.imballo_modalita, imballo_percentuale: patch.percentuale ?? header.imballo_percentuale, imballo_valore: patch.valoreEuro ?? header.imballo_valore })} />
-          <SelettoreVoce label="Trasporto" modalita={header.trasporto_modalita} percentuale={header.trasporto_percentuale} valoreEuro={header.trasporto_valore} inputStyle={inputStyle} permettiTesto
+          <SelettoreVoce label="Imballo" modalita={header.imballo_modalita} percentuale={header.imballo_percentuale} valoreEuro={header.imballo_valore} inputStyle={inputStyle} isMobile={isMobile}
+            onChange={(patch) => setHeader({ ...header, imballo_modalita: patch.modalita ?? header.imballo_modalita, imballo_percentuale: patch.percentuale ?? header.imballo_percentuale, imballo_valore: patch.valoreEuro ?? header.imballo_valore })} />
+          <SelettoreVoce label="Trasporto" modalita={header.trasporto_modalita} percentuale={header.trasporto_percentuale} valoreEuro={header.trasporto_valore} inputStyle={inputStyle} permettiTesto isMobile={isMobile}
             onChange={(patch) => setHeader({ ...header, trasporto_modalita: patch.modalita ?? header.trasporto_modalita, trasporto_percentuale: patch.percentuale ?? header.trasporto_percentuale, trasporto_valore: patch.valoreEuro ?? header.trasporto_valore })} />
-          <SelettoreVoce label="IVA" modalita={header.iva_modalita} percentuale={header.iva_percentuale} valoreEuro={header.iva_valore} inputStyle={inputStyle} onChange={(patch) => setHeader({ ...header, iva_modalita: patch.modalita ?? header.iva_modalita, iva_percentuale: patch.percentuale ?? header.iva_percentuale, iva_valore: patch.valoreEuro ?? header.iva_valore })} />
+          <SelettoreVoce label="IVA" modalita={header.iva_modalita} percentuale={header.iva_percentuale} valoreEuro={header.iva_valore} inputStyle={inputStyle} isMobile={isMobile}
+            onChange={(patch) => setHeader({ ...header, iva_modalita: patch.modalita ?? header.iva_modalita, iva_percentuale: patch.percentuale ?? header.iva_percentuale, iva_valore: patch.valoreEuro ?? header.iva_valore })} />
           <div style={{ marginTop: 4 }}>
             <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 4 }}>Modalità di pagamento</label>
             <input placeholder="Es. 30% all'ordine, saldo alla consegna" value={header.modalita_pagamento} onChange={(e) => setHeader({ ...header, modalita_pagamento: e.target.value })} style={{ ...fieldStyle, marginBottom: 0, maxWidth: 400 }} />
