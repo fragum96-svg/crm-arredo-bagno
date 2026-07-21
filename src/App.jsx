@@ -1818,11 +1818,11 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
             onChange={(patch) => setHeader({ ...header, iva_modalita: patch.modalita ?? header.iva_modalita, iva_percentuale: patch.percentuale ?? header.iva_percentuale, iva_valore: patch.valoreEuro ?? header.iva_valore })} />
           <div style={{ marginTop: 4 }}>
             <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 4 }}>Modalità di pagamento</label>
-            <input placeholder="Es. 30% all'ordine, saldo alla consegna" value={header.modalita_pagamento} onChange={(e) => setHeader({ ...header, modalita_pagamento: e.target.value })} style={{ ...fieldStyle, marginBottom: 0, maxWidth: 400 }} />
+            <input placeholder="Es. 30% all'ordine, saldo alla consegna" value={header.modalita_pagamento} onChange={(e) => setHeader({ ...header, modalita_pagamento: e.target.value })} style={{ ...fieldStyle, marginBottom: 0, maxWidth: isMobile ? "100%" : 400 }} />
           </div>
           <div style={{ marginTop: 4 }}>
             <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 4 }}>Prezzi mostrati nel PDF</label>
-            <select value={header.modalita_prezzi_pdf} onChange={(e) => setHeader({ ...header, modalita_prezzi_pdf: e.target.value })} style={{ ...inputStyle, maxWidth: 300 }}>
+            <select value={header.modalita_prezzi_pdf} onChange={(e) => setHeader({ ...header, modalita_prezzi_pdf: e.target.value })} style={{ ...inputStyle, maxWidth: isMobile ? "100%" : 300, width: isMobile ? "100%" : "auto" }}>
               <option value="dettagliato">Completo (listino + sconti + netto)</option>
               <option value="solo_netto">Solo prezzi netti (unitario e totale)</option>
             </select>
@@ -1837,12 +1837,12 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
           </div>
           <div style={{ marginTop: 12 }}>
             <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 4 }}>Note</label>
-            <textarea placeholder="Annotazioni aggiuntive sul preventivo" value={header.note} onChange={(e) => setHeader({ ...header, note: e.target.value })} style={{ ...fieldStyle, marginBottom: 0, maxWidth: 500, minHeight: 60 }} />
+            <textarea placeholder="Annotazioni aggiuntive sul preventivo" value={header.note} onChange={(e) => setHeader({ ...header, note: e.target.value })} style={{ ...fieldStyle, marginBottom: 0, maxWidth: isMobile ? "100%" : 500, minHeight: 60 }} />
           </div>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", fontSize: 13, marginBottom: 16 }}>
-          <div style={{ textAlign: "right", minWidth: 220 }}>
+        <div style={{ display: "flex", justifyContent: isMobile ? "stretch" : "flex-end", fontSize: 13, marginBottom: 16 }}>
+          <div style={{ textAlign: isMobile ? "left" : "right", minWidth: isMobile ? "auto" : 220, width: isMobile ? "100%" : "auto" }}>
             <div style={{ color: COLORS.muted }}>Totale netto: {formattaEuro(tot.totaleNetto)}</div>
             {rigaTotali("Imballo", header.imballo_modalita, tot.valoreImballo, header.imballo_valore)}
             {rigaTotali("Trasporto", header.trasporto_modalita, tot.valoreTrasporto, header.trasporto_valore)}
