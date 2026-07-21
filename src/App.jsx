@@ -1684,7 +1684,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
       <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16 }}>Preventivi / Offerte</h2>
       <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, marginBottom: 24, overflowX: "hidden" }}>
         <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>{editingId ? "Modifica preventivo" : "Nuovo preventivo"}</h3>
-        <div className="form-header-preventivo" style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
+        <div className="form-header-preventivo" style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
           <select value={header.azienda_id} onChange={(e) => setHeader({ ...header, azienda_id: e.target.value })} style={{ ...fieldStyle, maxWidth: isMobile ? "100%" : 220 }}>
             <option value="">-- Azienda --</option>
             {aziende.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
