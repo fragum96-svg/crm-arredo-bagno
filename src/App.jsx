@@ -1696,7 +1696,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
           {!header.cliente_id && (
             <input placeholder="...oppure scrivi il nome cliente manualmente" value={header.cliente_manuale} onChange={(e) => setHeader({ ...header, cliente_manuale: e.target.value })} style={{ ...fieldStyle, maxWidth: isMobile ? "100%" : 260 }} />
           )}
-          <input type="date" value={header.data} onChange={(e) => setHeader({ ...header, data: e.target.value })} style={{ ...fieldStyle, width: isMobile ? "60%" : "100%", maxWidth: isMobile ? 180 : 160 }} />
+          <input type="date" value={header.data} onChange={(e) => setHeader({ ...header, data: e.target.value })} style={{ ...fieldStyle, width: isMobile ? "auto" : "100%", maxWidth: isMobile ? 115 : 160, fontSize: isMobile ? 12 : 13, padding: isMobile ? "8px 4px" : "8px 10px" }} />
           <input placeholder="RIF" value={header.rif} onChange={(e) => setHeader({ ...header, rif: e.target.value })} style={{ ...fieldStyle, maxWidth: isMobile ? "100%" : 160 }} />
         </div>
 
