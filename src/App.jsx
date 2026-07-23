@@ -281,8 +281,8 @@ function generaStampaHTML(preventivo, clienti, aziende) {
   return `<!doctype html><html><head><meta charset="utf-8"><title>Preventivo ${preventivo.rif || ""}</title>
   <style>
     body{font-family:Arial, sans-serif; padding:40px; color:#1a1a1a;}
-    h1{color:#1a1a1a; font-size:22px; margin-bottom:2px; font-weight:700;}
-    p{font-size:13px; margin:2px 0; color:#1a1a1a;}
+    h1{color:#1a1a1a; font-size:22px; margin-bottom:10px; font-weight:700;}
+    p{font-size:13px; margin:6px 0; color:#1a1a1a;}
     table{width:100%; border-collapse:collapse; margin-top:20px;}
     th,td{border-bottom:1px solid #ddd; padding:8px; text-align:left; font-size:12px; color:#1a1a1a;}
     th{color:#555; font-weight:600;}
@@ -291,8 +291,8 @@ function generaStampaHTML(preventivo, clienti, aziende) {
   </style></head>
   <body>
     <h1>${azienda ? azienda.nome : ""}</h1>
-    <p>Data: ${preventivo.data ? new Date(preventivo.data).toLocaleDateString("it-IT") : ""}</p>
-    <p>Spettabile: ${cliente ? cliente.ragione_sociale : (preventivo.cliente_manuale || "")}${preventivo.rif ? ` — Rif. ${preventivo.rif}` : ""}</p>
+    <p style="margin-top:14px;">Data: ${preventivo.data ? new Date(preventivo.data).toLocaleDateString("it-IT") : ""}</p>
+    <p style="margin-top:10px;">Spett.le: ${cliente ? cliente.ragione_sociale : (preventivo.cliente_manuale || "")}${preventivo.rif ? ` — Rif. ${preventivo.rif}` : ""}</p>
     <table>
       <thead><tr>${intestazioneColonne}</tr></thead>
       <tbody>${righeHtml}</tbody>
@@ -786,6 +786,9 @@ function AziendeMandanti({ session }) {
 function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreventivo, onApriGruppo }) {
   const [cliente, setCliente] = useState(null);
   const [gruppo, setGruppo] = useState(null);
+  const [sedi, setSedi] = useState([]);
+  const [nuovaSede, setNuovaSede] = useState({ nome_sede: "", indirizzo: "" });
+  const [salvandoSede, setSalvandoSede] = useState(false);
   const [visite, setVisite] = useState([]);
   const [preventivi, setPreventivi] = useState([]);
   const [documenti, setDocumenti] = useState([]);
@@ -805,15 +808,17 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
     setLoading(true);
     setError("");
     try {
-      const [rCliente, rVisite, rPreventivi, rDocumenti, rOrdini, rAttivita] = await Promise.all([
+      const [rCliente, rVisite, rPreventivi, rDocumenti, rOrdini, rAttivita, rSedi] = await Promise.all([
         fetch(`${SUPABASE_URL}/rest/v1/clienti?id=eq.${clienteId}&select=*`, { headers: headers() }),
         fetch(`${SUPABASE_URL}/rest/v1/visite?cliente_id=eq.${clienteId}&select=*&order=data_visita.desc`, { headers: headers() }),
         fetch(`${SUPABASE_URL}/rest/v1/preventivi?cliente_id=eq.${clienteId}&select=*&order=data.desc`, { headers: headers() }),
         fetch(`${SUPABASE_URL}/rest/v1/documenti_cliente?cliente_id=eq.${clienteId}&select=*&order=created_at.desc`, { headers: headers() }),
         fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati?cliente_id=eq.${clienteId}&select=*&order=data_ordine.desc`, { headers: headers() }),
         fetch(`${SUPABASE_URL}/rest/v1/attivita_cliente?cliente_id=eq.${clienteId}&select=*&order=data.desc`, { headers: headers() }),
+        fetch(`${SUPABASE_URL}/rest/v1/sedi_cliente?cliente_id=eq.${clienteId}&select=*&order=created_at.asc`, { headers: headers() }),
       ]);
-      const [dCliente, dVisite, dPreventivi, dDocumenti, dOrdini, dAttivita] = await Promise.all([rCliente.json(), rVisite.json(), rPreventivi.json(), rDocumenti.json(), rOrdini.json(), rAttivita.json()]);
+      const [dCliente, dVisite, dPreventivi, dDocumenti, dOrdini, dAttivita, dSedi] = await Promise.all([rCliente.json(), rVisite.json(), rPreventivi.json(), rDocumenti.json(), rOrdini.json(), rAttivita.json(), rSedi.json()]);
+      setSedi(Array.isArray(dSedi) ? dSedi : []);
       setCliente(dCliente && dCliente[0]);
       if (dCliente && dCliente[0] && dCliente[0].gruppo_id) {
         try {
@@ -904,6 +909,43 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
     }
   };
 
+  const salvaSede = async () => {
+    if (!nuovaSede.indirizzo.trim()) { setError("L'indirizzo della sede è obbligatorio."); return; }
+    setSalvandoSede(true);
+    setError("");
+    try {
+      const coords = await geocodificaIndirizzo(nuovaSede.indirizzo);
+      await fetch(`${SUPABASE_URL}/rest/v1/sedi_cliente`, {
+        method: "POST",
+        headers: { ...headers(), Prefer: "return=representation" },
+        body: JSON.stringify({
+          cliente_id: clienteId,
+          nome_sede: nuovaSede.nome_sede || null,
+          indirizzo: nuovaSede.indirizzo,
+          latitudine: coords ? coords.lat : null,
+          longitudine: coords ? coords.lon : null,
+        }),
+      });
+      await registraAttivita(session, clienteId, "sede", `Aggiunta sede: ${nuovaSede.nome_sede || nuovaSede.indirizzo}`);
+      setNuovaSede({ nome_sede: "", indirizzo: "" });
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSalvandoSede(false);
+    }
+  };
+
+  const rimuoviSede = async (id) => {
+    if (!window.confirm("Eliminare questa sede?")) return;
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/sedi_cliente?id=eq.${id}`, { method: "DELETE", headers: headers() });
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const nomeAzienda = (id) => aziendeOptions.find((a) => a.id === id)?.nome || "—";
   const inputStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
   const sezione = (titolo, contenuto) => (
@@ -981,6 +1023,28 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
             );
           })
         )
+      ))}
+
+      {sezione("Sedi / Filiali", (
+        <div>
+          {sedi.length === 0 ? (
+            <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 12 }}>Nessuna sede aggiuntiva inserita.</p>
+          ) : (
+            sedi.map((s) => (
+              <div key={s.id} style={{ fontSize: 12, padding: "8px 0", borderBottom: "1px solid #f0f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span><strong>{s.nome_sede || "Sede"}</strong> — {s.indirizzo}</span>
+                <button onClick={() => rimuoviSede(s.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 11 }}>Elimina</button>
+              </div>
+            ))
+          )}
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${COLORS.border}`, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <input placeholder="Nome sede (es. Filiale Nord)" value={nuovaSede.nome_sede} onChange={(e) => setNuovaSede({ ...nuovaSede, nome_sede: e.target.value })} style={{ ...inputStyle, width: 180, marginBottom: 0 }} />
+            <input placeholder="Indirizzo *" value={nuovaSede.indirizzo} onChange={(e) => setNuovaSede({ ...nuovaSede, indirizzo: e.target.value })} style={{ ...inputStyle, width: 220, marginBottom: 0 }} />
+            <button onClick={salvaSede} disabled={salvandoSede} style={{ padding: "8px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+              {salvandoSede ? "Salvataggio..." : "Aggiungi sede"}
+            </button>
+          </div>
+        </div>
       ))}
 
       {sezione("Ordini confermati", (
@@ -1916,6 +1980,7 @@ function MappaClienti({ session }) {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const [clienti, setClienti] = useState([]);
+  const [sedi, setSedi] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -1926,10 +1991,15 @@ function MappaClienti({ session }) {
       setLoading(true);
       setError("");
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale,indirizzo,classificazione,latitudine,longitudine`, { headers: headers() });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || "Errore nel caricamento");
+        const [rClienti, rSedi] = await Promise.all([
+          fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale,indirizzo,classificazione,latitudine,longitudine`, { headers: headers() }),
+          fetch(`${SUPABASE_URL}/rest/v1/sedi_cliente?select=*`, { headers: headers() }),
+        ]);
+        const data = await rClienti.json();
+        const dataSedi = await rSedi.json();
+        if (!rClienti.ok) throw new Error(data.message || "Errore nel caricamento");
         setClienti(data);
+        setSedi(Array.isArray(dataSedi) ? dataSedi : []);
       } catch (err) {
         setError(err.message);
       } finally {
@@ -1952,17 +2022,23 @@ function MappaClienti({ session }) {
     if (!mapInstance.current || !window.L) return;
     const L = window.L;
     const conCoordinate = clienti.filter((c) => c.latitudine && c.longitudine);
+    const sediConCoordinate = sedi.filter((s) => s.latitudine && s.longitudine);
     const markers = [];
     conCoordinate.forEach((c) => {
       const m = L.marker([c.latitudine, c.longitudine]).addTo(mapInstance.current).bindPopup(`<strong>${c.ragione_sociale}</strong><br/>${c.classificazione || ""}<br/>${c.indirizzo || ""}`);
       markers.push(m);
     });
-    if (conCoordinate.length > 0) {
+    sediConCoordinate.forEach((s) => {
+      const clienteDellaSede = clienti.find((c) => c.id === s.cliente_id);
+      const m = L.marker([s.latitudine, s.longitudine], { opacity: 0.85 }).addTo(mapInstance.current).bindPopup(`<strong>${clienteDellaSede ? clienteDellaSede.ragione_sociale : ""}</strong><br/>${s.nome_sede || "Sede"}<br/>${s.indirizzo}`);
+      markers.push(m);
+    });
+    if (conCoordinate.length > 0 || sediConCoordinate.length > 0) {
       const gruppo = L.featureGroup(markers);
       mapInstance.current.fitBounds(gruppo.getBounds().pad(0.2));
     }
     return () => { markers.forEach((m) => mapInstance.current && mapInstance.current.removeLayer(m)); };
-  }, [clienti]);
+  }, [clienti, sedi]);
 
   const senzaCoordinate = clienti.filter((c) => c.indirizzo && (!c.latitudine || !c.longitudine));
 
