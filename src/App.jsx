@@ -631,7 +631,50 @@ function AziendeMandanti({ session }) {
     }
   };
 
-  const resetForm = () => { setForm(emptyForm); setEditingId(null); };
+  const resetForm = () => { setForm(emptyForm); setEditingId(null); setSediForm([]); setSediEsistenti([]); setNuovaSedeForm({ nome_sede: "", indirizzo: "" }); };
+
+  const aggiungiSedeAlForm = () => {
+    if (!nuovaSedeForm.indirizzo.trim()) return;
+    setSediForm((s) => [...s, nuovaSedeForm]);
+    setNuovaSedeForm({ nome_sede: "", indirizzo: "" });
+  };
+
+  const rimuoviSedeDalForm = (idx) => {
+    setSediForm((s) => s.filter((_, i) => i !== idx));
+  };
+
+  const aggiungiSedeSubito = async () => {
+    if (!nuovaSedeForm.indirizzo.trim() || !editingId) return;
+    try {
+      const coords = await geocodificaIndirizzo(nuovaSedeForm.indirizzo);
+      await fetch(`${SUPABASE_URL}/rest/v1/sedi_cliente`, {
+        method: "POST",
+        headers: { ...headers(), Prefer: "return=representation" },
+        body: JSON.stringify({
+          cliente_id: editingId,
+          nome_sede: nuovaSedeForm.nome_sede || null,
+          indirizzo: nuovaSedeForm.indirizzo,
+          latitudine: coords ? coords.lat : null,
+          longitudine: coords ? coords.lon : null,
+        }),
+      });
+      setNuovaSedeForm({ nome_sede: "", indirizzo: "" });
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/sedi_cliente?cliente_id=eq.${editingId}&select=*`, { headers: headers() });
+      const data = await res.json();
+      if (res.ok) setSediEsistenti(data);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const rimuoviSedeEsistente = async (id) => {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/sedi_cliente?id=eq.${id}`, { method: "DELETE", headers: headers() });
+      setSediEsistenti((s) => s.filter((x) => x.id !== id));
+    } catch (err) {
+      setError(err.message);
+    }
+  };
 
   const save = async () => {
     if (!form.nome.trim()) { setError("Il nome azienda è obbligatorio."); return; }
@@ -1135,6 +1178,9 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo }) {
   const [saving, setSaving] = useState(false);
   const [filtroClassificazione, setFiltroClassificazione] = useState("");
   const [clienteApertoId, setClienteApertoId] = useState(null);
+  const [sediForm, setSediForm] = useState([]);
+  const [sediEsistenti, setSediEsistenti] = useState([]);
+  const [nuovaSedeForm, setNuovaSedeForm] = useState({ nome_sede: "", indirizzo: "" });
 
   const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}` });
 
@@ -1205,6 +1251,24 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo }) {
       if (!res.ok) throw new Error(data.message || "Errore nel salvataggio");
       const idSalvato = editingId || (data && data[0] && data[0].id);
       if (idSalvato) await registraAttivita(session, idSalvato, "modifica", editingId ? "Scheda anagrafica aggiornata" : "Cliente creato");
+      if (!editingId && idSalvato && sediForm.length > 0) {
+        for (const sede of sediForm) {
+          try {
+            const coords = await geocodificaIndirizzo(sede.indirizzo);
+            await fetch(`${SUPABASE_URL}/rest/v1/sedi_cliente`, {
+              method: "POST",
+              headers: { ...headers(), Prefer: "return=representation" },
+              body: JSON.stringify({
+                cliente_id: idSalvato,
+                nome_sede: sede.nome_sede || null,
+                indirizzo: sede.indirizzo,
+                latitudine: coords ? coords.lat : null,
+                longitudine: coords ? coords.lon : null,
+              }),
+            });
+          } catch (e) {}
+        }
+      }
       resetForm();
       load();
     } catch (err) {
@@ -1214,7 +1278,7 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo }) {
     }
   };
 
-  const edit = (cliente) => {
+  const edit = async (cliente) => {
     setEditingId(cliente.id);
     setForm({
       ragione_sociale: cliente.ragione_sociale || "",
@@ -1227,6 +1291,11 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo }) {
       competitor: (cliente.competitor || []).join(", "),
       note: cliente.note || "",
     });
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/sedi_cliente?cliente_id=eq.${cliente.id}&select=*`, { headers: headers() });
+      const data = await res.json();
+      if (res.ok) setSediEsistenti(data);
+    } catch (e) {}
   };
 
   const remove = async (id) => {
@@ -1288,6 +1357,36 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo }) {
           </div>
           <input placeholder="Competitor (separati da virgola)" value={form.competitor} onChange={(e) => setForm({ ...form, competitor: e.target.value })} style={inputStyle} />
           <textarea placeholder="Note" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} style={{ ...inputStyle, minHeight: 60 }} />
+
+          <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 6 }}>Sedi / Filiali aggiuntive</label>
+          <div style={{ marginBottom: 10, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 8 }}>
+            {editingId ? (
+              <>
+                {sediEsistenti.map((s) => (
+                  <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, marginBottom: 4 }}>
+                    <span><strong>{s.nome_sede || "Sede"}</strong> — {s.indirizzo}</span>
+                    <button onClick={() => rimuoviSedeEsistente(s.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 11 }}>Elimina</button>
+                  </div>
+                ))}
+              </>
+            ) : (
+              sediForm.map((s, idx) => (
+                <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, marginBottom: 4 }}>
+                  <span><strong>{s.nome_sede || "Sede"}</strong> — {s.indirizzo}</span>
+                  <button onClick={() => rimuoviSedeDalForm(idx)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 11 }}>Rimuovi</button>
+                </div>
+              ))
+            )}
+            {sediEsistenti.length === 0 && sediForm.length === 0 && (
+              <span style={{ fontSize: 11, color: "#9aa7b2" }}>Nessuna sede aggiuntiva.</span>
+            )}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+              <input placeholder="Nome sede (opz.)" value={nuovaSedeForm.nome_sede} onChange={(e) => setNuovaSedeForm({ ...nuovaSedeForm, nome_sede: e.target.value })} style={{ ...inputStyle, marginBottom: 0, width: 110, fontSize: 11 }} />
+              <input placeholder="Indirizzo" value={nuovaSedeForm.indirizzo} onChange={(e) => setNuovaSedeForm({ ...nuovaSedeForm, indirizzo: e.target.value })} style={{ ...inputStyle, marginBottom: 0, width: 140, fontSize: 11 }} />
+              <button onClick={editingId ? aggiungiSedeSubito : aggiungiSedeAlForm} style={{ padding: "6px 10px", background: "#fff", color: COLORS.primary, border: `1px solid ${COLORS.border}`, borderRadius: 6, fontSize: 11, cursor: "pointer" }}>+ Aggiungi</button>
+            </div>
+          </div>
+
           {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 10 }}>{error}</div>}
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={save} disabled={saving} style={{ padding: "9px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
@@ -1779,11 +1878,11 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
 
                   <label style={rigaLabel}>Articolo</label>
                   <div style={{ position: "relative" }}>
-                    <input value={riga.articolo} onChange={(e) => { aggiornaRiga(riga.id, "articolo", e.target.value); cercaSuggerimenti(riga.id, e.target.value); }} style={campoMobile} autoComplete="off" />
+                    <input value={riga.articolo} onChange={(e) => { aggiornaRiga(riga.id, "articolo", e.target.value); cercaSuggerimenti(riga.id, e.target.value); }} onBlur={() => setTimeout(() => setSuggerimenti((s) => ({ ...s, [riga.id]: [] })), 150)} style={campoMobile} autoComplete="off" />
                     {suggerimenti[riga.id] && suggerimenti[riga.id].length > 0 && (
                       <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10, background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 8, boxShadow: "0 4px 14px rgba(20,40,60,0.12)", maxHeight: 160, overflowY: "auto" }}>
                         {suggerimenti[riga.id].map((voce) => (
-                          <div key={voce.id} onClick={() => selezionaSuggerimento(riga.id, voce)} style={{ padding: "8px 10px", fontSize: 12, cursor: "pointer", borderBottom: `1px solid ${COLORS.border}` }}>
+                          <div key={voce.id} onMouseDown={() => selezionaSuggerimento(riga.id, voce)} style={{ padding: "8px 10px", fontSize: 12, cursor: "pointer", borderBottom: `1px solid ${COLORS.border}` }}>
                             <strong>{voce.codice_articolo}</strong> — {voce.descrizione} ({formattaEuro(voce.prezzo_unitario)})
                           </div>
                         ))}
@@ -1844,11 +1943,11 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
               return (
                 <tr key={riga.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
                   <td style={{ padding: 4, position: "relative" }} data-label="Articolo">
-                    <input value={riga.articolo} onChange={(e) => { aggiornaRiga(riga.id, "articolo", e.target.value); cercaSuggerimenti(riga.id, e.target.value); }} style={{ ...inputStyle, width: 70 }} autoComplete="off" />
+                    <input value={riga.articolo} onChange={(e) => { aggiornaRiga(riga.id, "articolo", e.target.value); cercaSuggerimenti(riga.id, e.target.value); }} onBlur={() => setTimeout(() => setSuggerimenti((s) => ({ ...s, [riga.id]: [] })), 150)} style={{ ...inputStyle, width: 70 }} autoComplete="off" />
                     {suggerimenti[riga.id] && suggerimenti[riga.id].length > 0 && (
                       <div style={{ position: "absolute", top: "100%", left: 0, zIndex: 10, background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 8, boxShadow: "0 4px 14px rgba(20,40,60,0.12)", minWidth: 220, maxHeight: 160, overflowY: "auto" }}>
                         {suggerimenti[riga.id].map((voce) => (
-                          <div key={voce.id} onClick={() => selezionaSuggerimento(riga.id, voce)} style={{ padding: "6px 10px", fontSize: 11, cursor: "pointer", borderBottom: `1px solid ${COLORS.border}` }}>
+                          <div key={voce.id} onMouseDown={() => selezionaSuggerimento(riga.id, voce)} style={{ padding: "6px 10px", fontSize: 11, cursor: "pointer", borderBottom: `1px solid ${COLORS.border}` }}>
                             <strong>{voce.codice_articolo}</strong> — {voce.descrizione} ({formattaEuro(voce.prezzo_unitario)})
                           </div>
                         ))}
