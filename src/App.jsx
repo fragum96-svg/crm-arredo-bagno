@@ -205,6 +205,7 @@ function nuovaRiga() {
     descrizione: "",
     finitura: "",
     quantita: 1,
+    unita_misura: "",
     prezzo_unitario: 0,
     sconto1: 0,
     sconto2: 0,
@@ -255,8 +256,8 @@ function generaStampaHTML(preventivo, clienti, aziende) {
   const soloNetto = preventivo.modalita_prezzi_pdf === "solo_netto";
 
   const intestazioneColonne = soloNetto
-    ? `<th>Img</th><th>Articolo</th><th>Descrizione</th><th>Finitura</th><th>Qtà</th><th>Prezzo netto un.</th><th>Prezzo netto totale</th>`
-    : `<th>Img</th><th>Articolo</th><th>Descrizione</th><th>Finitura</th><th>Qtà</th><th>Prezzo listino un.</th><th>Sc.1</th><th>Sc.2</th><th>Prezzo netto un.</th><th>Prezzo netto totale</th>`;
+    ? `<th>Img</th><th>Articolo</th><th>Descrizione</th><th>Finitura</th><th>Qtà</th><th>U.M.</th><th>Prezzo netto un.</th><th>Prezzo netto totale</th>`
+    : `<th>Img</th><th>Articolo</th><th>Descrizione</th><th>Finitura</th><th>Qtà</th><th>U.M.</th><th>Prezzo listino un.</th><th>Sc.1</th><th>Sc.2</th><th>Prezzo netto un.</th><th>Prezzo netto totale</th>`;
 
   const righeHtml = righeArr
     .map((riga) => {
@@ -265,9 +266,9 @@ function generaStampaHTML(preventivo, clienti, aziende) {
       const nettoUnitario = qta > 0 ? netto / qta : netto;
       const cellaImg = `<td>${riga.immagine_url ? `<img src="${riga.immagine_url}" style="max-width:60px;max-height:60px;width:auto;height:auto;object-fit:contain;border-radius:4px;" />` : ""}</td>`;
       if (soloNetto) {
-        return `<tr>${cellaImg}<td>${riga.articolo || ""}</td><td>${riga.descrizione || ""}</td><td>${riga.finitura || ""}</td><td>${riga.quantita || ""}</td><td>${formattaNumero(nettoUnitario)}</td><td>${formattaNumero(netto)}</td></tr>`;
+        return `<tr>${cellaImg}<td>${riga.articolo || ""}</td><td>${riga.descrizione || ""}</td><td>${riga.finitura || ""}</td><td>${riga.quantita || ""}</td><td>${riga.unita_misura || ""}</td><td>${formattaNumero(nettoUnitario)}</td><td>${formattaNumero(netto)}</td></tr>`;
       }
-      return `<tr>${cellaImg}<td>${riga.articolo || ""}</td><td>${riga.descrizione || ""}</td><td>${riga.finitura || ""}</td><td>${riga.quantita || ""}</td><td>${formattaNumero(riga.prezzo_unitario)}</td><td>${riga.sconto1 || 0}%</td><td>${riga.sconto2 || 0}%</td><td>${formattaNumero(nettoUnitario)}</td><td>${formattaNumero(netto)}</td></tr>`;
+      return `<tr>${cellaImg}<td>${riga.articolo || ""}</td><td>${riga.descrizione || ""}</td><td>${riga.finitura || ""}</td><td>${riga.quantita || ""}</td><td>${riga.unita_misura || ""}</td><td>${formattaNumero(riga.prezzo_unitario)}</td><td>${riga.sconto1 || 0}%</td><td>${riga.sconto2 || 0}%</td><td>${formattaNumero(nettoUnitario)}</td><td>${formattaNumero(netto)}</td></tr>`;
     })
     .join("");
 
@@ -1919,6 +1920,10 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
                       <input type="number" value={riga.quantita} onChange={(e) => aggiornaRiga(riga.id, "quantita", e.target.value)} style={campoMobile} />
                     </div>
                     <div style={{ flex: 1 }}>
+                      <label style={rigaLabel}>U.M. (MQ/ML)</label>
+                      <input placeholder="es. MQ" value={riga.unita_misura} onChange={(e) => aggiornaRiga(riga.id, "unita_misura", e.target.value)} style={campoMobile} />
+                    </div>
+                    <div style={{ flex: 1 }}>
                       <label style={rigaLabel}>Prezzo un.</label>
                       <input type="number" value={riga.prezzo_unitario} onChange={(e) => aggiornaRiga(riga.id, "prezzo_unitario", e.target.value)} style={campoMobile} />
                     </div>
@@ -1962,7 +1967,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 12 }} className="tabella-righe-preventivo">
           <thead>
             <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
-              <th style={{ padding: 6 }}>Art.</th><th style={{ padding: 6 }}>Descrizione</th><th style={{ padding: 6 }}>Finitura</th><th style={{ padding: 6 }}>Qtà</th>
+              <th style={{ padding: 6 }}>Art.</th><th style={{ padding: 6 }}>Descrizione</th>              <th style={{ padding: 6 }}>Finitura</th><th style={{ padding: 6 }}>Qtà</th><th style={{ padding: 6 }}>U.M.</th>
               <th style={{ padding: 6 }}>Prezzo un.</th><th style={{ padding: 6 }}>Sc.1 %</th><th style={{ padding: 6 }}>Sc.2 %</th>              <th style={{ padding: 6 }}>Netto manuale</th>
               <th style={{ padding: 6 }}>Immagine</th>
               <th style={{ padding: 6 }}>Netto</th><th style={{ padding: 6 }}></th>
@@ -1988,6 +1993,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
                   <td style={{ padding: 4 }} data-label="Descrizione"><input value={riga.descrizione} onChange={(e) => aggiornaRiga(riga.id, "descrizione", e.target.value)} style={{ ...inputStyle, width: 150 }} /></td>
                   <td style={{ padding: 4 }} data-label="Finitura"><input value={riga.finitura} onChange={(e) => aggiornaRiga(riga.id, "finitura", e.target.value)} style={{ ...inputStyle, width: 70 }} /></td>
                   <td style={{ padding: 4 }} data-label="Qtà"><input type="number" value={riga.quantita} onChange={(e) => aggiornaRiga(riga.id, "quantita", e.target.value)} style={{ ...inputStyle, width: 45 }} /></td>
+                  <td style={{ padding: 4 }} data-label="U.M."><input placeholder="MQ/ML" value={riga.unita_misura} onChange={(e) => aggiornaRiga(riga.id, "unita_misura", e.target.value)} style={{ ...inputStyle, width: 50 }} /></td>
                   <td style={{ padding: 4 }} data-label="Prezzo un."><input type="number" value={riga.prezzo_unitario} onChange={(e) => aggiornaRiga(riga.id, "prezzo_unitario", e.target.value)} style={{ ...inputStyle, width: 65 }} /></td>
                   <td style={{ padding: 4 }} data-label="Sc.1 %"><input type="number" value={riga.sconto1} onChange={(e) => aggiornaRiga(riga.id, "sconto1", e.target.value)} style={{ ...inputStyle, width: 50 }} /></td>
                   <td style={{ padding: 4 }} data-label="Sc.2 %"><input type="number" value={riga.sconto2} onChange={(e) => aggiornaRiga(riga.id, "sconto2", e.target.value)} style={{ ...inputStyle, width: 50 }} /></td>
