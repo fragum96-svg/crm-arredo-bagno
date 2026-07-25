@@ -263,7 +263,7 @@ function generaStampaHTML(preventivo, clienti, aziende) {
       const { netto } = calcolaRigaNetto(riga);
       const qta = Number(riga.quantita) || 0;
       const nettoUnitario = qta > 0 ? netto / qta : netto;
-      const cellaImg = `<td>${riga.immagine_url ? `<img src="${riga.immagine_url}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;" />` : ""}</td>`;
+      const cellaImg = `<td>${riga.immagine_url ? `<img src="${riga.immagine_url}" style="max-width:60px;max-height:60px;width:auto;height:auto;object-fit:contain;border-radius:4px;" />` : ""}</td>`;
       if (soloNetto) {
         return `<tr>${cellaImg}<td>${riga.articolo || ""}</td><td>${riga.descrizione || ""}</td><td>${riga.finitura || ""}</td><td>${riga.quantita || ""}</td><td>${formattaNumero(nettoUnitario)}</td><td>${formattaNumero(netto)}</td></tr>`;
       }
