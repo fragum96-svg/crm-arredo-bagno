@@ -209,6 +209,7 @@ function nuovaRiga() {
     sconto1: 0,
     sconto2: 0,
     prezzo_netto_manuale: "",
+    immagine_url: "",
   };
 }
 
@@ -254,18 +255,19 @@ function generaStampaHTML(preventivo, clienti, aziende) {
   const soloNetto = preventivo.modalita_prezzi_pdf === "solo_netto";
 
   const intestazioneColonne = soloNetto
-    ? `<th>Articolo</th><th>Descrizione</th><th>Finitura</th><th>Qtà</th><th>Prezzo netto un.</th><th>Prezzo netto totale</th>`
-    : `<th>Articolo</th><th>Descrizione</th><th>Finitura</th><th>Qtà</th><th>Prezzo listino un.</th><th>Sc.1</th><th>Sc.2</th><th>Prezzo netto un.</th><th>Prezzo netto totale</th>`;
+    ? `<th>Img</th><th>Articolo</th><th>Descrizione</th><th>Finitura</th><th>Qtà</th><th>Prezzo netto un.</th><th>Prezzo netto totale</th>`
+    : `<th>Img</th><th>Articolo</th><th>Descrizione</th><th>Finitura</th><th>Qtà</th><th>Prezzo listino un.</th><th>Sc.1</th><th>Sc.2</th><th>Prezzo netto un.</th><th>Prezzo netto totale</th>`;
 
   const righeHtml = righeArr
     .map((riga) => {
       const { netto } = calcolaRigaNetto(riga);
       const qta = Number(riga.quantita) || 0;
       const nettoUnitario = qta > 0 ? netto / qta : netto;
+      const cellaImg = `<td>${riga.immagine_url ? `<img src="${riga.immagine_url}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;" />` : ""}</td>`;
       if (soloNetto) {
-        return `<tr><td>${riga.articolo || ""}</td><td>${riga.descrizione || ""}</td><td>${riga.finitura || ""}</td><td>${riga.quantita || ""}</td><td>${formattaNumero(nettoUnitario)}</td><td>${formattaNumero(netto)}</td></tr>`;
+        return `<tr>${cellaImg}<td>${riga.articolo || ""}</td><td>${riga.descrizione || ""}</td><td>${riga.finitura || ""}</td><td>${riga.quantita || ""}</td><td>${formattaNumero(nettoUnitario)}</td><td>${formattaNumero(netto)}</td></tr>`;
       }
-      return `<tr><td>${riga.articolo || ""}</td><td>${riga.descrizione || ""}</td><td>${riga.finitura || ""}</td><td>${riga.quantita || ""}</td><td>${formattaNumero(riga.prezzo_unitario)}</td><td>${riga.sconto1 || 0}%</td><td>${riga.sconto2 || 0}%</td><td>${formattaNumero(nettoUnitario)}</td><td>${formattaNumero(netto)}</td></tr>`;
+      return `<tr>${cellaImg}<td>${riga.articolo || ""}</td><td>${riga.descrizione || ""}</td><td>${riga.finitura || ""}</td><td>${riga.quantita || ""}</td><td>${formattaNumero(riga.prezzo_unitario)}</td><td>${riga.sconto1 || 0}%</td><td>${riga.sconto2 || 0}%</td><td>${formattaNumero(nettoUnitario)}</td><td>${formattaNumero(netto)}</td></tr>`;
     })
     .join("");
 
@@ -1680,6 +1682,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [suggerimenti, setSuggerimenti] = useState({});
+  const [caricandoImmagine, setCaricandoImmagine] = useState(null);
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" && window.innerWidth < 768);
 
   useEffect(() => {
@@ -1742,6 +1745,20 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
   const selezionaSuggerimento = (rigaId, voce) => {
     setRighe((r) => r.map((x) => (x.id === rigaId ? { ...x, articolo: voce.codice_articolo, descrizione: voce.descrizione, prezzo_unitario: voce.prezzo_unitario } : x)));
     setSuggerimenti((s) => ({ ...s, [rigaId]: [] }));
+  };
+
+  const caricaImmagineRiga = async (rigaId, file) => {
+    setCaricandoImmagine(rigaId);
+    try {
+      const path = `preventivi/${Date.now()}_${file.name}`;
+      await caricaFileStorage(session, "documenti-clienti", path, file);
+      const url = urlPubblicoStorage("documenti-clienti", path);
+      aggiornaRiga(rigaId, "immagine_url", url);
+    } catch (err) {
+      setError("Errore nel caricamento immagine: " + err.message);
+    } finally {
+      setCaricandoImmagine(null);
+    }
   };
 
   const tot = calcolaTotaliPreventivo(header, righe);
@@ -1921,6 +1938,19 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
                   <label style={rigaLabel}>Netto manuale (opzionale)</label>
                   <input type="number" placeholder="lascia vuoto per calcolo automatico" value={riga.prezzo_netto_manuale} onChange={(e) => aggiornaRiga(riga.id, "prezzo_netto_manuale", e.target.value)} style={campoMobile} />
 
+                  <label style={rigaLabel}>Immagine articolo (opzionale)</label>
+                  {riga.immagine_url ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                      <img src={riga.immagine_url} alt="" style={{ width: 60, height: 60, objectFit: "cover", borderRadius: 8, border: `1px solid ${COLORS.border}` }} />
+                      <button onClick={() => aggiornaRiga(riga.id, "immagine_url", "")} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 12 }}>Rimuovi</button>
+                    </div>
+                  ) : (
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: COLORS.primary, cursor: "pointer", marginBottom: 8 }}>
+                      <Upload size={13} /> {caricandoImmagine === riga.id ? "Caricamento..." : "Carica immagine"}
+                      <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const file = e.target.files && e.target.files[0]; if (file) caricaImmagineRiga(riga.id, file); e.target.value = ""; }} />
+                    </label>
+                  )}
+
                   <div style={{ textAlign: "right", fontWeight: 700, color: COLORS.text, fontSize: 15, marginTop: 4 }}>
                     Netto: {formattaEuro(netto)}
                   </div>
@@ -1933,7 +1963,8 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
           <thead>
             <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
               <th style={{ padding: 6 }}>Art.</th><th style={{ padding: 6 }}>Descrizione</th><th style={{ padding: 6 }}>Finitura</th><th style={{ padding: 6 }}>Qtà</th>
-              <th style={{ padding: 6 }}>Prezzo un.</th><th style={{ padding: 6 }}>Sc.1 %</th><th style={{ padding: 6 }}>Sc.2 %</th><th style={{ padding: 6 }}>Netto manuale</th>
+              <th style={{ padding: 6 }}>Prezzo un.</th><th style={{ padding: 6 }}>Sc.1 %</th><th style={{ padding: 6 }}>Sc.2 %</th>              <th style={{ padding: 6 }}>Netto manuale</th>
+              <th style={{ padding: 6 }}>Immagine</th>
               <th style={{ padding: 6 }}>Netto</th><th style={{ padding: 6 }}></th>
             </tr>
           </thead>
@@ -1961,6 +1992,19 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
                   <td style={{ padding: 4 }} data-label="Sc.1 %"><input type="number" value={riga.sconto1} onChange={(e) => aggiornaRiga(riga.id, "sconto1", e.target.value)} style={{ ...inputStyle, width: 50 }} /></td>
                   <td style={{ padding: 4 }} data-label="Sc.2 %"><input type="number" value={riga.sconto2} onChange={(e) => aggiornaRiga(riga.id, "sconto2", e.target.value)} style={{ ...inputStyle, width: 50 }} /></td>
                   <td style={{ padding: 4 }} data-label="Netto manuale"><input type="number" placeholder="opz." value={riga.prezzo_netto_manuale} onChange={(e) => aggiornaRiga(riga.id, "prezzo_netto_manuale", e.target.value)} style={{ ...inputStyle, width: 65 }} /></td>
+                  <td style={{ padding: 4 }} data-label="Immagine">
+                    {riga.immagine_url ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <img src={riga.immagine_url} alt="" style={{ width: 32, height: 32, objectFit: "cover", borderRadius: 4 }} />
+                        <button onClick={() => aggiornaRiga(riga.id, "immagine_url", "")} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 10 }}>✕</button>
+                      </div>
+                    ) : (
+                      <label style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10, color: COLORS.primary, cursor: "pointer" }}>
+                        <Upload size={11} /> {caricandoImmagine === riga.id ? "..." : "Carica"}
+                        <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const file = e.target.files && e.target.files[0]; if (file) caricaImmagineRiga(riga.id, file); e.target.value = ""; }} />
+                      </label>
+                    )}
+                  </td>
                   <td style={{ padding: 4, fontWeight: 600 }} data-label="Netto">{formattaEuro(netto)}</td>
                   <td style={{ padding: 4 }} data-label=""><button onClick={() => rimuoviRiga(riga.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 14 }}>✕ Rimuovi riga</button></td>
                 </tr>
