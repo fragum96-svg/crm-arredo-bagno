@@ -353,8 +353,11 @@ function LoginScreen({ onLogin }) {
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: `linear-gradient(135deg, ${COLORS.bg} 0%, #e8f3fa 100%)`, fontFamily: "Arial, sans-serif" }}>
-      <div style={{ width: 360, padding: 36, background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 16, boxShadow: "0 12px 40px rgba(11,123,196,0.12)" }}>
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: `linear-gradient(135deg, ${COLORS.bg} 0%, #e8f3fa 100%)`, fontFamily: "Arial, sans-serif", position: "relative", overflow: "hidden" }}>
+      <div style={{ position: "absolute", top: "-80px", left: "-80px", width: 260, height: 260, borderRadius: "50%", background: `radial-gradient(circle, ${COLORS.primary}22, transparent 70%)` }} />
+      <div style={{ position: "absolute", bottom: "-100px", right: "-60px", width: 320, height: 320, borderRadius: "50%", background: `radial-gradient(circle, ${COLORS.primaryDark}20, transparent 70%)` }} />
+      <div style={{ position: "absolute", top: "30%", right: "10%", width: 140, height: 140, borderRadius: "50%", background: `radial-gradient(circle, ${COLORS.primary}15, transparent 70%)` }} />
+      <div style={{ width: 360, padding: 36, background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 16, boxShadow: "0 12px 40px rgba(11,123,196,0.12)", position: "relative", zIndex: 1 }}>
         <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.primaryDark})`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
           <ShieldCheck size={22} color="#fff" />
         </div>
@@ -369,6 +372,7 @@ function LoginScreen({ onLogin }) {
           {loading ? "Accesso in corso..." : "Accedi"}
         </button>
         <p style={{ fontSize: 11, color: "#9aa7b2", marginTop: 18, textAlign: "center" }}>Le credenziali vengono create dall'amministratore.</p>
+        </div>
       </div>
     </div>
   );
@@ -740,7 +744,7 @@ function AziendeMandanti({ session }) {
 
   return (
     <div style={{ fontFamily: "Arial, sans-serif" }}>
-      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16 }}>Aziende mandanti</h2>
+      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}><Building2 size={20} color={COLORS.primary} /> Aziende mandanti</h2>
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 280px", background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, maxWidth: 340 }}>
           <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>{editingId ? "Modifica azienda" : "Nuova azienda"}</h3>
@@ -1330,7 +1334,7 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo }) {
 
   return (
     <div style={{ fontFamily: "Arial, sans-serif" }}>
-      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16 }}>Anagrafica clienti</h2>
+      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}><Users size={20} color={COLORS.primary} /> Anagrafica clienti</h2>
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 300px", background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, maxWidth: 380 }}>
           <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>{editingId ? "Modifica cliente" : "Nuovo cliente"}</h3>
@@ -1862,7 +1866,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
 
   return (
     <div style={{ fontFamily: "Arial, sans-serif", overflowX: "hidden", width: "100%" }}>
-      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16 }}>Preventivi / Offerte</h2>
+      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}><FileText size={20} color={COLORS.primary} /> Preventivi / Offerte</h2>
       <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, marginBottom: 24, overflowX: "hidden" }}>
         <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>{editingId ? "Modifica preventivo" : "Nuovo preventivo"}</h3>
         <div className="form-header-preventivo" style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
