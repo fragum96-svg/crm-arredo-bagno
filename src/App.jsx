@@ -2,59 +2,26 @@ import { useState, useEffect, useRef } from "react";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
 } from "recharts";
 import {
-  Users,
-  Building2,
-  CalendarDays,
-  FileText,
-  LogOut,
-  Menu as MenuIcon,
-  LayoutDashboard,
-  ShieldCheck,
-  Printer,
-  Map as MapIcon,
-  Upload,
-  TrendingUp,
-  Wallet,
-  ClipboardList,
-  Briefcase,
-  Users2,
+  Users, Building2, CalendarDays, FileText, LogOut, Menu as MenuIcon, LayoutDashboard, ShieldCheck,
+  Printer, Map as MapIcon, Upload, TrendingUp, Wallet, ClipboardList, Briefcase, Users2,
 } from "lucide-react";
 
-// ============================================================
-// CONFIGURAZIONE SUPABASE
-// ============================================================
 const SUPABASE_URL = "https://hifwdbjkerlfjbgwhpxc.supabase.co";
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpZndkYmprZXJsZmpiZ3docHhjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5OTEzMTYsImV4cCI6MjA5OTU2NzMxNn0.wAPiUA4YU9ofHJgDrtFBHAFLzEuOAnAwMdX4Elk3Bsc";
 
 const COLORS = {
-  primary: "#0b7bc4",
-  primaryDark: "#075985",
-  bg: "#f7fafc",
-  card: "#ffffff",
-  border: "#e2edf5",
-  text: "#233242",
-  muted: "#7c8b98",
-  danger: "#c0392b",
-  success: "#1a7a3c",
+  primary: "#0b7bc4", primaryDark: "#075985", bg: "#f7fafc", card: "#ffffff",
+  border: "#e2edf5", text: "#233242", muted: "#7c8b98", danger: "#c0392b", success: "#1a7a3c",
 };
 
-const MESI_BREVI = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
-const GIORNI_SETTIMANA = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
-const MESI = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
-const CLASSIFICAZIONI = ["Architetto", "Contractor", "Showroom", "Rivenditore termoidraulica", "Professionista", "Impresa", "Privato"];
+const MESI_BREVI = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
+const GIORNI_SETTIMANA = ["Lun","Mar","Mer","Gio","Ven","Sab","Dom"];
+const MESI = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+const CLASSIFICAZIONI = ["Architetto","Contractor","Showroom","Rivenditore termoidraulica","Professionista","Impresa","Privato"];
 const STATI_PREVENTIVO = [
   { valore: "bozza", label: "Bozza", colore: "#9aa7b2" },
   { valore: "inviato", label: "Inviato", colore: "#d4a017" },
@@ -65,35 +32,22 @@ const STATI_PREVENTIVO = [
 function formattaEuro(n) {
   return (Number(n) || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
 }
-
 function formattaNumero(n) {
   return (Number(n) || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function makeSupabaseClient(url, key) {
-  const authHeaders = (token) => ({
-    "Content-Type": "application/json",
-    apikey: key,
-    Authorization: `Bearer ${token || key}`,
-  });
+  const authHeaders = (token) => ({ "Content-Type": "application/json", apikey: key, Authorization: "Bearer " + (token || key) });
   return {
     auth: {
       async signInWithPassword({ email, password }) {
-        const res = await fetch(`${url}/auth/v1/token?grant_type=password`, {
-          method: "POST",
-          headers: authHeaders(),
-          body: JSON.stringify({ email, password }),
-        });
+        const res = await fetch(url + "/auth/v1/token?grant_type=password", { method: "POST", headers: authHeaders(), body: JSON.stringify({ email, password }) });
         const data = await res.json();
         if (!res.ok) return { data: null, error: data };
         return { data, error: null };
       },
       async signUp({ email, password }) {
-        const res = await fetch(`${url}/auth/v1/signup`, {
-          method: "POST",
-          headers: authHeaders(),
-          body: JSON.stringify({ email, password }),
-        });
+        const res = await fetch(url + "/auth/v1/signup", { method: "POST", headers: authHeaders(), body: JSON.stringify({ email, password }) });
         const data = await res.json();
         if (!res.ok) return { data: null, error: data };
         return { data, error: null };
@@ -104,9 +58,7 @@ function makeSupabaseClient(url, key) {
 
 async function geocodificaIndirizzo(indirizzo) {
   try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(indirizzo)}`
-    );
+    const res = await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(indirizzo));
     const data = await res.json();
     if (data && data[0]) return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
   } catch (e) {}
@@ -129,25 +81,18 @@ function caricaLeaflet() {
 
 async function registraAttivita(session, clienteId, tipo, descrizione) {
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/attivita_cliente`, {
+    await fetch(SUPABASE_URL + "/rest/v1/attivita_cliente", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${session.access_token}`,
-      },
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token },
       body: JSON.stringify({ cliente_id: clienteId, tipo, descrizione }),
     });
   } catch (e) {}
 }
 
 async function caricaFileStorage(session, bucket, path, file) {
-  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
+  const res = await fetch(SUPABASE_URL + "/storage/v1/object/" + bucket + "/" + path, {
     method: "POST",
-    headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${session.access_token}`,
-    },
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token },
     body: file,
   });
   if (!res.ok) {
@@ -156,15 +101,11 @@ async function caricaFileStorage(session, bucket, path, file) {
   }
   return path;
 }
-
 function urlPubblicoStorage(bucket, path) {
-  return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+  return SUPABASE_URL + "/storage/v1/object/public/" + bucket + "/" + path;
 }
 
-function toISODate(d) {
-  return d.toISOString().slice(0, 10);
-}
-
+function toISODate(d) { return d.toISOString().slice(0, 10); }
 function startOfWeek(date) {
   const d = new Date(date);
   const day = (d.getDay() + 6) % 7;
@@ -172,48 +113,26 @@ function startOfWeek(date) {
   d.setHours(0, 0, 0, 0);
   return d;
 }
-
 function getMonthGrid(date) {
-  const year = date.getFullYear();
-  const month = date.getMonth();
-  const firstOfMonth = new Date(year, month, 1);
-  const start = startOfWeek(firstOfMonth);
+  const start = startOfWeek(new Date(date.getFullYear(), date.getMonth(), 1));
   const days = [];
-  for (let i = 0; i < 42; i++) {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    days.push(d);
-  }
+  for (let i = 0; i < 42; i++) { const d = new Date(start); d.setDate(start.getDate() + i); days.push(d); }
   return days;
 }
-
 function getWeekDays(date) {
   const start = startOfWeek(date);
   const days = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    days.push(d);
-  }
+  for (let i = 0; i < 7; i++) { const d = new Date(start); d.setDate(start.getDate() + i); days.push(d); }
   return days;
 }
 
 function nuovaRiga() {
   return {
-    id: Math.random().toString(36).slice(2),
-    articolo: "",
-    descrizione: "",
-    finitura: "",
-    quantita: 1,
-    unita_misura: "",
-    prezzo_unitario: 0,
-    sconto1: 0,
-    sconto2: 0,
-    prezzo_netto_manuale: "",
-    immagine_url: "",
+    id: Math.random().toString(36).slice(2), articolo: "", descrizione: "", finitura: "",
+    quantita: 1, unita_misura: "", prezzo_unitario: 0, sconto1: 0, sconto2: 0,
+    prezzo_netto_manuale: "", immagine_url: "",
   };
 }
-
 function calcolaRigaNetto(riga) {
   const totaleListino = (Number(riga.quantita) || 0) * (Number(riga.prezzo_unitario) || 0);
   if (riga.prezzo_netto_manuale !== undefined && riga.prezzo_netto_manuale !== "" && riga.prezzo_netto_manuale !== null) {
@@ -223,14 +142,12 @@ function calcolaRigaNetto(riga) {
   const dopoSconto2 = dopoSconto1 * (1 - (Number(riga.sconto2) || 0) / 100);
   return { totaleListino, netto: dopoSconto2 };
 }
-
 function calcolaValoreVoce(modalita, percentuale, valoreEuro, base) {
   if (modalita === "nascosto" || modalita === "escluso") return 0;
   if (modalita === "percentuale") return base * ((Number(percentuale) || 0) / 100);
   if (modalita === "euro") return Number(valoreEuro) || 0;
   return 0;
 }
-
 function calcolaTotaliPreventivo(t, righeArr) {
   const totaleNetto = righeArr.reduce((sum, riga) => sum + calcolaRigaNetto(riga).netto, 0);
   const valoreImballo = calcolaValoreVoce(t.imballo_modalita, t.imballo_percentuale, t.imballo_valore, totaleNetto);
@@ -241,11 +158,8 @@ function calcolaTotaliPreventivo(t, righeArr) {
   const totaleFinale = sub2 + valoreIva;
   return { totaleNetto, valoreImballo, valoreTrasporto, valoreIva, totaleFinale };
 }
-
 function combinaRicaviPerAzienda(ordini, preventivi, aziendaId) {
-  return ordini
-    .filter((ordine) => ordine.azienda_id === aziendaId)
-    .map((ordine) => ({ cliente_id: ordine.cliente_id, importo: Number(ordine.importo) || 0, data: ordine.data_ordine }));
+  return ordini.filter((o) => o.azienda_id === aziendaId).map((o) => ({ cliente_id: o.cliente_id, importo: Number(o.importo) || 0, data: o.data_ordine }));
 }
 
 function generaStampaHTML(preventivo, clienti, aziende) {
@@ -256,59 +170,46 @@ function generaStampaHTML(preventivo, clienti, aziende) {
   const soloNetto = preventivo.modalita_prezzi_pdf === "solo_netto";
 
   const intestazioneColonne = soloNetto
-    ? `<th>Img</th><th>Articolo</th><th>Descrizione</th><th>Finitura</th><th>Qtà</th><th>U.M.</th><th>Prezzo netto un.</th><th>Prezzo netto totale</th>`
-    : `<th>Img</th><th>Articolo</th><th>Descrizione</th><th>Finitura</th><th>Qtà</th><th>U.M.</th><th>Prezzo listino un.</th><th>Sc.1</th><th>Sc.2</th><th>Prezzo netto un.</th><th>Prezzo netto totale</th>`;
+    ? "<th>Img</th><th>Articolo</th><th>Descrizione</th><th>Finitura</th><th>Qtà</th><th>U.M.</th><th>Prezzo netto un.</th><th>Prezzo netto totale</th>"
+    : "<th>Img</th><th>Articolo</th><th>Descrizione</th><th>Finitura</th><th>Qtà</th><th>U.M.</th><th>Prezzo listino un.</th><th>Sc.1</th><th>Sc.2</th><th>Prezzo netto un.</th><th>Prezzo netto totale</th>";
 
-  const righeHtml = righeArr
-    .map((riga) => {
-      const { netto } = calcolaRigaNetto(riga);
-      const qta = Number(riga.quantita) || 0;
-      const nettoUnitario = qta > 0 ? netto / qta : netto;
-      const cellaImg = `<td>${riga.immagine_url ? `<img src="${riga.immagine_url}" style="max-width:60px;max-height:60px;width:auto;height:auto;object-fit:contain;border-radius:4px;" />` : ""}</td>`;
-      if (soloNetto) {
-        return `<tr>${cellaImg}<td>${riga.articolo || ""}</td><td>${riga.descrizione || ""}</td><td>${riga.finitura || ""}</td><td>${riga.quantita || ""}</td><td>${riga.unita_misura || ""}</td><td>${formattaNumero(nettoUnitario)}</td><td>${formattaNumero(netto)}</td></tr>`;
-      }
-      return `<tr>${cellaImg}<td>${riga.articolo || ""}</td><td>${riga.descrizione || ""}</td><td>${riga.finitura || ""}</td><td>${riga.quantita || ""}</td><td>${riga.unita_misura || ""}</td><td>${formattaNumero(riga.prezzo_unitario)}</td><td>${riga.sconto1 || 0}%</td><td>${riga.sconto2 || 0}%</td><td>${formattaNumero(nettoUnitario)}</td><td>${formattaNumero(netto)}</td></tr>`;
-    })
-    .join("");
-
-  const rigaVoce = (label, modalita, valore, valoreGrezzo) => {
-    if (modalita === "nascosto") return "";
-    if (modalita === "escluso") return `<div>${label}: escluso</div>`;
-    if (modalita === "euro" && valoreGrezzo !== undefined && valoreGrezzo !== "" && isNaN(parseFloat(String(valoreGrezzo).replace(",", ".")))) {
-      return `<div>${label}: ${valoreGrezzo}</div>`;
+  const righeHtml = righeArr.map((riga) => {
+    const { netto } = calcolaRigaNetto(riga);
+    const qta = Number(riga.quantita) || 0;
+    const nettoUnitario = qta > 0 ? netto / qta : netto;
+    const cellaImg = "<td>" + (riga.immagine_url ? '<img src="' + riga.immagine_url + '" style="max-width:60px;max-height:60px;width:auto;height:auto;object-fit:contain;border-radius:4px;" />' : "") + "</td>";
+    if (soloNetto) {
+      return "<tr>" + cellaImg + "<td>" + (riga.articolo || "") + "</td><td>" + (riga.descrizione || "") + "</td><td>" + (riga.finitura || "") + "</td><td>" + (riga.quantita || "") + "</td><td>" + (riga.unita_misura || "") + "</td><td>" + formattaNumero(nettoUnitario) + "</td><td>" + formattaNumero(netto) + "</td></tr>";
     }
-    return `<div>${label}: ${formattaNumero(valore)}</div>`;
-  };
+    return "<tr>" + cellaImg + "<td>" + (riga.articolo || "") + "</td><td>" + (riga.descrizione || "") + "</td><td>" + (riga.finitura || "") + "</td><td>" + (riga.quantita || "") + "</td><td>" + (riga.unita_misura || "") + "</td><td>" + formattaNumero(riga.prezzo_unitario) + "</td><td>" + (riga.sconto1 || 0) + "%</td><td>" + (riga.sconto2 || 0) + "%</td><td>" + formattaNumero(nettoUnitario) + "</td><td>" + formattaNumero(netto) + "</td></tr>";
+  }).join("");
 
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Preventivo ${preventivo.rif || ""}</title>
-  <style>
-    body{font-family:Arial, sans-serif; padding:40px; color:#1a1a1a;}
-    h1{color:#1a1a1a; font-size:22px; margin-bottom:10px; font-weight:700;}
-    p{font-size:13px; margin:6px 0; color:#1a1a1a;}
-    table{width:100%; border-collapse:collapse; margin-top:20px;}
-    th,td{border-bottom:1px solid #ddd; padding:8px; text-align:left; font-size:12px; color:#1a1a1a;}
-    th{color:#555; font-weight:600;}
-    .totali{margin-top:20px; text-align:right; font-size:13px;}
-    .totali strong{font-size:16px; color:#1a1a1a; border-top:2px solid #1a1a1a; padding-top:6px; display:inline-block;}
-  </style></head>
-  <body>
-    <h1>${azienda ? azienda.nome : ""}</h1>
-    <p style="margin-top:14px;">Data: ${preventivo.data ? new Date(preventivo.data).toLocaleDateString("it-IT") : ""}</p>
-    <p style="margin-top:10px;">Spett.le: ${cliente ? cliente.ragione_sociale : (preventivo.cliente_manuale || "")}${preventivo.rif ? ` — Rif. ${preventivo.rif}` : ""}</p>
-    <table>
-      <thead><tr>${intestazioneColonne}</tr></thead>
-      <tbody>${righeHtml}</tbody>
-    </table>
-    <div class="totali">
-      ${rigaVoce("Imballo", preventivo.imballo_modalita, tot.valoreImballo, preventivo.imballo_valore)}
-      ${rigaVoce("Trasporto", preventivo.trasporto_modalita, tot.valoreTrasporto, preventivo.trasporto_valore)}
-      ${rigaVoce("IVA", preventivo.iva_modalita, tot.valoreIva, preventivo.iva_valore)}
-      <div><strong>Totale: ${formattaNumero(tot.totaleFinale)}</strong></div>
-    </div>
-    ${preventivo.modalita_pagamento ? `<p style="margin-top:20px;"><strong>Modalità di pagamento:</strong> ${preventivo.modalita_pagamento}</p>` : ""}
-    ${preventivo.note ? `<p style="margin-top:10px;"><strong>Note:</strong> ${preventivo.note}</p>` : ""}
-  </body></html>`;
+  function rigaVoce(label, modalita, valore, valoreGrezzo) {
+    if (modalita === "nascosto") return "";
+    if (modalita === "escluso") return "<div>" + label + ": escluso</div>";
+    if (modalita === "euro" && valoreGrezzo !== undefined && valoreGrezzo !== "" && isNaN(parseFloat(String(valoreGrezzo).replace(",", ".")))) {
+      return "<div>" + label + ": " + valoreGrezzo + "</div>";
+    }
+    return "<div>" + label + ": " + formattaNumero(valore) + "</div>";
+  }
+
+  const nomeClienteStampa = cliente ? cliente.ragione_sociale : (preventivo.cliente_manuale || "");
+
+  return '<!doctype html><html><head><meta charset="utf-8"><title>Preventivo ' + (preventivo.rif || "") + '</title>' +
+    '<style>body{font-family:Arial, sans-serif; padding:40px; color:#1a1a1a;} h1{color:#1a1a1a; font-size:22px; margin-bottom:10px; font-weight:700;} p{font-size:13px; margin:6px 0; color:#1a1a1a;} table{width:100%; border-collapse:collapse; margin-top:20px;} th,td{border-bottom:1px solid #ddd; padding:8px; text-align:left; font-size:12px; color:#1a1a1a;} th{color:#555; font-weight:600;} .totali{margin-top:20px; text-align:right; font-size:13px;} .totali strong{font-size:16px; color:#1a1a1a; border-top:2px solid #1a1a1a; padding-top:6px; display:inline-block;}</style>' +
+    "</head><body>" +
+    "<h1>" + (azienda ? azienda.nome : "") + "</h1>" +
+    '<p style="margin-top:14px;">Data: ' + (preventivo.data ? new Date(preventivo.data).toLocaleDateString("it-IT") : "") + "</p>" +
+    '<p style="margin-top:10px;">Spett.le: ' + nomeClienteStampa + (preventivo.rif ? " — Rif. " + preventivo.rif : "") + "</p>" +
+    "<table><thead><tr>" + intestazioneColonne + "</tr></thead><tbody>" + righeHtml + "</tbody></table>" +
+    '<div class="totali">' +
+    rigaVoce("Imballo", preventivo.imballo_modalita, tot.valoreImballo, preventivo.imballo_valore) +
+    rigaVoce("Trasporto", preventivo.trasporto_modalita, tot.valoreTrasporto, preventivo.trasporto_valore) +
+    rigaVoce("IVA", preventivo.iva_modalita, tot.valoreIva, preventivo.iva_valore) +
+    "<div><strong>Totale: " + formattaNumero(tot.totaleFinale) + "</strong></div></div>" +
+    (preventivo.modalita_pagamento ? '<p style="margin-top:20px;"><strong>Modalità di pagamento:</strong> ' + preventivo.modalita_pagamento + "</p>" : "") +
+    (preventivo.note ? '<p style="margin-top:10px;"><strong>Note:</strong> ' + preventivo.note + "</p>" : "") +
+    "</body></html>";
 }
 
 function stampaPreventivo(preventivo, clienti, aziende) {
@@ -320,9 +221,6 @@ function stampaPreventivo(preventivo, clienti, aziende) {
   setTimeout(() => win.print(), 300);
 }
 
-// ============================================================
-// SCHERMATA DI LOGIN
-// ============================================================
 function LoginScreen({ onLogin }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -332,19 +230,16 @@ function LoginScreen({ onLogin }) {
 
   const submit = async () => {
     setError("");
-    if (!configured) {
-      setError("Configurazione Supabase mancante.");
-      return;
-    }
+    if (!configured) { setError("Configurazione Supabase mancante."); return; }
     setLoading(true);
     try {
       const client = makeSupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-      const { data, error } = await client.auth.signInWithPassword({ email, password });
-      if (error) {
-        setError(error.error_description || error.msg || "Email o password non corrette.");
+      const result = await client.auth.signInWithPassword({ email, password });
+      if (result.error) {
+        setError(result.error.error_description || result.error.msg || "Email o password non corrette.");
         return;
       }
-      onLogin(data);
+      onLogin(result.data);
     } catch (err) {
       setError("Errore di connessione a Supabase: " + (err.message || err));
     } finally {
@@ -352,69 +247,35 @@ function LoginScreen({ onLogin }) {
     }
   };
 
-  const cerchioDecorativo = (stile) => <div style={{ position: "absolute", borderRadius: "50%", ...stile }} />;
+  const cerchio1 = { position: "absolute", top: -80, left: -80, width: 260, height: 260, borderRadius: "50%", background: "radial-gradient(circle, " + COLORS.primary + "22, transparent 70%)" };
+  const cerchio2 = { position: "absolute", bottom: -100, right: -60, width: 320, height: 320, borderRadius: "50%", background: "radial-gradient(circle, " + COLORS.primaryDark + "20, transparent 70%)" };
+  const cerchio3 = { position: "absolute", top: "30%", right: "10%", width: 140, height: 140, borderRadius: "50%", background: "radial-gradient(circle, " + COLORS.primary + "15, transparent 70%)" };
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, " + COLORS.bg + " 0%, #e8f3fa 100%)", fontFamily: "Arial, sans-serif", position: "relative", overflow: "hidden" }}>
-      {cerchioDecorativo({ top: -80, left: -80, width: 260, height: 260, background: "radial-gradient(circle, " + COLORS.primary + "22, transparent 70%)" })}
-      {cerchioDecorativo({ bottom: -100, right: -60, width: 320, height: 320, background: "radial-gradient(circle, " + COLORS.primaryDark + "20, transparent 70%)" })}
-      {cerchioDecorativo({ top: "30%", right: "10%", width: 140, height: 140, background: "radial-gradient(circle, " + COLORS.primary + "15, transparent 70%)" })}
-
+      <div style={cerchio1} />
+      <div style={cerchio2} />
+      <div style={cerchio3} />
       <div style={{ width: 360, padding: 36, background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 16, boxShadow: "0 12px 40px rgba(11,123,196,0.12)", position: "relative", zIndex: 1 }}>
         <div style={{ width: 44, height: 44, borderRadius: 12, background: "linear-gradient(135deg, " + COLORS.primary + ", " + COLORS.primaryDark + ")", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
           <ShieldCheck size={22} color="#fff" />
         </div>
-
         <h1 style={{ fontSize: 21, fontWeight: 700, color: COLORS.text, marginBottom: 4 }}>CRM Arredo Bagno</h1>
         <p style={{ fontSize: 13, color: COLORS.muted, marginBottom: 24 }}>Accedi con le credenziali che ti sono state fornite</p>
-
         <label style={{ fontSize: 13, color: "#333", display: "block", marginBottom: 6 }}>Email</label>
         <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ width: "100%", padding: "10px 12px", marginBottom: 16, border: "1px solid " + COLORS.border, borderRadius: 10, fontSize: 14, boxSizing: "border-box" }} />
-
         <label style={{ fontSize: 13, color: "#333", display: "block", marginBottom: 6 }}>Password</label>
         <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ width: "100%", padding: "10px 12px", marginBottom: 16, border: "1px solid " + COLORS.border, borderRadius: 10, fontSize: 14, boxSizing: "border-box" }} />
-
         {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 12 }}>{error}</div>}
-
         <button onClick={submit} disabled={loading} style={{ width: "100%", padding: "12px 0", background: "linear-gradient(135deg, " + COLORS.primary + ", " + COLORS.primaryDark + ")", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
           {loading ? "Accesso in corso..." : "Accedi"}
         </button>
-
         <p style={{ fontSize: 11, color: "#9aa7b2", marginTop: 18, textAlign: "center" }}>Le credenziali vengono create dall'amministratore.</p>
       </div>
     </div>
   );
 }
 
-  return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: `linear-gradient(135deg, ${COLORS.bg} 0%, #e8f3fa 100%)`, fontFamily: "Arial, sans-serif", position: "relative", overflow: "hidden" }}>
-      <div style={{ position: "absolute", top: "-80px", left: "-80px", width: 260, height: 260, borderRadius: "50%", background: `radial-gradient(circle, ${COLORS.primary}22, transparent 70%)` }} />
-      <div style={{ position: "absolute", bottom: "-100px", right: "-60px", width: 320, height: 320, borderRadius: "50%", background: `radial-gradient(circle, ${COLORS.primaryDark}20, transparent 70%)` }} />
-      <div style={{ position: "absolute", top: "30%", right: "10%", width: 140, height: 140, borderRadius: "50%", background: `radial-gradient(circle, ${COLORS.primary}15, transparent 70%)` }} />
-      <div style={{ width: 360, padding: 36, background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 16, boxShadow: "0 12px 40px rgba(11,123,196,0.12)", position: "relative", zIndex: 1 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.primaryDark})`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
-          <ShieldCheck size={22} color="#fff" />
-        </div>
-        <h1 style={{ fontSize: 21, fontWeight: 700, color: COLORS.text, marginBottom: 4 }}>CRM Arredo Bagno</h1>
-        <p style={{ fontSize: 13, color: COLORS.muted, marginBottom: 24 }}>Accedi con le credenziali che ti sono state fornite</p>
-        <label style={{ fontSize: 13, color: "#333", display: "block", marginBottom: 6 }}>Email</label>
-        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ width: "100%", padding: "10px 12px", marginBottom: 16, border: `1px solid ${COLORS.border}`, borderRadius: 10, fontSize: 14, boxSizing: "border-box" }} />
-        <label style={{ fontSize: 13, color: "#333", display: "block", marginBottom: 6 }}>Password</label>
-        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ width: "100%", padding: "10px 12px", marginBottom: 16, border: `1px solid ${COLORS.border}`, borderRadius: 10, fontSize: 14, boxSizing: "border-box" }} />
-        {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 12 }}>{error}</div>}
-        <button onClick={submit} disabled={loading} style={{ width: "100%", padding: "12px 0", background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.primaryDark})`, color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-          {loading ? "Accesso in corso..." : "Accedi"}
-        </button>
-        <p style={{ fontSize: 11, color: "#9aa7b2", marginTop: 18, textAlign: "center" }}>Le credenziali vengono create dall'amministratore.</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================
-// PANNELLO ADMIN
-// ============================================================
 function AdminPanel({ session }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -426,66 +287,49 @@ function AdminPanel({ session }) {
   const loadUsers = async () => {
     setLoadingUsers(true);
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?select=email,role,created_at&order=created_at.desc`, {
-        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}` },
+      const res = await fetch(SUPABASE_URL + "/rest/v1/profiles?select=email,role,created_at&order=created_at.desc", {
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token },
       });
       const data = await res.json();
       if (res.ok) setUsers(data);
-    } catch (e) {} finally {
-      setLoadingUsers(false);
-    }
+    } catch (e) {} finally { setLoadingUsers(false); }
   };
-
   useEffect(() => { loadUsers(); }, []);
 
   const createUser = async () => {
-    setMsg(null);
-    setLoading(true);
+    setMsg(null); setLoading(true);
     try {
       const tempClient = makeSupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-      const { data, error } = await tempClient.auth.signUp({ email, password });
-      if (error) {
-        setMsg({ type: "error", text: error.error_description || error.msg || "Errore nella creazione dell'utente." });
+      const result = await tempClient.auth.signUp({ email, password });
+      if (result.error) {
+        setMsg({ type: "error", text: result.error.error_description || result.error.msg || "Errore nella creazione dell'utente." });
         return;
       }
-      setMsg({ type: "success", text: `Utente creato: ${email}.` });
-      setEmail("");
-      setPassword("");
-      loadUsers();
+      setMsg({ type: "success", text: "Utente creato: " + email });
+      setEmail(""); setPassword(""); loadUsers();
     } catch (err) {
       setMsg({ type: "error", text: "Errore di connessione: " + (err.message || err) });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   return (
     <div style={{ fontFamily: "Arial, sans-serif" }}>
       <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16 }}>Pannello Admin</h2>
-      <div style={{ maxWidth: 420, padding: 24, background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14, marginBottom: 24 }}>
+      <div style={{ maxWidth: 420, padding: 24, background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, marginBottom: 24 }}>
         <h3 style={{ fontSize: 15, color: COLORS.primary, marginBottom: 4 }}>Crea nuovo utente</h3>
-        <input type="email" placeholder="Email utente" value={email} onChange={(e) => setEmail(e.target.value)} style={{ width: "100%", padding: "10px 12px", marginBottom: 10, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 14, boxSizing: "border-box" }} />
-        <input type="text" placeholder="Password provvisoria" value={password} onChange={(e) => setPassword(e.target.value)} style={{ width: "100%", padding: "10px 12px", marginBottom: 10, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 14, boxSizing: "border-box" }} />
+        <input type="email" placeholder="Email utente" value={email} onChange={(e) => setEmail(e.target.value)} style={{ width: "100%", padding: "10px 12px", marginBottom: 10, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 14, boxSizing: "border-box" }} />
+        <input type="text" placeholder="Password provvisoria" value={password} onChange={(e) => setPassword(e.target.value)} style={{ width: "100%", padding: "10px 12px", marginBottom: 10, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 14, boxSizing: "border-box" }} />
         <button onClick={createUser} disabled={loading} style={{ padding: "10px 18px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
           {loading ? "Creazione..." : "Crea utente"}
         </button>
         {msg && <div style={{ marginTop: 12, fontSize: 12, color: msg.type === "error" ? COLORS.danger : COLORS.success }}>{msg.text}</div>}
       </div>
-      <div style={{ maxWidth: 500, padding: 24, background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14 }}>
+      <div style={{ maxWidth: 500, padding: 24, background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14 }}>
         <h3 style={{ fontSize: 15, color: COLORS.primary, marginBottom: 4 }}>Utenti creati</h3>
-        {loadingUsers ? (
-          <p style={{ fontSize: 12, color: COLORS.muted }}>Caricamento...</p>
-        ) : (
+        {loadingUsers ? <p style={{ fontSize: 12, color: COLORS.muted }}>Caricamento...</p> : (
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-            <thead><tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}><th style={{ padding: "6px 4px" }}>Email</th><th style={{ padding: "6px 4px" }}>Ruolo</th></tr></thead>
-            <tbody>
-              {users.map((u, i) => (
-                <tr key={i} style={{ borderBottom: "1px solid #f0f5f9" }}>
-                  <td style={{ padding: "6px 4px" }}>{u.email}</td>
-                  <td style={{ padding: "6px 4px" }}>{u.role}</td>
-                </tr>
-              ))}
-            </tbody>
+            <thead><tr style={{ textAlign: "left", borderBottom: "2px solid " + COLORS.border }}><th style={{ padding: "6px 4px" }}>Email</th><th style={{ padding: "6px 4px" }}>Ruolo</th></tr></thead>
+            <tbody>{users.map((u, i) => (<tr key={i} style={{ borderBottom: "1px solid #f0f5f9" }}><td style={{ padding: "6px 4px" }}>{u.email}</td><td style={{ padding: "6px 4px" }}>{u.role}</td></tr>))}</tbody>
           </table>
         )}
       </div>
@@ -493,30 +337,25 @@ function AdminPanel({ session }) {
   );
 }
 
-// ============================================================
-// DASHBOARD
-// ============================================================
 function Dashboard({ session, goTo }) {
   const [counts, setCounts] = useState({ clienti: 0, aziende: 0, visiteMese: 0, preventivi: 0 });
   const [portafoglio, setPortafoglio] = useState(0);
   const [loading, setLoading] = useState(true);
-
-  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}` });
+  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token });
 
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        const inizioMese = new Date();
-        inizioMese.setDate(1);
+        const inizioMese = new Date(); inizioMese.setDate(1);
         const inizioMeseStr = inizioMese.toISOString().slice(0, 10);
-        const [rClienti, rAziende, rVisite, rPreventivi] = await Promise.all([
-          fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id`, { headers: headers() }),
-          fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?select=id`, { headers: headers() }),
-          fetch(`${SUPABASE_URL}/rest/v1/visite?select=id&data_visita=gte.${inizioMeseStr}`, { headers: headers() }),
-          fetch(`${SUPABASE_URL}/rest/v1/preventivi?select=id,stato,fatturato,righe,imballo_modalita,imballo_percentuale,imballo_valore,trasporto_modalita,trasporto_percentuale,trasporto_valore,iva_modalita,iva_percentuale,iva_valore`, { headers: headers() }),
+        const results = await Promise.all([
+          fetch(SUPABASE_URL + "/rest/v1/clienti?select=id", { headers: headers() }),
+          fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id", { headers: headers() }),
+          fetch(SUPABASE_URL + "/rest/v1/visite?select=id&data_visita=gte." + inizioMeseStr, { headers: headers() }),
+          fetch(SUPABASE_URL + "/rest/v1/preventivi?select=id,stato,fatturato,righe,imballo_modalita,imballo_percentuale,imballo_valore,trasporto_modalita,trasporto_percentuale,trasporto_valore,iva_modalita,iva_percentuale,iva_valore", { headers: headers() }),
         ]);
-        const [dClienti, dAziende, dVisite, dPreventivi] = await Promise.all([rClienti.json(), rAziende.json(), rVisite.json(), rPreventivi.json()]);
+        const [dClienti, dAziende, dVisite, dPreventivi] = await Promise.all(results.map((r) => r.json()));
         setCounts({
           clienti: Array.isArray(dClienti) ? dClienti.length : 0,
           aziende: Array.isArray(dAziende) ? dAziende.length : 0,
@@ -525,9 +364,7 @@ function Dashboard({ session, goTo }) {
         });
         const accettatiNonFatturati = (Array.isArray(dPreventivi) ? dPreventivi : []).filter((pv) => pv.stato === "accettato" && !pv.fatturato);
         setPortafoglio(accettatiNonFatturati.reduce((s, pv) => s + calcolaTotaliPreventivo(pv, pv.righe || []).totaleFinale, 0));
-      } catch (e) {} finally {
-        setLoading(false);
-      }
+      } catch (e) {} finally { setLoading(false); }
     })();
   }, [session]);
 
@@ -540,37 +377,24 @@ function Dashboard({ session, goTo }) {
 
   return (
     <div style={{ fontFamily: "Arial, sans-serif" }}>
-      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 4 }}>Dashboard</h2>
+      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}><LayoutDashboard size={20} color={COLORS.primary} /> Dashboard</h2>
       <p style={{ color: COLORS.muted, fontSize: 13, marginBottom: 20 }}>Riepilogo generale della tua attività</p>
-
-      <div className="dashboard-card" style={{ background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.primaryDark})`, borderRadius: 14, padding: 20, marginBottom: 20, maxWidth: 320, cursor: "pointer" }} onClick={() => goTo("preventivi")}>
+      <div className="dashboard-card" style={{ background: "linear-gradient(135deg, " + COLORS.primary + ", " + COLORS.primaryDark + ")", borderRadius: 14, padding: 20, marginBottom: 20, maxWidth: 320, cursor: "pointer" }} onClick={() => goTo("preventivi")}>
         <div style={{ fontSize: 12, color: "rgba(255,255,255,0.85)" }}>Portafoglio ordini (accettati, non fatturati)</div>
         <div style={{ fontSize: 26, fontWeight: 700, color: "#fff" }}>{loading ? "…" : formattaEuro(portafoglio)}</div>
       </div>
-
       <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-        <button onClick={() => goTo("visite")} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 20px", background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.primaryDark})`, color: "#fff", border: "none", borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-          <CalendarDays size={16} /> Vai al Calendario
-        </button>
-        <button onClick={() => goTo("preventivi")} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 20px", background: "#fff", color: COLORS.primary, border: `1px solid ${COLORS.border}`, borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-          <FileText size={16} /> Nuovo Preventivo
-        </button>
-        <button onClick={() => goTo("statistiche")} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 20px", background: "#fff", color: COLORS.primary, border: `1px solid ${COLORS.border}`, borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-          <TrendingUp size={16} /> Statistiche
-        </button>
-        <button onClick={() => goTo("fatturato")} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 20px", background: "#fff", color: COLORS.primary, border: `1px solid ${COLORS.border}`, borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-          <Wallet size={16} /> Fatturato
-        </button>
+        <button onClick={() => goTo("visite")} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 20px", background: "linear-gradient(135deg, " + COLORS.primary + ", " + COLORS.primaryDark + ")", color: "#fff", border: "none", borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer" }}><CalendarDays size={16} /> Vai al Calendario</button>
+        <button onClick={() => goTo("preventivi")} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 20px", background: "#fff", color: COLORS.primary, border: "1px solid " + COLORS.border, borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer" }}><FileText size={16} /> Nuovo Preventivo</button>
+        <button onClick={() => goTo("statistiche")} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 20px", background: "#fff", color: COLORS.primary, border: "1px solid " + COLORS.border, borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer" }}><TrendingUp size={16} /> Statistiche</button>
+        <button onClick={() => goTo("fatturato")} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 20px", background: "#fff", color: COLORS.primary, border: "1px solid " + COLORS.border, borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer" }}><Wallet size={16} /> Fatturato</button>
       </div>
-
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
         {cards.map((c) => {
           const Icon = c.icon;
           return (
-            <div key={c.key} className="dashboard-card" onClick={() => goTo(c.key)} style={{ flex: "1 1 200px", minWidth: 180, background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: 20, cursor: "pointer", boxShadow: "0 4px 14px rgba(20,40,60,0.05)" }}>
-              <div style={{ width: 38, height: 38, borderRadius: 10, background: `${c.color}18`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
-                <Icon size={20} color={c.color} />
-              </div>
+            <div key={c.key} className="dashboard-card" onClick={() => goTo(c.key)} style={{ flex: "1 1 200px", minWidth: 180, background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, padding: 20, cursor: "pointer", boxShadow: "0 4px 14px rgba(20,40,60,0.05)" }}>
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: c.color + "18", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}><Icon size={20} color={c.color} /></div>
               <div style={{ fontSize: 26, fontWeight: 700, color: COLORS.text }}>{loading ? "…" : c.value}</div>
               <div style={{ fontSize: 13, color: COLORS.muted, marginTop: 2 }}>{c.label}</div>
             </div>
@@ -581,9 +405,6 @@ function Dashboard({ session, goTo }) {
   );
 }
 
-// ============================================================
-// AZIENDE MANDANTI
-// ============================================================
 function AziendeMandanti({ session }) {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -594,193 +415,103 @@ function AziendeMandanti({ session }) {
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
-
-  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}` });
+  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token });
 
   const load = async () => {
-    setLoading(true);
-    setError("");
+    setLoading(true); setError("");
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?select=*&order=nome.asc`, { headers: headers() });
+      const res = await fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=*&order=nome.asc", { headers: headers() });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Errore nel caricamento");
       setList(data);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
-
   useEffect(() => { load(); }, []);
 
   const trovaColonna = (rigaOggetto, candidati) => {
     const chiavi = Object.keys(rigaOggetto);
-    for (const cand of candidati) {
-      const trovata = chiavi.find((k) => k.toLowerCase().trim().includes(cand));
-      if (trovata) return rigaOggetto[trovata];
-    }
+    for (const cand of candidati) { const trovata = chiavi.find((k) => k.toLowerCase().trim().includes(cand)); if (trovata) return rigaOggetto[trovata]; }
     return "";
   };
 
   const caricaListino = async (aziendaId, file) => {
-    setUploadingId(aziendaId);
-    setUploadMsg(null);
+    setUploadingId(aziendaId); setUploadMsg(null);
     try {
       let righeFile = [];
       const nomeFile = file.name.toLowerCase();
       if (nomeFile.endsWith(".csv")) {
         const testo = await file.text();
-        const parsed = Papa.parse(testo, { header: true, skipEmptyLines: true, dynamicTyping: true });
-        righeFile = parsed.data;
+        righeFile = Papa.parse(testo, { header: true, skipEmptyLines: true, dynamicTyping: true }).data;
       } else if (nomeFile.endsWith(".xlsx") || nomeFile.endsWith(".xls")) {
         const buffer = await file.arrayBuffer();
         const wb = XLSX.read(buffer, { type: "array" });
-        const primoFoglio = wb.Sheets[wb.SheetNames[0]];
-        righeFile = XLSX.utils.sheet_to_json(primoFoglio, { defval: "" });
+        righeFile = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
       } else {
-        setUploadMsg({ type: "error", text: "Formato non supportato: usa file .xlsx, .xls o .csv." });
-        setUploadingId(null);
-        return;
+        setUploadMsg({ type: "error", text: "Formato non supportato: usa .xlsx, .xls o .csv." });
+        setUploadingId(null); return;
       }
-      const voci = righeFile
-        .map((rigaFile) => ({
-          azienda_id: aziendaId,
-          codice_articolo: String(trovaColonna(rigaFile, ["codice", "articolo", "cod."])).trim(),
-          descrizione: String(trovaColonna(rigaFile, ["descrizione", "desc"])).trim(),
-          prezzo_unitario: Number(String(trovaColonna(rigaFile, ["prezzo", "listino", "importo"])).replace(",", ".").replace(/[^\d.-]/g, "")) || 0,
-        }))
-        .filter((v) => v.codice_articolo);
-      if (voci.length === 0) {
-        setUploadMsg({ type: "error", text: "Nessuna riga valida trovata." });
-        setUploadingId(null);
-        return;
-      }
-      await fetch(`${SUPABASE_URL}/rest/v1/listini?azienda_id=eq.${aziendaId}`, { method: "DELETE", headers: headers() });
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/listini`, {
-        method: "POST",
-        headers: { ...headers(), Prefer: "return=representation" },
-        body: JSON.stringify(voci),
-      });
+      const voci = righeFile.map((r) => ({
+        azienda_id: aziendaId,
+        codice_articolo: String(trovaColonna(r, ["codice", "articolo", "cod."])).trim(),
+        descrizione: String(trovaColonna(r, ["descrizione", "desc"])).trim(),
+        prezzo_unitario: Number(String(trovaColonna(r, ["prezzo", "listino", "importo"])).replace(",", ".").replace(/[^\d.-]/g, "")) || 0,
+      })).filter((v) => v.codice_articolo);
+      if (voci.length === 0) { setUploadMsg({ type: "error", text: "Nessuna riga valida trovata." }); setUploadingId(null); return; }
+      await fetch(SUPABASE_URL + "/rest/v1/listini?azienda_id=eq." + aziendaId, { method: "DELETE", headers: headers() });
+      const res = await fetch(SUPABASE_URL + "/rest/v1/listini", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(voci) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Errore nel salvataggio del listino");
-      setUploadMsg({ type: "success", text: `Listino caricato: ${voci.length} articoli.` });
+      setUploadMsg({ type: "success", text: "Listino caricato: " + voci.length + " articoli." });
     } catch (err) {
       setUploadMsg({ type: "error", text: err.message || "Errore nel caricamento del file." });
-    } finally {
-      setUploadingId(null);
-    }
+    } finally { setUploadingId(null); }
   };
 
-  const resetForm = () => { setForm(emptyForm); setEditingId(null); setSediForm([]); setSediEsistenti([]); setNuovaSedeForm({ nome_sede: "", indirizzo: "" }); };
-
-  const aggiungiSedeAlForm = () => {
-    if (!nuovaSedeForm.indirizzo.trim()) return;
-    setSediForm((s) => [...s, nuovaSedeForm]);
-    setNuovaSedeForm({ nome_sede: "", indirizzo: "" });
-  };
-
-  const rimuoviSedeDalForm = (idx) => {
-    setSediForm((s) => s.filter((_, i) => i !== idx));
-  };
-
-  const aggiungiSedeSubito = async () => {
-    if (!nuovaSedeForm.indirizzo.trim() || !editingId) return;
-    try {
-      const coords = await geocodificaIndirizzo(nuovaSedeForm.indirizzo);
-      await fetch(`${SUPABASE_URL}/rest/v1/sedi_cliente`, {
-        method: "POST",
-        headers: { ...headers(), Prefer: "return=representation" },
-        body: JSON.stringify({
-          cliente_id: editingId,
-          nome_sede: nuovaSedeForm.nome_sede || null,
-          indirizzo: nuovaSedeForm.indirizzo,
-          latitudine: coords ? coords.lat : null,
-          longitudine: coords ? coords.lon : null,
-        }),
-      });
-      setNuovaSedeForm({ nome_sede: "", indirizzo: "" });
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/sedi_cliente?cliente_id=eq.${editingId}&select=*`, { headers: headers() });
-      const data = await res.json();
-      if (res.ok) setSediEsistenti(data);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  const rimuoviSedeEsistente = async (id) => {
-    try {
-      await fetch(`${SUPABASE_URL}/rest/v1/sedi_cliente?id=eq.${id}`, { method: "DELETE", headers: headers() });
-      setSediEsistenti((s) => s.filter((x) => x.id !== id));
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
+  const resetForm = () => { setForm(emptyForm); setEditingId(null); };
   const save = async () => {
     if (!form.nome.trim()) { setError("Il nome azienda è obbligatorio."); return; }
-    setSaving(true);
-    setError("");
+    setSaving(true); setError("");
     try {
       const body = {
         nome: form.nome,
         sconto1: form.sconto1 !== "" ? Number(form.sconto1) : null,
         sconto2: form.sconto2 !== "" ? Number(form.sconto2) : null,
         imballo_percentuale: form.imballo_percentuale !== "" ? Number(form.imballo_percentuale) : null,
-        trasporto: form.trasporto || null,
-        resi: form.resi || null,
-        note: form.note || null,
+        trasporto: form.trasporto || null, resi: form.resi || null, note: form.note || null,
         colore: form.colore || "#0b7bc4",
       };
-      let res;
-      if (editingId) {
-        res = await fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?id=eq.${editingId}`, { method: "PATCH", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
-      } else {
-        res = await fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti`, { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
-      }
+      const res = editingId
+        ? await fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?id=eq." + editingId, { method: "PATCH", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) })
+        : await fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Errore nel salvataggio");
-      resetForm();
-      load();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
+      resetForm(); load();
+    } catch (err) { setError(err.message); } finally { setSaving(false); }
   };
-
   const edit = (azienda) => {
     setEditingId(azienda.id);
     setForm({
-      nome: azienda.nome || "",
-      sconto1: azienda.sconto1 ?? "",
-      sconto2: azienda.sconto2 ?? "",
-      imballo_percentuale: azienda.imballo_percentuale ?? "",
-      trasporto: azienda.trasporto || "",
-      resi: azienda.resi || "",
-      note: azienda.note || "",
-      colore: azienda.colore || "#0b7bc4",
+      nome: azienda.nome || "", sconto1: azienda.sconto1 ?? "", sconto2: azienda.sconto2 ?? "",
+      imballo_percentuale: azienda.imballo_percentuale ?? "", trasporto: azienda.trasporto || "",
+      resi: azienda.resi || "", note: azienda.note || "", colore: azienda.colore || "#0b7bc4",
     });
   };
-
   const remove = async (id) => {
     if (!window.confirm("Eliminare questa azienda?")) return;
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?id=eq.${id}`, { method: "DELETE", headers: headers() });
+      const res = await fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?id=eq." + id, { method: "DELETE", headers: headers() });
       if (!res.ok) throw new Error("Errore nell'eliminazione");
       load();
-    } catch (err) {
-      setError(err.message);
-    }
+    } catch (err) { setError(err.message); }
   };
 
-  const inputStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
+  const inputStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
 
   return (
     <div style={{ fontFamily: "Arial, sans-serif" }}>
       <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}><Building2 size={20} color={COLORS.primary} /> Aziende mandanti</h2>
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 280px", background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, maxWidth: 340 }}>
+        <div style={{ flex: "1 1 280px", background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, maxWidth: 340 }}>
           <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>{editingId ? "Modifica azienda" : "Nuova azienda"}</h3>
           <input placeholder="Nome azienda *" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} style={inputStyle} />
           <input placeholder="Sconto 1 (%)" value={form.sconto1} onChange={(e) => setForm({ ...form, sconto1: e.target.value })} style={inputStyle} />
@@ -789,39 +520,23 @@ function AziendeMandanti({ session }) {
           <input placeholder="Trasporto (policy)" value={form.trasporto} onChange={(e) => setForm({ ...form, trasporto: e.target.value })} style={inputStyle} />
           <input placeholder="Resi (policy)" value={form.resi} onChange={(e) => setForm({ ...form, resi: e.target.value })} style={inputStyle} />
           <textarea placeholder="Note" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} style={{ ...inputStyle, minHeight: 60 }} />
-          <label style={{ fontSize: 12, color: "#333", display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-            Colore identificativo
+          <label style={{ fontSize: 12, color: "#333", display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>Colore identificativo
             <input type="color" value={form.colore} onChange={(e) => setForm({ ...form, colore: e.target.value })} style={{ width: 40, height: 28, border: "none", padding: 0, cursor: "pointer" }} />
           </label>
           {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 10 }}>{error}</div>}
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={save} disabled={saving} style={{ padding: "9px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-              {saving ? "Salvataggio..." : editingId ? "Salva modifiche" : "Aggiungi azienda"}
-            </button>
-            {editingId && (
-              <button onClick={resetForm} style={{ padding: "9px 16px", background: "#fff", color: COLORS.primary, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13, cursor: "pointer" }}>Annulla</button>
-            )}
+            <button onClick={save} disabled={saving} style={{ padding: "9px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>{saving ? "Salvataggio..." : editingId ? "Salva modifiche" : "Aggiungi azienda"}</button>
+            {editingId && <button onClick={resetForm} style={{ padding: "9px 16px", background: "#fff", color: COLORS.primary, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13, cursor: "pointer" }}>Annulla</button>}
           </div>
         </div>
         <div style={{ flex: "2 1 400px" }}>
           {uploadMsg && <div style={{ fontSize: 12, marginBottom: 10, color: uploadMsg.type === "error" ? COLORS.danger : COLORS.success }}>{uploadMsg.text}</div>}
-          {loading ? (
-            <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
-          ) : list.length === 0 ? (
-            <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessuna azienda ancora inserita.</p>
-          ) : (
+          {loading ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p> : list.length === 0 ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessuna azienda ancora inserita.</p> : (
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }} className="tabella-responsive">
-              <thead>
-                <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
-                  <th style={{ padding: "8px 6px" }}>Nome</th>
-                  <th style={{ padding: "8px 6px" }}>Sc. 1</th>
-                  <th style={{ padding: "8px 6px" }}>Sc. 2</th>
-                  <th style={{ padding: "8px 6px" }}>Imballo</th>
-                  <th style={{ padding: "8px 6px" }}>Trasporto</th>
-                  <th style={{ padding: "8px 6px" }}>Listino</th>
-                  <th style={{ padding: "8px 6px" }}></th>
-                </tr>
-              </thead>
+              <thead><tr style={{ textAlign: "left", borderBottom: "2px solid " + COLORS.border }}>
+                <th style={{ padding: "8px 6px" }}>Nome</th><th style={{ padding: "8px 6px" }}>Sc. 1</th><th style={{ padding: "8px 6px" }}>Sc. 2</th>
+                <th style={{ padding: "8px 6px" }}>Imballo</th><th style={{ padding: "8px 6px" }}>Trasporto</th><th style={{ padding: "8px 6px" }}>Listino</th><th style={{ padding: "8px 6px" }}></th>
+              </tr></thead>
               <tbody>
                 {list.map((azienda) => (
                   <tr key={azienda.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
@@ -831,19 +546,14 @@ function AziendeMandanti({ session }) {
                         {azienda.nome}
                       </span>
                     </td>
-                    <td style={{ padding: "8px 6px" }} data-label="Sc. 1">{azienda.sconto1 != null ? `${azienda.sconto1}%` : "-"}</td>
-                    <td style={{ padding: "8px 6px" }} data-label="Sc. 2">{azienda.sconto2 != null ? `${azienda.sconto2}%` : "-"}</td>
-                    <td style={{ padding: "8px 6px" }} data-label="Imballo">{azienda.imballo_percentuale != null ? `${azienda.imballo_percentuale}%` : "-"}</td>
+                    <td style={{ padding: "8px 6px" }} data-label="Sc. 1">{azienda.sconto1 != null ? azienda.sconto1 + "%" : "-"}</td>
+                    <td style={{ padding: "8px 6px" }} data-label="Sc. 2">{azienda.sconto2 != null ? azienda.sconto2 + "%" : "-"}</td>
+                    <td style={{ padding: "8px 6px" }} data-label="Imballo">{azienda.imballo_percentuale != null ? azienda.imballo_percentuale + "%" : "-"}</td>
                     <td style={{ padding: "8px 6px" }} data-label="Trasporto">{azienda.trasporto || "-"}</td>
                     <td style={{ padding: "8px 6px" }} data-label="Listino">
                       <label style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: COLORS.primary, cursor: "pointer" }}>
-                        <Upload size={12} />
-                        {uploadingId === azienda.id ? "Caricamento..." : "Carica"}
-                        <input type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }} onChange={(e) => {
-                          const file = e.target.files && e.target.files[0];
-                          if (file) caricaListino(azienda.id, file);
-                          e.target.value = "";
-                        }} />
+                        <Upload size={12} /> {uploadingId === azienda.id ? "Caricamento..." : "Carica"}
+                        <input type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }} onChange={(e) => { const file = e.target.files && e.target.files[0]; if (file) caricaListino(azienda.id, file); e.target.value = ""; }} />
                       </label>
                     </td>
                     <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }} data-label="">
@@ -855,18 +565,13 @@ function AziendeMandanti({ session }) {
               </tbody>
             </table>
           )}
-          <p style={{ fontSize: 11, color: COLORS.muted, marginTop: 10 }}>
-            Il file deve avere colonne riconoscibili come Codice/Articolo, Descrizione, Prezzo/Listino. Caricare un nuovo file sostituisce il listino precedente di quell'azienda.
-          </p>
+          <p style={{ fontSize: 11, color: COLORS.muted, marginTop: 10 }}>Il file deve avere colonne riconoscibili come Codice/Articolo, Descrizione, Prezzo/Listino. Caricare un nuovo file sostituisce il listino precedente.</p>
         </div>
       </div>
     </div>
   );
 }
 
-// ============================================================
-// SCHEDA CLIENTE
-// ============================================================
 function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreventivo, onApriGruppo }) {
   const [cliente, setCliente] = useState(null);
   const [gruppo, setGruppo] = useState(null);
@@ -885,155 +590,93 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
   const [formOrdine, setFormOrdine] = useState({ azienda_id: "", importo: "", data_ordine: new Date().toISOString().slice(0, 10), note: "" });
   const [fileOrdine, setFileOrdine] = useState(null);
   const [savingOrdine, setSavingOrdine] = useState(false);
-
-  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}` });
+  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token });
 
   const load = async () => {
-    setLoading(true);
-    setError("");
+    setLoading(true); setError("");
     try {
-      const [rCliente, rVisite, rPreventivi, rDocumenti, rOrdini, rAttivita, rSedi] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/clienti?id=eq.${clienteId}&select=*`, { headers: headers() }),
-        fetch(`${SUPABASE_URL}/rest/v1/visite?cliente_id=eq.${clienteId}&select=*&order=data_visita.desc`, { headers: headers() }),
-        fetch(`${SUPABASE_URL}/rest/v1/preventivi?cliente_id=eq.${clienteId}&select=*&order=data.desc`, { headers: headers() }),
-        fetch(`${SUPABASE_URL}/rest/v1/documenti_cliente?cliente_id=eq.${clienteId}&select=*&order=created_at.desc`, { headers: headers() }),
-        fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati?cliente_id=eq.${clienteId}&select=*&order=data_ordine.desc`, { headers: headers() }),
-        fetch(`${SUPABASE_URL}/rest/v1/attivita_cliente?cliente_id=eq.${clienteId}&select=*&order=data.desc`, { headers: headers() }),
-        fetch(`${SUPABASE_URL}/rest/v1/sedi_cliente?cliente_id=eq.${clienteId}&select=*&order=created_at.asc`, { headers: headers() }),
+      const results = await Promise.all([
+        fetch(SUPABASE_URL + "/rest/v1/clienti?id=eq." + clienteId + "&select=*", { headers: headers() }),
+        fetch(SUPABASE_URL + "/rest/v1/visite?cliente_id=eq." + clienteId + "&select=*&order=data_visita.desc", { headers: headers() }),
+        fetch(SUPABASE_URL + "/rest/v1/preventivi?cliente_id=eq." + clienteId + "&select=*&order=data.desc", { headers: headers() }),
+        fetch(SUPABASE_URL + "/rest/v1/documenti_cliente?cliente_id=eq." + clienteId + "&select=*&order=created_at.desc", { headers: headers() }),
+        fetch(SUPABASE_URL + "/rest/v1/ordini_confermati?cliente_id=eq." + clienteId + "&select=*&order=data_ordine.desc", { headers: headers() }),
+        fetch(SUPABASE_URL + "/rest/v1/attivita_cliente?cliente_id=eq." + clienteId + "&select=*&order=data.desc", { headers: headers() }),
+        fetch(SUPABASE_URL + "/rest/v1/sedi_cliente?cliente_id=eq." + clienteId + "&select=*&order=created_at.asc", { headers: headers() }),
       ]);
-      const [dCliente, dVisite, dPreventivi, dDocumenti, dOrdini, dAttivita, dSedi] = await Promise.all([rCliente.json(), rVisite.json(), rPreventivi.json(), rDocumenti.json(), rOrdini.json(), rAttivita.json(), rSedi.json()]);
-      setSedi(Array.isArray(dSedi) ? dSedi : []);
+      const [dCliente, dVisite, dPreventivi, dDocumenti, dOrdini, dAttivita, dSedi] = await Promise.all(results.map((r) => r.json()));
       setCliente(dCliente && dCliente[0]);
-      if (dCliente && dCliente[0] && dCliente[0].gruppo_id) {
-        try {
-          const rGruppo = await fetch(`${SUPABASE_URL}/rest/v1/gruppi_acquisto?id=eq.${dCliente[0].gruppo_id}&select=*`, { headers: headers() });
-          const dGruppo = await rGruppo.json();
-          setGruppo(dGruppo && dGruppo[0]);
-        } catch (e) {
-          setGruppo(null);
-        }
-      } else {
-        setGruppo(null);
-      }
       setVisite(Array.isArray(dVisite) ? dVisite : []);
       setPreventivi(Array.isArray(dPreventivi) ? dPreventivi : []);
       setDocumenti(Array.isArray(dDocumenti) ? dDocumenti : []);
       setOrdini(Array.isArray(dOrdini) ? dOrdini : []);
       setAttivita(Array.isArray(dAttivita) ? dAttivita : []);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+      setSedi(Array.isArray(dSedi) ? dSedi : []);
+      if (dCliente && dCliente[0] && dCliente[0].gruppo_id) {
+        try {
+          const rGruppo = await fetch(SUPABASE_URL + "/rest/v1/gruppi_acquisto?id=eq." + dCliente[0].gruppo_id + "&select=*", { headers: headers() });
+          const dGruppo = await rGruppo.json();
+          setGruppo(dGruppo && dGruppo[0]);
+        } catch (e) { setGruppo(null); }
+      } else { setGruppo(null); }
+    } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
-
   useEffect(() => { load(); }, [clienteId]);
 
   const aggiungiNota = async () => {
     if (!nota.trim()) return;
     await registraAttivita(session, clienteId, "nota", nota.trim());
-    setNota("");
-    load();
+    setNota(""); load();
   };
-
   const caricaDocumento = async (file) => {
-    setUploadingDoc(true);
-    setError("");
+    setUploadingDoc(true); setError("");
     try {
-      const path = `${clienteId}/${Date.now()}_${file.name}`;
+      const path = clienteId + "/" + Date.now() + "_" + file.name;
       await caricaFileStorage(session, "documenti-clienti", path, file);
-      await fetch(`${SUPABASE_URL}/rest/v1/documenti_cliente`, {
-        method: "POST",
-        headers: { ...headers(), Prefer: "return=representation" },
-        body: JSON.stringify({ cliente_id: clienteId, nome_file: file.name, tipo_documento: "documento", storage_path: path }),
-      });
-      await registraAttivita(session, clienteId, "documento", `Caricato documento: ${file.name}`);
+      await fetch(SUPABASE_URL + "/rest/v1/documenti_cliente", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: clienteId, nome_file: file.name, tipo_documento: "documento", storage_path: path }) });
+      await registraAttivita(session, clienteId, "documento", "Caricato documento: " + file.name);
       load();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setUploadingDoc(false);
-    }
+    } catch (err) { setError(err.message); } finally { setUploadingDoc(false); }
   };
-
   const salvaOrdine = async () => {
     if (!formOrdine.azienda_id || !formOrdine.importo) { setError("Seleziona azienda e importo."); return; }
-    setSavingOrdine(true);
-    setError("");
+    setSavingOrdine(true); setError("");
     try {
       let path = null;
-      if (fileOrdine) {
-        path = `${clienteId}/ordini/${Date.now()}_${fileOrdine.name}`;
-        await caricaFileStorage(session, "documenti-clienti", path, fileOrdine);
-      }
-      await fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati`, {
-        method: "POST",
-        headers: { ...headers(), Prefer: "return=representation" },
-        body: JSON.stringify({ cliente_id: clienteId, azienda_id: formOrdine.azienda_id, importo: Number(formOrdine.importo) || 0, data_ordine: formOrdine.data_ordine, note: formOrdine.note || null, storage_path: path }),
-      });
-      await registraAttivita(session, clienteId, "ordine", `Registrato ordine confermato di ${formattaEuro(formOrdine.importo)}`);
+      if (fileOrdine) { path = clienteId + "/ordini/" + Date.now() + "_" + fileOrdine.name; await caricaFileStorage(session, "documenti-clienti", path, fileOrdine); }
+      await fetch(SUPABASE_URL + "/rest/v1/ordini_confermati", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: clienteId, azienda_id: formOrdine.azienda_id, importo: Number(formOrdine.importo) || 0, data_ordine: formOrdine.data_ordine, note: formOrdine.note || null, storage_path: path }) });
+      await registraAttivita(session, clienteId, "ordine", "Registrato ordine confermato di " + formattaEuro(formOrdine.importo));
       setFormOrdine({ azienda_id: "", importo: "", data_ordine: new Date().toISOString().slice(0, 10), note: "" });
-      setFileOrdine(null);
-      load();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSavingOrdine(false);
-    }
+      setFileOrdine(null); load();
+    } catch (err) { setError(err.message); } finally { setSavingOrdine(false); }
   };
-
   const rimuoviOrdine = async (id) => {
     if (!window.confirm("Eliminare questo ordine confermato?")) return;
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati?id=eq.${id}`, { method: "DELETE", headers: headers() });
+      await fetch(SUPABASE_URL + "/rest/v1/ordini_confermati?id=eq." + id, { method: "DELETE", headers: headers() });
       await registraAttivita(session, clienteId, "ordine", "Ordine confermato eliminato");
       load();
-    } catch (err) {
-      setError(err.message);
-    }
+    } catch (err) { setError(err.message); }
   };
-
   const salvaSede = async () => {
     if (!nuovaSede.indirizzo.trim()) { setError("L'indirizzo della sede è obbligatorio."); return; }
-    setSalvandoSede(true);
-    setError("");
+    setSalvandoSede(true); setError("");
     try {
       const coords = await geocodificaIndirizzo(nuovaSede.indirizzo);
-      await fetch(`${SUPABASE_URL}/rest/v1/sedi_cliente`, {
-        method: "POST",
-        headers: { ...headers(), Prefer: "return=representation" },
-        body: JSON.stringify({
-          cliente_id: clienteId,
-          nome_sede: nuovaSede.nome_sede || null,
-          indirizzo: nuovaSede.indirizzo,
-          latitudine: coords ? coords.lat : null,
-          longitudine: coords ? coords.lon : null,
-        }),
-      });
-      await registraAttivita(session, clienteId, "sede", `Aggiunta sede: ${nuovaSede.nome_sede || nuovaSede.indirizzo}`);
-      setNuovaSede({ nome_sede: "", indirizzo: "" });
-      load();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSalvandoSede(false);
-    }
+      await fetch(SUPABASE_URL + "/rest/v1/sedi_cliente", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: clienteId, nome_sede: nuovaSede.nome_sede || null, indirizzo: nuovaSede.indirizzo, latitudine: coords ? coords.lat : null, longitudine: coords ? coords.lon : null }) });
+      await registraAttivita(session, clienteId, "sede", "Aggiunta sede: " + (nuovaSede.nome_sede || nuovaSede.indirizzo));
+      setNuovaSede({ nome_sede: "", indirizzo: "" }); load();
+    } catch (err) { setError(err.message); } finally { setSalvandoSede(false); }
   };
-
   const rimuoviSede = async (id) => {
     if (!window.confirm("Eliminare questa sede?")) return;
-    try {
-      await fetch(`${SUPABASE_URL}/rest/v1/sedi_cliente?id=eq.${id}`, { method: "DELETE", headers: headers() });
-      load();
-    } catch (err) {
-      setError(err.message);
-    }
+    try { await fetch(SUPABASE_URL + "/rest/v1/sedi_cliente?id=eq." + id, { method: "DELETE", headers: headers() }); load(); } catch (err) { setError(err.message); }
   };
 
-  const nomeAzienda = (id) => aziendeOptions.find((a) => a.id === id)?.nome || "—";
-  const inputStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
+  const nomeAzienda = (id) => { const a = aziendeOptions.find((x) => x.id === id); return a ? a.nome : "—"; };
+  const inputStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
   const sezione = (titolo, contenuto) => (
-    <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 16, boxShadow: "0 6px 20px rgba(20,40,60,0.06)", padding: 22, marginBottom: 20, transition: "box-shadow 0.2s ease" }}>
+    <div style={{ background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 16, boxShadow: "0 6px 20px rgba(20,40,60,0.06)", padding: 22, marginBottom: 20 }}>
       <h3 style={{ fontSize: 15, color: COLORS.text, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ width: 4, height: 16, borderRadius: 2, background: COLORS.primary, display: "inline-block" }} />
         {titolo}
@@ -1062,21 +705,13 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
           <div><strong>Email:</strong> {cliente.email || "-"}</div>
           <div><strong>Aziende collaborate:</strong> {(cliente.aziende_collaborate || []).join(", ") || "-"}</div>
           {gruppo && (
-            <div style={{ marginTop: 8 }}>
-              <strong>Gruppo d'acquisto:</strong>{" "}
-              <span onClick={() => onApriGruppo && onApriGruppo(gruppo.id)} style={{ color: COLORS.primary, cursor: onApriGruppo ? "pointer" : "default" }}>
-                {gruppo.nome}
-              </span>
+            <div style={{ marginTop: 8 }}><strong>Gruppo d'acquisto:</strong>{" "}
+              <span onClick={() => onApriGruppo && onApriGruppo(gruppo.id)} style={{ color: COLORS.primary, cursor: onApriGruppo ? "pointer" : "default" }}>{gruppo.nome}</span>
             </div>
           )}
           {cliente.condizioni_per_azienda && Object.keys(cliente.condizioni_per_azienda).length > 0 && (
-            <div style={{ marginTop: 8 }}>
-              <strong>Condizioni commerciali:</strong>
-              <ul style={{ margin: "4px 0 0 18px" }}>
-                {Object.entries(cliente.condizioni_per_azienda).map(([nomeAz, cond]) => (
-                  <li key={nomeAz} style={{ fontSize: 12 }}>{nomeAz}: {cond}</li>
-                ))}
-              </ul>
+            <div style={{ marginTop: 8 }}><strong>Condizioni commerciali:</strong>
+              <ul style={{ margin: "4px 0 0 18px" }}>{Object.entries(cliente.condizioni_per_azienda).map(([nomeAz, cond]) => (<li key={nomeAz} style={{ fontSize: 12 }}>{nomeAz}: {cond}</li>))}</ul>
             </div>
           )}
           <div style={{ marginTop: 8 }}><strong>Competitor:</strong> {(cliente.competitor || []).join(", ") || "-"}</div>
@@ -1084,13 +719,27 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
         </div>
       ))}
 
+      {sezione("Sedi / Filiali", (
+        <div>
+          {sedi.length === 0 ? <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 12 }}>Nessuna sede aggiuntiva inserita.</p> : (
+            sedi.map((s) => (
+              <div key={s.id} style={{ fontSize: 12, padding: "8px 0", borderBottom: "1px solid #f0f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span><strong>{s.nome_sede || "Sede"}</strong> — {s.indirizzo}</span>
+                <button onClick={() => rimuoviSede(s.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 11 }}>Elimina</button>
+              </div>
+            ))
+          )}
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid " + COLORS.border, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <input placeholder="Nome sede (es. Filiale Nord)" value={nuovaSede.nome_sede} onChange={(e) => setNuovaSede({ ...nuovaSede, nome_sede: e.target.value })} style={{ ...inputStyle, width: 180, marginBottom: 0 }} />
+            <input placeholder="Indirizzo *" value={nuovaSede.indirizzo} onChange={(e) => setNuovaSede({ ...nuovaSede, indirizzo: e.target.value })} style={{ ...inputStyle, width: 220, marginBottom: 0 }} />
+            <button onClick={salvaSede} disabled={salvandoSede} style={{ padding: "8px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{salvandoSede ? "Salvataggio..." : "Aggiungi sede"}</button>
+          </div>
+        </div>
+      ))}
+
       {sezione("Storico visite", (
         visite.length === 0 ? <p style={{ fontSize: 12, color: COLORS.muted }}>Nessuna visita registrata.</p> : (
-          visite.map((v) => (
-            <div key={v.id} style={{ fontSize: 12, padding: "8px 0", borderBottom: "1px solid #f0f5f9" }}>
-              <strong>{new Date(v.data_visita).toLocaleDateString("it-IT")}</strong>{v.argomenti_trattati ? ` — ${v.argomenti_trattati}` : ""}
-            </div>
-          ))
+          visite.map((v) => (<div key={v.id} style={{ fontSize: 12, padding: "8px 0", borderBottom: "1px solid #f0f5f9" }}><strong>{new Date(v.data_visita).toLocaleDateString("it-IT")}</strong>{v.argomenti_trattati ? " — " + v.argomenti_trattati : ""}</div>))
         )
       ))}
 
@@ -1109,28 +758,6 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
         )
       ))}
 
-      {sezione("Sedi / Filiali", (
-        <div>
-          {sedi.length === 0 ? (
-            <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 12 }}>Nessuna sede aggiuntiva inserita.</p>
-          ) : (
-            sedi.map((s) => (
-              <div key={s.id} style={{ fontSize: 12, padding: "8px 0", borderBottom: "1px solid #f0f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span><strong>{s.nome_sede || "Sede"}</strong> — {s.indirizzo}</span>
-                <button onClick={() => rimuoviSede(s.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 11 }}>Elimina</button>
-              </div>
-            ))
-          )}
-          <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${COLORS.border}`, display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <input placeholder="Nome sede (es. Filiale Nord)" value={nuovaSede.nome_sede} onChange={(e) => setNuovaSede({ ...nuovaSede, nome_sede: e.target.value })} style={{ ...inputStyle, width: 180, marginBottom: 0 }} />
-            <input placeholder="Indirizzo *" value={nuovaSede.indirizzo} onChange={(e) => setNuovaSede({ ...nuovaSede, indirizzo: e.target.value })} style={{ ...inputStyle, width: 220, marginBottom: 0 }} />
-            <button onClick={salvaSede} disabled={salvandoSede} style={{ padding: "8px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-              {salvandoSede ? "Salvataggio..." : "Aggiungi sede"}
-            </button>
-          </div>
-        </div>
-      ))}
-
       {sezione("Ordini confermati", (
         <div>
           {ordini.length === 0 ? <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 12 }}>Nessun ordine confermato ancora.</p> : (
@@ -1145,7 +772,7 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
               </div>
             ))
           )}
-          <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${COLORS.border}` }}>
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid " + COLORS.border }}>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <select value={formOrdine.azienda_id} onChange={(e) => setFormOrdine({ ...formOrdine, azienda_id: e.target.value })} style={{ ...inputStyle, width: 160, marginBottom: 0 }}>
                 <option value="">-- Azienda --</option>
@@ -1157,9 +784,7 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
                 <Upload size={13} /> {fileOrdine ? fileOrdine.name.slice(0, 16) : "PDF ordine"}
                 <input type="file" accept="application/pdf" style={{ display: "none" }} onChange={(e) => setFileOrdine((e.target.files && e.target.files[0]) || null)} />
               </label>
-              <button onClick={salvaOrdine} disabled={savingOrdine} style={{ padding: "8px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                {savingOrdine ? "Salvataggio..." : "Registra ordine"}
-              </button>
+              <button onClick={salvaOrdine} disabled={savingOrdine} style={{ padding: "8px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{savingOrdine ? "Salvataggio..." : "Registra ordine"}</button>
             </div>
           </div>
         </div>
@@ -1168,20 +793,11 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
       {sezione("Documenti", (
         <div>
           {documenti.length === 0 ? <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 12 }}>Nessun documento caricato.</p> : (
-            documenti.map((d) => (
-              <div key={d.id} style={{ fontSize: 12, padding: "6px 0", borderBottom: "1px solid #f0f5f9" }}>
-                <a href={urlPubblicoStorage("documenti-clienti", d.storage_path)} target="_blank" rel="noreferrer" style={{ color: COLORS.primary }}>{d.nome_file}</a>
-                <span style={{ color: COLORS.muted, marginLeft: 8 }}>{new Date(d.created_at).toLocaleDateString("it-IT")}</span>
-              </div>
-            ))
+            documenti.map((d) => (<div key={d.id} style={{ fontSize: 12, padding: "6px 0", borderBottom: "1px solid #f0f5f9" }}><a href={urlPubblicoStorage("documenti-clienti", d.storage_path)} target="_blank" rel="noreferrer" style={{ color: COLORS.primary }}>{d.nome_file}</a><span style={{ color: COLORS.muted, marginLeft: 8 }}>{new Date(d.created_at).toLocaleDateString("it-IT")}</span></div>))
           )}
           <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: COLORS.primary, cursor: "pointer", marginTop: 10 }}>
             <Upload size={13} /> {uploadingDoc ? "Caricamento..." : "Carica documento"}
-            <input type="file" style={{ display: "none" }} onChange={(e) => {
-              const file = e.target.files && e.target.files[0];
-              if (file) caricaDocumento(file);
-              e.target.value = "";
-            }} />
+            <input type="file" style={{ display: "none" }} onChange={(e) => { const file = e.target.files && e.target.files[0]; if (file) caricaDocumento(file); e.target.value = ""; }} />
           </label>
         </div>
       ))}
@@ -1193,11 +809,7 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
             <button onClick={aggiungiNota} style={{ padding: "8px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Aggiungi</button>
           </div>
           {attivita.length === 0 ? <p style={{ fontSize: 12, color: COLORS.muted }}>Nessuna attività registrata.</p> : (
-            attivita.map((att) => (
-              <div key={att.id} style={{ fontSize: 12, padding: "6px 0", borderBottom: "1px solid #f0f5f9" }}>
-                <span style={{ color: COLORS.muted }}>{new Date(att.data).toLocaleDateString("it-IT")}</span> — {att.descrizione}
-              </div>
-            ))
+            attivita.map((att) => (<div key={att.id} style={{ fontSize: 12, padding: "6px 0", borderBottom: "1px solid #f0f5f9" }}><span style={{ color: COLORS.muted }}>{new Date(att.data).toLocaleDateString("it-IT")}</span> — {att.descrizione}</div>))
           )}
         </div>
       ))}
@@ -1205,9 +817,8 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
   );
 }
 
-// ============================================================
-// ANAGRAFICA CLIENTI
-// ============================================================
+const CLASSIFICAZIONI_ELENCO = CLASSIFICAZIONI;
+
 function ClientiAnagrafica({ session, apriPreventivo, apriGruppo }) {
   const [list, setList] = useState([]);
   const [aziendeOptions, setAziendeOptions] = useState([]);
@@ -1222,32 +833,46 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo }) {
   const [sediForm, setSediForm] = useState([]);
   const [sediEsistenti, setSediEsistenti] = useState([]);
   const [nuovaSedeForm, setNuovaSedeForm] = useState({ nome_sede: "", indirizzo: "" });
-
-  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}` });
+  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token });
 
   const load = async () => {
-    setLoading(true);
-    setError("");
+    setLoading(true); setError("");
     try {
-      const [resClienti, resAziende] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/clienti?select=*&order=ragione_sociale.asc`, { headers: headers() }),
-        fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?select=id,nome&order=nome.asc`, { headers: headers() }),
+      const results = await Promise.all([
+        fetch(SUPABASE_URL + "/rest/v1/clienti?select=*&order=ragione_sociale.asc", { headers: headers() }),
+        fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome&order=nome.asc", { headers: headers() }),
       ]);
-      const dataClienti = await resClienti.json();
-      const dataAziende = await resAziende.json();
-      if (!resClienti.ok) throw new Error(dataClienti.message || "Errore nel caricamento clienti");
+      const dataClienti = await results[0].json();
+      const dataAziende = await results[1].json();
+      if (!results[0].ok) throw new Error(dataClienti.message || "Errore nel caricamento clienti");
       setList(dataClienti);
-      if (resAziende.ok) setAziendeOptions(dataAziende);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+      if (results[1].ok) setAziendeOptions(dataAziende);
+    } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
-
   useEffect(() => { load(); }, []);
 
-  const resetForm = () => { setForm(emptyForm); setEditingId(null); };
+  const resetForm = () => { setForm(emptyForm); setEditingId(null); setSediForm([]); setSediEsistenti([]); setNuovaSedeForm({ nome_sede: "", indirizzo: "" }); };
+
+  const aggiungiSedeAlForm = () => {
+    if (!nuovaSedeForm.indirizzo.trim()) return;
+    setSediForm((s) => [...s, nuovaSedeForm]);
+    setNuovaSedeForm({ nome_sede: "", indirizzo: "" });
+  };
+  const rimuoviSedeDalForm = (idx) => setSediForm((s) => s.filter((_, i) => i !== idx));
+  const aggiungiSedeSubito = async () => {
+    if (!nuovaSedeForm.indirizzo.trim() || !editingId) return;
+    try {
+      const coords = await geocodificaIndirizzo(nuovaSedeForm.indirizzo);
+      await fetch(SUPABASE_URL + "/rest/v1/sedi_cliente", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: editingId, nome_sede: nuovaSedeForm.nome_sede || null, indirizzo: nuovaSedeForm.indirizzo, latitudine: coords ? coords.lat : null, longitudine: coords ? coords.lon : null }) });
+      setNuovaSedeForm({ nome_sede: "", indirizzo: "" });
+      const res = await fetch(SUPABASE_URL + "/rest/v1/sedi_cliente?cliente_id=eq." + editingId + "&select=*", { headers: headers() });
+      const data = await res.json();
+      if (res.ok) setSediEsistenti(data);
+    } catch (err) { setError(err.message); }
+  };
+  const rimuoviSedeEsistente = async (id) => {
+    try { await fetch(SUPABASE_URL + "/rest/v1/sedi_cliente?id=eq." + id, { method: "DELETE", headers: headers() }); setSediEsistenti((s) => s.filter((x) => x.id !== id)); } catch (err) { setError(err.message); }
+  };
 
   const toggleAzienda = (nome) => {
     setForm((f) => {
@@ -1258,36 +883,25 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo }) {
       return { ...f, aziende_collaborate: nuoveAziende, condizioni_per_azienda: nuoveCondizioni };
     });
   };
-
-  const aggiornaCondizione = (nome, testo) => {
-    setForm((f) => ({ ...f, condizioni_per_azienda: { ...f.condizioni_per_azienda, [nome]: testo } }));
-  };
+  const aggiornaCondizione = (nome, testo) => setForm((f) => ({ ...f, condizioni_per_azienda: { ...f.condizioni_per_azienda, [nome]: testo } }));
 
   const save = async () => {
     if (!form.ragione_sociale.trim()) { setError("La ragione sociale è obbligatoria."); return; }
-    setSaving(true);
-    setError("");
+    setSaving(true); setError("");
     try {
       let coords = null;
       if (form.indirizzo && form.indirizzo.trim()) coords = await geocodificaIndirizzo(form.indirizzo);
       const body = {
-        ragione_sociale: form.ragione_sociale,
-        indirizzo: form.indirizzo || null,
-        telefono: form.telefono || null,
-        email: form.email || null,
-        classificazione: form.classificazione || null,
-        aziende_collaborate: form.aziende_collaborate,
-        condizioni_per_azienda: form.condizioni_per_azienda,
+        ragione_sociale: form.ragione_sociale, indirizzo: form.indirizzo || null, telefono: form.telefono || null,
+        email: form.email || null, classificazione: form.classificazione || null,
+        aziende_collaborate: form.aziende_collaborate, condizioni_per_azienda: form.condizioni_per_azienda,
         competitor: form.competitor ? form.competitor.split(",").map((s) => s.trim()).filter(Boolean) : [],
         note: form.note || null,
         ...(coords ? { latitudine: coords.lat, longitudine: coords.lon } : {}),
       };
-      let res;
-      if (editingId) {
-        res = await fetch(`${SUPABASE_URL}/rest/v1/clienti?id=eq.${editingId}`, { method: "PATCH", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
-      } else {
-        res = await fetch(`${SUPABASE_URL}/rest/v1/clienti`, { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
-      }
+      const res = editingId
+        ? await fetch(SUPABASE_URL + "/rest/v1/clienti?id=eq." + editingId, { method: "PATCH", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) })
+        : await fetch(SUPABASE_URL + "/rest/v1/clienti", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Errore nel salvataggio");
       const idSalvato = editingId || (data && data[0] && data[0].id);
@@ -1295,45 +909,25 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo }) {
       if (!editingId && idSalvato && sediForm.length > 0) {
         for (const sede of sediForm) {
           try {
-            const coords = await geocodificaIndirizzo(sede.indirizzo);
-            await fetch(`${SUPABASE_URL}/rest/v1/sedi_cliente`, {
-              method: "POST",
-              headers: { ...headers(), Prefer: "return=representation" },
-              body: JSON.stringify({
-                cliente_id: idSalvato,
-                nome_sede: sede.nome_sede || null,
-                indirizzo: sede.indirizzo,
-                latitudine: coords ? coords.lat : null,
-                longitudine: coords ? coords.lon : null,
-              }),
-            });
+            const coordsSede = await geocodificaIndirizzo(sede.indirizzo);
+            await fetch(SUPABASE_URL + "/rest/v1/sedi_cliente", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: idSalvato, nome_sede: sede.nome_sede || null, indirizzo: sede.indirizzo, latitudine: coordsSede ? coordsSede.lat : null, longitudine: coordsSede ? coordsSede.lon : null }) });
           } catch (e) {}
         }
       }
-      resetForm();
-      load();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
+      resetForm(); load();
+    } catch (err) { setError(err.message); } finally { setSaving(false); }
   };
 
   const edit = async (cliente) => {
     setEditingId(cliente.id);
     setForm({
-      ragione_sociale: cliente.ragione_sociale || "",
-      indirizzo: cliente.indirizzo || "",
-      telefono: cliente.telefono || "",
-      email: cliente.email || "",
-      classificazione: cliente.classificazione || "",
-      aziende_collaborate: cliente.aziende_collaborate || [],
-      condizioni_per_azienda: cliente.condizioni_per_azienda || {},
-      competitor: (cliente.competitor || []).join(", "),
-      note: cliente.note || "",
+      ragione_sociale: cliente.ragione_sociale || "", indirizzo: cliente.indirizzo || "", telefono: cliente.telefono || "",
+      email: cliente.email || "", classificazione: cliente.classificazione || "",
+      aziende_collaborate: cliente.aziende_collaborate || [], condizioni_per_azienda: cliente.condizioni_per_azienda || {},
+      competitor: (cliente.competitor || []).join(", "), note: cliente.note || "",
     });
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/sedi_cliente?cliente_id=eq.${cliente.id}&select=*`, { headers: headers() });
+      const res = await fetch(SUPABASE_URL + "/rest/v1/sedi_cliente?cliente_id=eq." + cliente.id + "&select=*", { headers: headers() });
       const data = await res.json();
       if (res.ok) setSediEsistenti(data);
     } catch (e) {}
@@ -1342,27 +936,19 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo }) {
   const remove = async (id) => {
     if (!window.confirm("Eliminare questo cliente?")) return;
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/clienti?id=eq.${id}`, { method: "DELETE", headers: headers() });
+      const res = await fetch(SUPABASE_URL + "/rest/v1/clienti?id=eq." + id, { method: "DELETE", headers: headers() });
       if (!res.ok) throw new Error("Errore nell'eliminazione");
       load();
-    } catch (err) {
-      setError(err.message);
-    }
+    } catch (err) { setError(err.message); }
   };
 
-  const inputStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
+  const inputStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
   const filteredList = filtroClassificazione ? list.filter((c) => c.classificazione === filtroClassificazione) : list;
 
   if (clienteApertoId) {
     return (
-      <SchedaCliente
-        clienteId={clienteApertoId}
-        session={session}
-        aziendeOptions={aziendeOptions}
-        onApriPreventivo={apriPreventivo}
-        onApriGruppo={apriGruppo}
-        onBack={() => { setClienteApertoId(null); load(); }}
-      />
+      <SchedaCliente clienteId={clienteApertoId} session={session} aziendeOptions={aziendeOptions} onApriPreventivo={apriPreventivo} onApriGruppo={apriGruppo}
+        onBack={() => { setClienteApertoId(null); load(); }} />
     );
   }
 
@@ -1370,7 +956,7 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo }) {
     <div style={{ fontFamily: "Arial, sans-serif" }}>
       <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}><Users size={20} color={COLORS.primary} /> Anagrafica clienti</h2>
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 300px", background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, maxWidth: 380 }}>
+        <div style={{ flex: "1 1 300px", background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, maxWidth: 380 }}>
           <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>{editingId ? "Modifica cliente" : "Nuovo cliente"}</h3>
           <input placeholder="Ragione sociale *" value={form.ragione_sociale} onChange={(e) => setForm({ ...form, ragione_sociale: e.target.value })} style={inputStyle} />
           <input placeholder="Indirizzo" value={form.indirizzo} onChange={(e) => setForm({ ...form, indirizzo: e.target.value })} style={inputStyle} />
@@ -1379,19 +965,18 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo }) {
           <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 4 }}>Classificazione</label>
           <select value={form.classificazione} onChange={(e) => setForm({ ...form, classificazione: e.target.value })} style={inputStyle}>
             <option value="">-- seleziona --</option>
-            {CLASSIFICAZIONI.map((c) => <option key={c} value={c}>{c}</option>)}
+            {CLASSIFICAZIONI_ELENCO.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
           <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 6 }}>Aziende mandanti con cui collabora</label>
-          <div style={{ marginBottom: 10, maxHeight: 220, overflowY: "auto", border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 8 }}>
+          <div style={{ marginBottom: 10, maxHeight: 220, overflowY: "auto", border: "1px solid " + COLORS.border, borderRadius: 8, padding: 8 }}>
             {aziendeOptions.length === 0 && <span style={{ fontSize: 12, color: "#9aa7b2" }}>Nessuna azienda mandante inserita ancora</span>}
             {aziendeOptions.map((a) => (
               <div key={a.id} style={{ marginBottom: 8 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, marginBottom: 4 }}>
-                  <input type="checkbox" checked={form.aziende_collaborate.includes(a.nome)} onChange={() => toggleAzienda(a.nome)} />
-                  {a.nome}
+                  <input type="checkbox" checked={form.aziende_collaborate.includes(a.nome)} onChange={() => toggleAzienda(a.nome)} /> {a.nome}
                 </label>
                 {form.aziende_collaborate.includes(a.nome) && (
-                  <input placeholder={`Condizioni commerciali con ${a.nome}`} value={form.condizioni_per_azienda[a.nome] || ""} onChange={(e) => aggiornaCondizione(a.nome, e.target.value)} style={{ ...inputStyle, marginBottom: 0, marginLeft: 22, width: "calc(100% - 22px)", fontSize: 11 }} />
+                  <input placeholder={"Condizioni commerciali con " + a.nome} value={form.condizioni_per_azienda[a.nome] || ""} onChange={(e) => aggiornaCondizione(a.nome, e.target.value)} style={{ ...inputStyle, marginBottom: 0, marginLeft: 22, width: "calc(100% - 22px)", fontSize: 11 }} />
                 )}
               </div>
             ))}
@@ -1400,16 +985,14 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo }) {
           <textarea placeholder="Note" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} style={{ ...inputStyle, minHeight: 60 }} />
 
           <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 6 }}>Sedi / Filiali aggiuntive</label>
-          <div style={{ marginBottom: 10, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 8 }}>
+          <div style={{ marginBottom: 10, border: "1px solid " + COLORS.border, borderRadius: 8, padding: 8 }}>
             {editingId ? (
-              <>
-                {sediEsistenti.map((s) => (
-                  <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, marginBottom: 4 }}>
-                    <span><strong>{s.nome_sede || "Sede"}</strong> — {s.indirizzo}</span>
-                    <button onClick={() => rimuoviSedeEsistente(s.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 11 }}>Elimina</button>
-                  </div>
-                ))}
-              </>
+              sediEsistenti.map((s) => (
+                <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, marginBottom: 4 }}>
+                  <span><strong>{s.nome_sede || "Sede"}</strong> — {s.indirizzo}</span>
+                  <button onClick={() => rimuoviSedeEsistente(s.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 11 }}>Elimina</button>
+                </div>
+              ))
             ) : (
               sediForm.map((s, idx) => (
                 <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, marginBottom: 4 }}>
@@ -1418,51 +1001,36 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo }) {
                 </div>
               ))
             )}
-            {sediEsistenti.length === 0 && sediForm.length === 0 && (
-              <span style={{ fontSize: 11, color: "#9aa7b2" }}>Nessuna sede aggiuntiva.</span>
-            )}
+            {sediEsistenti.length === 0 && sediForm.length === 0 && <span style={{ fontSize: 11, color: "#9aa7b2" }}>Nessuna sede aggiuntiva.</span>}
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
               <input placeholder="Nome sede (opz.)" value={nuovaSedeForm.nome_sede} onChange={(e) => setNuovaSedeForm({ ...nuovaSedeForm, nome_sede: e.target.value })} style={{ ...inputStyle, marginBottom: 0, width: 110, fontSize: 11 }} />
               <input placeholder="Indirizzo" value={nuovaSedeForm.indirizzo} onChange={(e) => setNuovaSedeForm({ ...nuovaSedeForm, indirizzo: e.target.value })} style={{ ...inputStyle, marginBottom: 0, width: 140, fontSize: 11 }} />
-              <button onClick={editingId ? aggiungiSedeSubito : aggiungiSedeAlForm} style={{ padding: "6px 10px", background: "#fff", color: COLORS.primary, border: `1px solid ${COLORS.border}`, borderRadius: 6, fontSize: 11, cursor: "pointer" }}>+ Aggiungi</button>
+              <button onClick={editingId ? aggiungiSedeSubito : aggiungiSedeAlForm} style={{ padding: "6px 10px", background: "#fff", color: COLORS.primary, border: "1px solid " + COLORS.border, borderRadius: 6, fontSize: 11, cursor: "pointer" }}>+ Aggiungi</button>
             </div>
           </div>
 
           {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 10 }}>{error}</div>}
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={save} disabled={saving} style={{ padding: "9px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-              {saving ? "Salvataggio..." : editingId ? "Salva modifiche" : "Aggiungi cliente"}
-            </button>
-            {editingId && <button onClick={resetForm} style={{ padding: "9px 16px", background: "#fff", color: COLORS.primary, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13, cursor: "pointer" }}>Annulla</button>}
+            <button onClick={save} disabled={saving} style={{ padding: "9px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>{saving ? "Salvataggio..." : editingId ? "Salva modifiche" : "Aggiungi cliente"}</button>
+            {editingId && <button onClick={resetForm} style={{ padding: "9px 16px", background: "#fff", color: COLORS.primary, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13, cursor: "pointer" }}>Annulla</button>}
           </div>
         </div>
         <div style={{ flex: "2 1 420px" }}>
           <div style={{ marginBottom: 12 }}>
             <select value={filtroClassificazione} onChange={(e) => setFiltroClassificazione(e.target.value)} style={{ ...inputStyle, maxWidth: 240, marginBottom: 0 }}>
               <option value="">Tutte le classificazioni</option>
-              {CLASSIFICAZIONI.map((c) => <option key={c} value={c}>{c}</option>)}
+              {CLASSIFICAZIONI_ELENCO.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
-          {loading ? (
-            <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
-          ) : filteredList.length === 0 ? (
-            <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun cliente trovato.</p>
-          ) : (
+          {loading ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p> : filteredList.length === 0 ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun cliente trovato.</p> : (
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }} className="tabella-responsive">
-              <thead>
-                <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
-                  <th style={{ padding: "8px 6px" }}>Ragione sociale</th>
-                  <th style={{ padding: "8px 6px" }}>Classificazione</th>
-                  <th style={{ padding: "8px 6px" }}>Telefono</th>
-                  <th style={{ padding: "8px 6px" }}></th>
-                </tr>
-              </thead>
+              <thead><tr style={{ textAlign: "left", borderBottom: "2px solid " + COLORS.border }}>
+                <th style={{ padding: "8px 6px" }}>Ragione sociale</th><th style={{ padding: "8px 6px" }}>Classificazione</th><th style={{ padding: "8px 6px" }}>Telefono</th><th style={{ padding: "8px 6px" }}></th>
+              </tr></thead>
               <tbody>
                 {filteredList.map((c) => (
                   <tr key={c.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
-                    <td style={{ padding: "8px 6px", fontWeight: 600 }} data-label="Cliente">
-                      <span onClick={() => setClienteApertoId(c.id)} style={{ cursor: "pointer", color: COLORS.primary }}>{c.ragione_sociale}</span>
-                    </td>
+                    <td style={{ padding: "8px 6px", fontWeight: 600 }} data-label="Cliente"><span onClick={() => setClienteApertoId(c.id)} style={{ cursor: "pointer", color: COLORS.primary }}>{c.ragione_sociale}</span></td>
                     <td style={{ padding: "8px 6px" }} data-label="Classificazione">{c.classificazione || "-"}</td>
                     <td style={{ padding: "8px 6px" }} data-label="Telefono">{c.telefono || "-"}</td>
                     <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }} data-label="">
@@ -1480,9 +1048,6 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo }) {
   );
 }
 
-// ============================================================
-// CALENDARIO VISITE
-// ============================================================
 function CalendarioVisite({ session }) {
   const [clienti, setClienti] = useState([]);
   const [visite, setVisite] = useState([]);
@@ -1496,66 +1061,43 @@ function CalendarioVisite({ session }) {
   const emptyForm = { data_visita: toISODate(new Date()), argomenti_trattati: "", cataloghi_lasciati: "", note: "" };
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
-
-  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}` });
+  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token });
 
   const load = async () => {
-    setLoading(true);
-    setError("");
+    setLoading(true); setError("");
     try {
-      const [resClienti, resVisite] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale&order=ragione_sociale.asc`, { headers: headers() }),
-        fetch(`${SUPABASE_URL}/rest/v1/visite?select=*&order=data_visita.asc`, { headers: headers() }),
+      const results = await Promise.all([
+        fetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale&order=ragione_sociale.asc", { headers: headers() }),
+        fetch(SUPABASE_URL + "/rest/v1/visite?select=*&order=data_visita.asc", { headers: headers() }),
       ]);
-      const dataClienti = await resClienti.json();
-      const dataVisite = await resVisite.json();
-      if (!resClienti.ok) throw new Error(dataClienti.message || "Errore nel caricamento clienti");
-      if (!resVisite.ok) throw new Error(dataVisite.message || "Errore nel caricamento visite");
-      setClienti(dataClienti);
-      setVisite(dataVisite);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+      const dataClienti = await results[0].json();
+      const dataVisite = await results[1].json();
+      if (!results[0].ok) throw new Error(dataClienti.message || "Errore nel caricamento clienti");
+      if (!results[1].ok) throw new Error(dataVisite.message || "Errore nel caricamento visite");
+      setClienti(dataClienti); setVisite(dataVisite);
+    } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
-
   useEffect(() => { load(); }, []);
 
   const save = async () => {
     if (!clienteSelezionato) { setError("Seleziona un cliente."); return; }
     if (!form.data_visita) { setError("La data della visita è obbligatoria."); return; }
-    setSaving(true);
-    setError("");
+    setSaving(true); setError("");
     try {
       const body = { cliente_id: clienteSelezionato, data_visita: form.data_visita, argomenti_trattati: form.argomenti_trattati || null, cataloghi_lasciati: form.cataloghi_lasciati || null, note: form.note || null };
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/visite`, { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
+      const res = await fetch(SUPABASE_URL + "/rest/v1/visite", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Errore nel salvataggio");
-      setForm(emptyForm);
-      setMostraForm(false);
-      load();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
+      setForm(emptyForm); setMostraForm(false); load();
+    } catch (err) { setError(err.message); } finally { setSaving(false); }
   };
-
   const remove = async (id) => {
     if (!window.confirm("Eliminare questa visita?")) return;
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/visite?id=eq.${id}`, { method: "DELETE", headers: headers() });
-      if (!res.ok) throw new Error("Errore nell'eliminazione");
-      load();
-    } catch (err) {
-      setError(err.message);
-    }
+    try { const res = await fetch(SUPABASE_URL + "/rest/v1/visite?id=eq." + id, { method: "DELETE", headers: headers() }); if (!res.ok) throw new Error("Errore nell'eliminazione"); load(); } catch (err) { setError(err.message); }
   };
 
-  const inputStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
-  const nomeCliente = (id) => clienti.find((c) => c.id === id)?.ragione_sociale || "—";
-  const nomeClientePreventivo = (p) => (p.cliente_id ? nomeCliente(p.cliente_id) : (p.cliente_manuale || "—"));
+  const inputStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
+  const nomeCliente = (id) => { const c = clienti.find((x) => x.id === id); return c ? c.ragione_sociale : "—"; };
   const visitePerGiorno = (isoDate) => visite.filter((v) => v.data_visita === isoDate);
 
   const cambiaPeriodo = (direzione) => {
@@ -1566,34 +1108,22 @@ function CalendarioVisite({ session }) {
     setCurrentDate(d);
     if (viewMode === "giorno") setGiornoSelezionato(toISODate(d));
   };
-
-  const vaiAOggi = () => {
-    const oggi = new Date();
-    setCurrentDate(oggi);
-    setGiornoSelezionato(toISODate(oggi));
-  };
-
+  const vaiAOggi = () => { const oggi = new Date(); setCurrentDate(oggi); setGiornoSelezionato(toISODate(oggi)); };
   const etichettaPeriodo = () => {
-    if (viewMode === "mese") return `${MESI[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
-    if (viewMode === "settimana") {
-      const days = getWeekDays(currentDate);
-      return `${days[0].getDate()} ${MESI[days[0].getMonth()].slice(0, 3)} - ${days[6].getDate()} ${MESI[days[6].getMonth()].slice(0, 3)} ${days[6].getFullYear()}`;
-    }
-    return `${currentDate.getDate()} ${MESI[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
+    if (viewMode === "mese") return MESI[currentDate.getMonth()] + " " + currentDate.getFullYear();
+    if (viewMode === "settimana") { const days = getWeekDays(currentDate); return days[0].getDate() + " " + MESI[days[0].getMonth()].slice(0, 3) + " - " + days[6].getDate() + " " + MESI[days[6].getMonth()].slice(0, 3) + " " + days[6].getFullYear(); }
+    return currentDate.getDate() + " " + MESI[currentDate.getMonth()] + " " + currentDate.getFullYear();
   };
-
   const oggiISO = toISODate(new Date());
 
   return (
     <div style={{ fontFamily: "Arial, sans-serif" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
         <h2 style={{ color: COLORS.text, fontSize: 20 }}>Calendario visite</h2>
-        <button onClick={() => setMostraForm((v) => !v)} style={{ padding: "9px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-          {mostraForm ? "Chiudi" : "+ Nuova visita"}
-        </button>
+        <button onClick={() => setMostraForm((v) => !v)} style={{ padding: "9px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>{mostraForm ? "Chiudi" : "+ Nuova visita"}</button>
       </div>
       {mostraForm && (
-        <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, marginBottom: 20, maxWidth: 420 }}>
+        <div style={{ background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, marginBottom: 20, maxWidth: 420 }}>
           <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>Registra / pianifica visita</h3>
           <select value={clienteSelezionato} onChange={(e) => setClienteSelezionato(e.target.value)} style={inputStyle}>
             <option value="">-- seleziona cliente --</option>
@@ -1604,9 +1134,7 @@ function CalendarioVisite({ session }) {
           <textarea placeholder="Cataloghi / listini lasciati" value={form.cataloghi_lasciati} onChange={(e) => setForm({ ...form, cataloghi_lasciati: e.target.value })} style={{ ...inputStyle, minHeight: 40 }} />
           <textarea placeholder="Note" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} style={{ ...inputStyle, minHeight: 40 }} />
           {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 10 }}>{error}</div>}
-          <button onClick={save} disabled={saving} style={{ padding: "9px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-            {saving ? "Salvataggio..." : "Salva"}
-          </button>
+          <button onClick={save} disabled={saving} style={{ padding: "9px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>{saving ? "Salvataggio..." : "Salva"}</button>
         </div>
       )}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
@@ -1618,29 +1146,25 @@ function CalendarioVisite({ session }) {
         </div>
         <div style={{ display: "flex", gap: 6 }}>
           {["mese", "settimana", "giorno"].map((m) => (
-            <button key={m} onClick={() => setViewMode(m)} style={{ padding: "7px 14px", borderRadius: 8, border: `1px solid ${COLORS.border}`, background: viewMode === m ? COLORS.primary : "#fff", color: viewMode === m ? "#fff" : COLORS.text, fontSize: 12, cursor: "pointer", textTransform: "capitalize" }}>{m}</button>
+            <button key={m} onClick={() => setViewMode(m)} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid " + COLORS.border, background: viewMode === m ? COLORS.primary : "#fff", color: viewMode === m ? "#fff" : COLORS.text, fontSize: 12, cursor: "pointer", textTransform: "capitalize" }}>{m}</button>
           ))}
         </div>
       </div>
-      {loading ? (
-        <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
-      ) : (
+      {loading ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p> : (
         <>
           {viewMode === "mese" && (
-            <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14, overflow: "hidden" }}>
+            <div style={{ background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, overflow: "hidden" }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
-                {GIORNI_SETTIMANA.map((g) => <div key={g} style={{ padding: "8px 4px", fontSize: 11, color: COLORS.muted, textAlign: "center", borderBottom: `1px solid ${COLORS.border}` }}>{g}</div>)}
+                {GIORNI_SETTIMANA.map((g) => <div key={g} style={{ padding: "8px 4px", fontSize: 11, color: COLORS.muted, textAlign: "center", borderBottom: "1px solid " + COLORS.border }}>{g}</div>)}
                 {getMonthGrid(currentDate).map((d, i) => {
                   const iso = toISODate(d);
                   const eventi = visitePerGiorno(iso);
                   const fuoriMese = d.getMonth() !== currentDate.getMonth();
                   const isOggi = iso === oggiISO;
                   return (
-                    <div key={i} onClick={() => { setGiornoSelezionato(iso); setViewMode("giorno"); setCurrentDate(d); }} style={{ minHeight: 78, padding: 6, borderRight: `1px solid ${COLORS.border}`, borderBottom: `1px solid ${COLORS.border}`, opacity: fuoriMese ? 0.4 : 1, cursor: "pointer", background: isOggi ? "#eaf5fc" : "transparent" }}>
+                    <div key={i} onClick={() => { setGiornoSelezionato(iso); setViewMode("giorno"); setCurrentDate(d); }} style={{ minHeight: 78, padding: 6, borderRight: "1px solid " + COLORS.border, borderBottom: "1px solid " + COLORS.border, opacity: fuoriMese ? 0.4 : 1, cursor: "pointer", background: isOggi ? "#eaf5fc" : "transparent" }}>
                       <div style={{ fontSize: 11, color: COLORS.text, fontWeight: isOggi ? 700 : 400, marginBottom: 4 }}>{d.getDate()}</div>
-                      {eventi.slice(0, 2).map((v) => (
-                        <div key={v.id} style={{ fontSize: 10, background: "#0b7bc418", color: COLORS.primary, borderRadius: 4, padding: "2px 4px", marginBottom: 2, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{nomeCliente(v.cliente_id)}</div>
-                      ))}
+                      {eventi.slice(0, 2).map((v) => (<div key={v.id} style={{ fontSize: 10, background: "#0b7bc418", color: COLORS.primary, borderRadius: 4, padding: "2px 4px", marginBottom: 2, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{nomeCliente(v.cliente_id)}</div>))}
                       {eventi.length > 2 && <div style={{ fontSize: 10, color: COLORS.muted }}>+{eventi.length - 2} altre</div>}
                     </div>
                   );
@@ -1655,7 +1179,7 @@ function CalendarioVisite({ session }) {
                 const eventi = visitePerGiorno(iso);
                 const isOggi = iso === oggiISO;
                 return (
-                  <div key={iso} style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 8, minHeight: 140, boxShadow: isOggi ? "0 0 0 2px #0b7bc4 inset" : "none" }}>
+                  <div key={iso} style={{ background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 10, padding: 8, minHeight: 140, boxShadow: isOggi ? "0 0 0 2px #0b7bc4 inset" : "none" }}>
                     <div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 6 }}>{GIORNI_SETTIMANA[(d.getDay() + 6) % 7]} {d.getDate()}</div>
                     {eventi.map((v) => <div key={v.id} style={{ fontSize: 11, background: "#0b7bc418", color: COLORS.primary, borderRadius: 6, padding: "4px 6px", marginBottom: 4 }}>{nomeCliente(v.cliente_id)}</div>)}
                   </div>
@@ -1665,11 +1189,9 @@ function CalendarioVisite({ session }) {
           )}
           {viewMode === "giorno" && (
             <div>
-              {visitePerGiorno(giornoSelezionato).length === 0 ? (
-                <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessuna visita in questa data.</p>
-              ) : (
+              {visitePerGiorno(giornoSelezionato).length === 0 ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessuna visita in questa data.</p> : (
                 visitePerGiorno(giornoSelezionato).map((v) => (
-                  <div key={v.id} style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 14, marginBottom: 10, boxShadow: "0 2px 8px rgba(20,40,60,0.04)" }}>
+                  <div key={v.id} style={{ background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 12, padding: 14, marginBottom: 10, boxShadow: "0 2px 8px rgba(20,40,60,0.04)" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                       <div style={{ fontWeight: 700, color: COLORS.primary, fontSize: 13 }}>{nomeCliente(v.cliente_id)}</div>
                       <button onClick={() => remove(v.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 12 }}>Elimina</button>
@@ -1688,30 +1210,19 @@ function CalendarioVisite({ session }) {
   );
 }
 
-// ============================================================
-// SELETTORE VOCE (Imballo/Trasporto/IVA)
-// ============================================================
 function SelettoreVoce({ label, modalita, percentuale, valoreEuro, onChange, inputStyle, permettiTesto, isMobile }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
       <label style={{ fontSize: 12, minWidth: 80 }}>{label}</label>
       <select value={modalita} onChange={(e) => onChange({ modalita: e.target.value })} style={{ ...inputStyle, width: isMobile ? "100%" : 130 }}>
-        <option value="escluso">Escluso</option>
-        <option value="percentuale">In %</option>
-        <option value="euro">In €</option>
-        <option value="nascosto">Non mostrare</option>
+        <option value="escluso">Escluso</option><option value="percentuale">In %</option><option value="euro">In €</option><option value="nascosto">Non mostrare</option>
       </select>
       {modalita === "percentuale" && <input type="number" value={percentuale} onChange={(e) => onChange({ percentuale: e.target.value })} style={{ ...inputStyle, width: isMobile ? "100%" : 70 }} placeholder="%" />}
-      {modalita === "euro" && (
-        <input type={permettiTesto ? "text" : "number"} value={valoreEuro} onChange={(e) => onChange({ valoreEuro: e.target.value })} style={{ ...inputStyle, width: isMobile ? "100%" : (permettiTesto ? 160 : 80) }} placeholder={permettiTesto ? "es. 50€ o a carico cliente" : "€"} />
-      )}
+      {modalita === "euro" && (<input type={permettiTesto ? "text" : "number"} value={valoreEuro} onChange={(e) => onChange({ valoreEuro: e.target.value })} style={{ ...inputStyle, width: isMobile ? "100%" : (permettiTesto ? 160 : 80) }} placeholder={permettiTesto ? "es. 50€ o a carico cliente" : "€"} />)}
     </div>
   );
 }
 
-// ============================================================
-// PREVENTIVI / OFFERTE
-// ============================================================
 function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) {
   const [clienti, setClienti] = useState([]);
   const [aziende, setAziende] = useState([]);
@@ -1723,7 +1234,6 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
   const [suggerimenti, setSuggerimenti] = useState({});
   const [caricandoImmagine, setCaricandoImmagine] = useState(null);
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" && window.innerWidth < 768);
-
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", onResize);
@@ -1731,40 +1241,33 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
   }, []);
 
   const emptyHeader = {
-    cliente_id: "", azienda_id: "", rif: "", data: new Date().toISOString().slice(0, 10),
+    cliente_id: "", cliente_manuale: "", azienda_id: "", rif: "", data: new Date().toISOString().slice(0, 10),
     imballo_modalita: "escluso", imballo_percentuale: 0, imballo_valore: 0,
     trasporto_modalita: "escluso", trasporto_percentuale: 0, trasporto_valore: 0,
     iva_modalita: "escluso", iva_percentuale: 22, iva_valore: 0,
-    modalita_pagamento: "", modalita_prezzi_pdf: "dettagliato", stato: "bozza", note: "", cliente_manuale: "",
+    modalita_pagamento: "", modalita_prezzi_pdf: "dettagliato", stato: "bozza", note: "",
   };
   const [header, setHeader] = useState(emptyHeader);
   const [righe, setRighe] = useState([nuovaRiga()]);
-
-  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}` });
+  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token });
 
   const load = async () => {
-    setLoading(true);
-    setError("");
+    setLoading(true); setError("");
     try {
-      const [resClienti, resAziende, resPreventivi] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale&order=ragione_sociale.asc`, { headers: headers() }),
-        fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?select=id,nome&order=nome.asc`, { headers: headers() }),
-        fetch(`${SUPABASE_URL}/rest/v1/preventivi?select=*&order=data.desc`, { headers: headers() }),
+      const results = await Promise.all([
+        fetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale&order=ragione_sociale.asc", { headers: headers() }),
+        fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome&order=nome.asc", { headers: headers() }),
+        fetch(SUPABASE_URL + "/rest/v1/preventivi?select=*&order=data.desc", { headers: headers() }),
       ]);
-      const dataClienti = await resClienti.json();
-      const dataAziende = await resAziende.json();
-      const dataPreventivi = await resPreventivi.json();
-      if (resClienti.ok) setClienti(dataClienti);
-      if (resAziende.ok) setAziende(dataAziende);
-      if (!resPreventivi.ok) throw new Error(dataPreventivi.message || "Errore nel caricamento");
+      const dataClienti = await results[0].json();
+      const dataAziende = await results[1].json();
+      const dataPreventivi = await results[2].json();
+      if (results[0].ok) setClienti(dataClienti);
+      if (results[1].ok) setAziende(dataAziende);
+      if (!results[2].ok) throw new Error(dataPreventivi.message || "Errore nel caricamento");
       setLista(dataPreventivi);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
-
   useEffect(() => { load(); }, []);
 
   const resetForm = () => { setHeader(emptyHeader); setRighe([nuovaRiga()]); setEditingId(null); };
@@ -1775,74 +1278,57 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
   const cercaSuggerimenti = async (rigaId, testo) => {
     if (!header.azienda_id || !testo || testo.length < 2) { setSuggerimenti((s) => ({ ...s, [rigaId]: [] })); return; }
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/listini?azienda_id=eq.${header.azienda_id}&codice_articolo=ilike.*${encodeURIComponent(testo)}*&select=*&limit=6`, { headers: headers() });
+      const res = await fetch(SUPABASE_URL + "/rest/v1/listini?azienda_id=eq." + header.azienda_id + "&codice_articolo=ilike.*" + encodeURIComponent(testo) + "*&select=*&limit=6", { headers: headers() });
       const data = await res.json();
       if (res.ok) setSuggerimenti((s) => ({ ...s, [rigaId]: data }));
     } catch (e) {}
   };
-
   const selezionaSuggerimento = (rigaId, voce) => {
     setRighe((r) => r.map((x) => (x.id === rigaId ? { ...x, articolo: voce.codice_articolo, descrizione: voce.descrizione, prezzo_unitario: voce.prezzo_unitario } : x)));
     setSuggerimenti((s) => ({ ...s, [rigaId]: [] }));
   };
-
   const caricaImmagineRiga = async (rigaId, file) => {
     setCaricandoImmagine(rigaId);
     try {
-      const path = `preventivi/${Date.now()}_${file.name}`;
+      const path = "preventivi/" + Date.now() + "_" + file.name;
       await caricaFileStorage(session, "documenti-clienti", path, file);
-      const url = urlPubblicoStorage("documenti-clienti", path);
-      aggiornaRiga(rigaId, "immagine_url", url);
-    } catch (err) {
-      setError("Errore nel caricamento immagine: " + err.message);
-    } finally {
-      setCaricandoImmagine(null);
-    }
+      aggiornaRiga(rigaId, "immagine_url", urlPubblicoStorage("documenti-clienti", path));
+    } catch (err) { setError("Errore nel caricamento immagine: " + err.message); } finally { setCaricandoImmagine(null); }
   };
 
   const tot = calcolaTotaliPreventivo(header, righe);
 
   const salva = async () => {
     if (!header.azienda_id || (!header.cliente_id && !header.cliente_manuale.trim())) { setError("Seleziona un'azienda e un cliente (dall'elenco o scritto manualmente)."); return; }
-    setSaving(true);
-    setError("");
+    setSaving(true); setError("");
     try {
       const body = {
         cliente_id: header.cliente_id || null, cliente_manuale: header.cliente_id ? null : (header.cliente_manuale || null),
-        azienda_id: header.azienda_id, rif: header.rif || null, data: header.data,
-        righe: righe,
+        azienda_id: header.azienda_id, rif: header.rif || null, data: header.data, righe: righe,
         imballo_modalita: header.imballo_modalita, imballo_percentuale: Number(header.imballo_percentuale) || 0, imballo_valore: Number(header.imballo_valore) || 0,
         trasporto_modalita: header.trasporto_modalita, trasporto_percentuale: Number(header.trasporto_percentuale) || 0, trasporto_valore: Number(header.trasporto_valore) || 0,
         iva_modalita: header.iva_modalita, iva_percentuale: Number(header.iva_percentuale) || 0, iva_valore: Number(header.iva_valore) || 0,
         modalita_pagamento: header.modalita_pagamento || null, modalita_prezzi_pdf: header.modalita_prezzi_pdf || "dettagliato",
         stato: header.stato || "bozza", note: header.note || null,
       };
-      let res;
-      if (editingId) {
-        res = await fetch(`${SUPABASE_URL}/rest/v1/preventivi?id=eq.${editingId}`, { method: "PATCH", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
-      } else {
-        res = await fetch(`${SUPABASE_URL}/rest/v1/preventivi`, { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
-      }
+      const res = editingId
+        ? await fetch(SUPABASE_URL + "/rest/v1/preventivi?id=eq." + editingId, { method: "PATCH", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) })
+        : await fetch(SUPABASE_URL + "/rest/v1/preventivi", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Errore nel salvataggio");
-      resetForm();
-      load();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
+      resetForm(); load();
+    } catch (err) { setError(err.message); } finally { setSaving(false); }
   };
 
   const modifica = (p) => {
     setEditingId(p.id);
     setHeader({
-      cliente_id: p.cliente_id || "", azienda_id: p.azienda_id || "", rif: p.rif || "", data: p.data || new Date().toISOString().slice(0, 10),
+      cliente_id: p.cliente_id || "", cliente_manuale: p.cliente_manuale || "", azienda_id: p.azienda_id || "", rif: p.rif || "", data: p.data || new Date().toISOString().slice(0, 10),
       imballo_modalita: p.imballo_modalita || "escluso", imballo_percentuale: p.imballo_percentuale || 0, imballo_valore: p.imballo_valore || 0,
       trasporto_modalita: p.trasporto_modalita || "escluso", trasporto_percentuale: p.trasporto_percentuale || 0, trasporto_valore: p.trasporto_valore || 0,
       iva_modalita: p.iva_modalita || "escluso", iva_percentuale: p.iva_percentuale ?? 22, iva_valore: p.iva_valore || 0,
       modalita_pagamento: p.modalita_pagamento || "", modalita_prezzi_pdf: p.modalita_prezzi_pdf || "dettagliato",
-      stato: p.stato || "bozza", note: p.note || "", cliente_manuale: p.cliente_manuale || "",
+      stato: p.stato || "bozza", note: p.note || "",
     });
     setRighe(p.righe && p.righe.length ? p.righe : [nuovaRiga()]);
   };
@@ -1851,7 +1337,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
     if (!preventivoIniziale) return;
     (async () => {
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/preventivi?id=eq.${preventivoIniziale}&select=*`, { headers: headers() });
+        const res = await fetch(SUPABASE_URL + "/rest/v1/preventivi?id=eq." + preventivoIniziale + "&select=*", { headers: headers() });
         const data = await res.json();
         if (res.ok && data && data[0]) modifica(data[0]);
       } catch (e) {}
@@ -1862,47 +1348,41 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
 
   const elimina = async (id) => {
     if (!window.confirm("Eliminare questo preventivo?")) return;
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/preventivi?id=eq.${id}`, { method: "DELETE", headers: headers() });
-      if (!res.ok) throw new Error("Errore nell'eliminazione");
-      load();
-    } catch (err) {
-      setError(err.message);
-    }
+    try { const res = await fetch(SUPABASE_URL + "/rest/v1/preventivi?id=eq." + id, { method: "DELETE", headers: headers() }); if (!res.ok) throw new Error("Errore nell'eliminazione"); load(); } catch (err) { setError(err.message); }
   };
 
   const segnaComeFatturato = async (p) => {
     if (!window.confirm("Creare un ordine confermato da questo preventivo?")) return;
     try {
       const totCalc = calcolaTotaliPreventivo(p, p.righe || []);
-      await fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati`, {
-        method: "POST",
-        headers: { ...headers(), Prefer: "return=representation" },
-        body: JSON.stringify({ cliente_id: p.cliente_id, azienda_id: p.azienda_id, importo: totCalc.totaleFinale, data_ordine: new Date().toISOString().slice(0, 10), note: p.rif ? `Da preventivo ${p.rif}` : "Da preventivo" }),
-      });
-      await fetch(`${SUPABASE_URL}/rest/v1/preventivi?id=eq.${p.id}`, { method: "PATCH", headers: headers(), body: JSON.stringify({ fatturato: true }) });
+      await fetch(SUPABASE_URL + "/rest/v1/ordini_confermati", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: p.cliente_id, azienda_id: p.azienda_id, importo: totCalc.totaleFinale, data_ordine: new Date().toISOString().slice(0, 10), note: p.rif ? "Da preventivo " + p.rif : "Da preventivo" }) });
+      await fetch(SUPABASE_URL + "/rest/v1/preventivi?id=eq." + p.id, { method: "PATCH", headers: headers(), body: JSON.stringify({ fatturato: true }) });
       load();
-    } catch (err) {
-      setError(err.message);
-    }
+    } catch (err) { setError(err.message); }
   };
 
-  const nomeCliente = (id) => clienti.find((c) => c.id === id)?.ragione_sociale || "—";
-  const nomeAzienda = (id) => aziende.find((a) => a.id === id)?.nome || "—";
-  const inputStyle = { padding: "6px 8px", border: `1px solid ${COLORS.border}`, borderRadius: 6, fontSize: 12, boxSizing: "border-box" };
-  const fieldStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
+  const nomeCliente = (id) => { const c = clienti.find((x) => x.id === id); return c ? c.ragione_sociale : "—"; };
   const nomeClientePreventivo = (p) => (p.cliente_id ? nomeCliente(p.cliente_id) : (p.cliente_manuale || "—"));
-
-  const rigaTotali = (label, modalita, valore) => {
+  const nomeAzienda = (id) => { const a = aziende.find((x) => x.id === id); return a ? a.nome : "—"; };
+  const inputStyle = { padding: "6px 8px", border: "1px solid " + COLORS.border, borderRadius: 6, fontSize: 12, boxSizing: "border-box" };
+  const fieldStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
+  const rigaTotali = (label, modalita, valore, valoreGrezzo) => {
     if (modalita === "nascosto") return null;
+    if (modalita === "euro" && valoreGrezzo !== undefined && valoreGrezzo !== "" && isNaN(parseFloat(String(valoreGrezzo).replace(",", ".")))) {
+      return <div style={{ color: COLORS.muted }}>{label}: {valoreGrezzo}</div>;
+    }
     return <div style={{ color: COLORS.muted }}>{label}: {modalita === "escluso" ? "escluso" : formattaEuro(valore)}</div>;
   };
+
+  const campoMobile = { width: "100%", padding: "10px", marginBottom: 8, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 14, boxSizing: "border-box" };
+  const rigaLabel = { fontSize: 11, color: COLORS.muted, marginBottom: 3, display: "block" };
 
   return (
     <div style={{ fontFamily: "Arial, sans-serif", overflowX: "hidden", width: "100%" }}>
       <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}><FileText size={20} color={COLORS.primary} /> Preventivi / Offerte</h2>
-      <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, marginBottom: 24, overflowX: "hidden" }}>
+      <div style={{ background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, marginBottom: 24, overflowX: "hidden" }}>
         <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>{editingId ? "Modifica preventivo" : "Nuovo preventivo"}</h3>
+
         <div className="form-header-preventivo" style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
           <select value={header.azienda_id} onChange={(e) => setHeader({ ...header, azienda_id: e.target.value })} style={{ ...fieldStyle, maxWidth: isMobile ? "100%" : 220 }}>
             <option value="">-- Azienda --</option>
@@ -1923,68 +1403,40 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
           <div style={{ marginBottom: 12 }}>
             {righe.map((riga, idx) => {
               const { netto } = calcolaRigaNetto(riga);
-              const campoMobile = { width: "100%", padding: "10px", marginBottom: 8, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 14, boxSizing: "border-box" };
-              const rigaLabel = { fontSize: 11, color: COLORS.muted, marginBottom: 3, display: "block" };
               return (
-                <div key={riga.id} style={{ border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 12, marginBottom: 10, background: COLORS.bg }}>
+                <div key={riga.id} style={{ border: "1px solid " + COLORS.border, borderRadius: 12, padding: 12, marginBottom: 10, background: COLORS.bg }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <span style={{ fontSize: 12, fontWeight: 700, color: COLORS.primary }}>Articolo {idx + 1}</span>
                     <button onClick={() => rimuoviRiga(riga.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 12 }}>✕ Rimuovi</button>
                   </div>
-
                   <label style={rigaLabel}>Articolo</label>
                   <div style={{ position: "relative" }}>
                     <input value={riga.articolo} onChange={(e) => { aggiornaRiga(riga.id, "articolo", e.target.value); cercaSuggerimenti(riga.id, e.target.value); }} onBlur={() => setTimeout(() => setSuggerimenti((s) => ({ ...s, [riga.id]: [] })), 150)} style={campoMobile} autoComplete="off" />
                     {suggerimenti[riga.id] && suggerimenti[riga.id].length > 0 && (
-                      <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10, background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 8, boxShadow: "0 4px 14px rgba(20,40,60,0.12)", maxHeight: 160, overflowY: "auto" }}>
-                        {suggerimenti[riga.id].map((voce) => (
-                          <div key={voce.id} onMouseDown={() => selezionaSuggerimento(riga.id, voce)} style={{ padding: "8px 10px", fontSize: 12, cursor: "pointer", borderBottom: `1px solid ${COLORS.border}` }}>
-                            <strong>{voce.codice_articolo}</strong> — {voce.descrizione} ({formattaEuro(voce.prezzo_unitario)})
-                          </div>
-                        ))}
+                      <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10, background: "#fff", border: "1px solid " + COLORS.border, borderRadius: 8, boxShadow: "0 4px 14px rgba(20,40,60,0.12)", maxHeight: 160, overflowY: "auto" }}>
+                        {suggerimenti[riga.id].map((voce) => (<div key={voce.id} onMouseDown={() => selezionaSuggerimento(riga.id, voce)} style={{ padding: "8px 10px", fontSize: 12, cursor: "pointer", borderBottom: "1px solid " + COLORS.border }}><strong>{voce.codice_articolo}</strong> — {voce.descrizione} ({formattaEuro(voce.prezzo_unitario)})</div>))}
                       </div>
                     )}
                   </div>
-
                   <label style={rigaLabel}>Descrizione</label>
                   <input value={riga.descrizione} onChange={(e) => aggiornaRiga(riga.id, "descrizione", e.target.value)} style={campoMobile} />
-
                   <label style={rigaLabel}>Finitura</label>
                   <input value={riga.finitura} onChange={(e) => aggiornaRiga(riga.id, "finitura", e.target.value)} style={campoMobile} />
-
                   <div style={{ display: "flex", gap: 8 }}>
-                    <div style={{ flex: 1 }}>
-                      <label style={rigaLabel}>Qtà</label>
-                      <input type="number" value={riga.quantita} onChange={(e) => aggiornaRiga(riga.id, "quantita", e.target.value)} style={campoMobile} />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <label style={rigaLabel}>U.M. (MQ/ML)</label>
-                      <input placeholder="es. MQ" value={riga.unita_misura} onChange={(e) => aggiornaRiga(riga.id, "unita_misura", e.target.value)} style={campoMobile} />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <label style={rigaLabel}>Prezzo un.</label>
-                      <input type="number" value={riga.prezzo_unitario} onChange={(e) => aggiornaRiga(riga.id, "prezzo_unitario", e.target.value)} style={campoMobile} />
-                    </div>
+                    <div style={{ flex: 1 }}><label style={rigaLabel}>Qtà</label><input type="number" value={riga.quantita} onChange={(e) => aggiornaRiga(riga.id, "quantita", e.target.value)} style={campoMobile} /></div>
+                    <div style={{ flex: 1 }}><label style={rigaLabel}>U.M. (MQ/ML)</label><input placeholder="es. MQ" value={riga.unita_misura} onChange={(e) => aggiornaRiga(riga.id, "unita_misura", e.target.value)} style={campoMobile} /></div>
+                    <div style={{ flex: 1 }}><label style={rigaLabel}>Prezzo un.</label><input type="number" value={riga.prezzo_unitario} onChange={(e) => aggiornaRiga(riga.id, "prezzo_unitario", e.target.value)} style={campoMobile} /></div>
                   </div>
-
                   <div style={{ display: "flex", gap: 8 }}>
-                    <div style={{ flex: 1 }}>
-                      <label style={rigaLabel}>Sc.1 %</label>
-                      <input type="number" value={riga.sconto1} onChange={(e) => aggiornaRiga(riga.id, "sconto1", e.target.value)} style={campoMobile} />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <label style={rigaLabel}>Sc.2 %</label>
-                      <input type="number" value={riga.sconto2} onChange={(e) => aggiornaRiga(riga.id, "sconto2", e.target.value)} style={campoMobile} />
-                    </div>
+                    <div style={{ flex: 1 }}><label style={rigaLabel}>Sc.1 %</label><input type="number" value={riga.sconto1} onChange={(e) => aggiornaRiga(riga.id, "sconto1", e.target.value)} style={campoMobile} /></div>
+                    <div style={{ flex: 1 }}><label style={rigaLabel}>Sc.2 %</label><input type="number" value={riga.sconto2} onChange={(e) => aggiornaRiga(riga.id, "sconto2", e.target.value)} style={campoMobile} /></div>
                   </div>
-
                   <label style={rigaLabel}>Netto manuale (opzionale)</label>
                   <input type="number" placeholder="lascia vuoto per calcolo automatico" value={riga.prezzo_netto_manuale} onChange={(e) => aggiornaRiga(riga.id, "prezzo_netto_manuale", e.target.value)} style={campoMobile} />
-
                   <label style={rigaLabel}>Immagine articolo (opzionale)</label>
                   {riga.immagine_url ? (
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                      <img src={riga.immagine_url} alt="" style={{ width: 60, height: 60, objectFit: "cover", borderRadius: 8, border: `1px solid ${COLORS.border}` }} />
+                      <img src={riga.immagine_url} alt="" style={{ width: 60, height: 60, objectFit: "cover", borderRadius: 8, border: "1px solid " + COLORS.border }} />
                       <button onClick={() => aggiornaRiga(riga.id, "immagine_url", "")} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 12 }}>Rimuovi</button>
                     </div>
                   ) : (
@@ -1993,74 +1445,64 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
                       <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const file = e.target.files && e.target.files[0]; if (file) caricaImmagineRiga(riga.id, file); e.target.value = ""; }} />
                     </label>
                   )}
-
-                  <div style={{ textAlign: "right", fontWeight: 700, color: COLORS.text, fontSize: 15, marginTop: 4 }}>
-                    Netto: {formattaEuro(netto)}
-                  </div>
+                  <div style={{ textAlign: "right", fontWeight: 700, color: COLORS.text, fontSize: 15, marginTop: 4 }}>Netto: {formattaEuro(netto)}</div>
                 </div>
               );
             })}
           </div>
         ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 12 }} className="tabella-righe-preventivo">
-          <thead>
-            <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
-              <th style={{ padding: 6 }}>Art.</th><th style={{ padding: 6 }}>Descrizione</th>              <th style={{ padding: 6 }}>Finitura</th><th style={{ padding: 6 }}>Qtà</th><th style={{ padding: 6 }}>U.M.</th>
-              <th style={{ padding: 6 }}>Prezzo un.</th><th style={{ padding: 6 }}>Sc.1 %</th><th style={{ padding: 6 }}>Sc.2 %</th>              <th style={{ padding: 6 }}>Netto manuale</th>
-              <th style={{ padding: 6 }}>Immagine</th>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 12 }} className="tabella-righe-preventivo">
+            <thead><tr style={{ textAlign: "left", borderBottom: "2px solid " + COLORS.border }}>
+              <th style={{ padding: 6 }}>Art.</th><th style={{ padding: 6 }}>Descrizione</th><th style={{ padding: 6 }}>Finitura</th><th style={{ padding: 6 }}>Qtà</th><th style={{ padding: 6 }}>U.M.</th>
+              <th style={{ padding: 6 }}>Prezzo un.</th><th style={{ padding: 6 }}>Sc.1 %</th><th style={{ padding: 6 }}>Sc.2 %</th><th style={{ padding: 6 }}>Netto manuale</th><th style={{ padding: 6 }}>Immagine</th>
               <th style={{ padding: 6 }}>Netto</th><th style={{ padding: 6 }}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {righe.map((riga) => {
-              const { netto } = calcolaRigaNetto(riga);
-              return (
-                <tr key={riga.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
-                  <td style={{ padding: 4, position: "relative" }} data-label="Articolo">
-                    <input value={riga.articolo} onChange={(e) => { aggiornaRiga(riga.id, "articolo", e.target.value); cercaSuggerimenti(riga.id, e.target.value); }} onBlur={() => setTimeout(() => setSuggerimenti((s) => ({ ...s, [riga.id]: [] })), 150)} style={{ ...inputStyle, width: 70 }} autoComplete="off" />
-                    {suggerimenti[riga.id] && suggerimenti[riga.id].length > 0 && (
-                      <div style={{ position: "absolute", top: "100%", left: 0, zIndex: 10, background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 8, boxShadow: "0 4px 14px rgba(20,40,60,0.12)", minWidth: 220, maxHeight: 160, overflowY: "auto" }}>
-                        {suggerimenti[riga.id].map((voce) => (
-                          <div key={voce.id} onMouseDown={() => selezionaSuggerimento(riga.id, voce)} style={{ padding: "6px 10px", fontSize: 11, cursor: "pointer", borderBottom: `1px solid ${COLORS.border}` }}>
-                            <strong>{voce.codice_articolo}</strong> — {voce.descrizione} ({formattaEuro(voce.prezzo_unitario)})
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </td>
-                  <td style={{ padding: 4 }} data-label="Descrizione"><input value={riga.descrizione} onChange={(e) => aggiornaRiga(riga.id, "descrizione", e.target.value)} style={{ ...inputStyle, width: 150 }} /></td>
-                  <td style={{ padding: 4 }} data-label="Finitura"><input value={riga.finitura} onChange={(e) => aggiornaRiga(riga.id, "finitura", e.target.value)} style={{ ...inputStyle, width: 70 }} /></td>
-                  <td style={{ padding: 4 }} data-label="Qtà"><input type="number" value={riga.quantita} onChange={(e) => aggiornaRiga(riga.id, "quantita", e.target.value)} style={{ ...inputStyle, width: 45 }} /></td>
-                  <td style={{ padding: 4 }} data-label="U.M."><input placeholder="MQ/ML" value={riga.unita_misura} onChange={(e) => aggiornaRiga(riga.id, "unita_misura", e.target.value)} style={{ ...inputStyle, width: 50 }} /></td>
-                  <td style={{ padding: 4 }} data-label="Prezzo un."><input type="number" value={riga.prezzo_unitario} onChange={(e) => aggiornaRiga(riga.id, "prezzo_unitario", e.target.value)} style={{ ...inputStyle, width: 65 }} /></td>
-                  <td style={{ padding: 4 }} data-label="Sc.1 %"><input type="number" value={riga.sconto1} onChange={(e) => aggiornaRiga(riga.id, "sconto1", e.target.value)} style={{ ...inputStyle, width: 50 }} /></td>
-                  <td style={{ padding: 4 }} data-label="Sc.2 %"><input type="number" value={riga.sconto2} onChange={(e) => aggiornaRiga(riga.id, "sconto2", e.target.value)} style={{ ...inputStyle, width: 50 }} /></td>
-                  <td style={{ padding: 4 }} data-label="Netto manuale"><input type="number" placeholder="opz." value={riga.prezzo_netto_manuale} onChange={(e) => aggiornaRiga(riga.id, "prezzo_netto_manuale", e.target.value)} style={{ ...inputStyle, width: 65 }} /></td>
-                  <td style={{ padding: 4 }} data-label="Immagine">
-                    {riga.immagine_url ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <img src={riga.immagine_url} alt="" style={{ width: 32, height: 32, objectFit: "cover", borderRadius: 4 }} />
-                        <button onClick={() => aggiornaRiga(riga.id, "immagine_url", "")} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 10 }}>✕</button>
-                      </div>
-                    ) : (
-                      <label style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10, color: COLORS.primary, cursor: "pointer" }}>
-                        <Upload size={11} /> {caricandoImmagine === riga.id ? "..." : "Carica"}
-                        <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const file = e.target.files && e.target.files[0]; if (file) caricaImmagineRiga(riga.id, file); e.target.value = ""; }} />
-                      </label>
-                    )}
-                  </td>
-                  <td style={{ padding: 4, fontWeight: 600 }} data-label="Netto">{formattaEuro(netto)}</td>
-                  <td style={{ padding: 4 }} data-label=""><button onClick={() => rimuoviRiga(riga.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 14 }}>✕ Rimuovi riga</button></td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+            </tr></thead>
+            <tbody>
+              {righe.map((riga) => {
+                const { netto } = calcolaRigaNetto(riga);
+                return (
+                  <tr key={riga.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
+                    <td style={{ padding: 4, position: "relative" }} data-label="Articolo">
+                      <input value={riga.articolo} onChange={(e) => { aggiornaRiga(riga.id, "articolo", e.target.value); cercaSuggerimenti(riga.id, e.target.value); }} onBlur={() => setTimeout(() => setSuggerimenti((s) => ({ ...s, [riga.id]: [] })), 150)} style={{ ...inputStyle, width: 70 }} autoComplete="off" />
+                      {suggerimenti[riga.id] && suggerimenti[riga.id].length > 0 && (
+                        <div style={{ position: "absolute", top: "100%", left: 0, zIndex: 10, background: "#fff", border: "1px solid " + COLORS.border, borderRadius: 8, boxShadow: "0 4px 14px rgba(20,40,60,0.12)", minWidth: 220, maxHeight: 160, overflowY: "auto" }}>
+                          {suggerimenti[riga.id].map((voce) => (<div key={voce.id} onMouseDown={() => selezionaSuggerimento(riga.id, voce)} style={{ padding: "6px 10px", fontSize: 11, cursor: "pointer", borderBottom: "1px solid " + COLORS.border }}><strong>{voce.codice_articolo}</strong> — {voce.descrizione} ({formattaEuro(voce.prezzo_unitario)})</div>))}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ padding: 4 }} data-label="Descrizione"><input value={riga.descrizione} onChange={(e) => aggiornaRiga(riga.id, "descrizione", e.target.value)} style={{ ...inputStyle, width: 150 }} /></td>
+                    <td style={{ padding: 4 }} data-label="Finitura"><input value={riga.finitura} onChange={(e) => aggiornaRiga(riga.id, "finitura", e.target.value)} style={{ ...inputStyle, width: 70 }} /></td>
+                    <td style={{ padding: 4 }} data-label="Qtà"><input type="number" value={riga.quantita} onChange={(e) => aggiornaRiga(riga.id, "quantita", e.target.value)} style={{ ...inputStyle, width: 45 }} /></td>
+                    <td style={{ padding: 4 }} data-label="U.M."><input placeholder="MQ/ML" value={riga.unita_misura} onChange={(e) => aggiornaRiga(riga.id, "unita_misura", e.target.value)} style={{ ...inputStyle, width: 50 }} /></td>
+                    <td style={{ padding: 4 }} data-label="Prezzo un."><input type="number" value={riga.prezzo_unitario} onChange={(e) => aggiornaRiga(riga.id, "prezzo_unitario", e.target.value)} style={{ ...inputStyle, width: 65 }} /></td>
+                    <td style={{ padding: 4 }} data-label="Sc.1 %"><input type="number" value={riga.sconto1} onChange={(e) => aggiornaRiga(riga.id, "sconto1", e.target.value)} style={{ ...inputStyle, width: 50 }} /></td>
+                    <td style={{ padding: 4 }} data-label="Sc.2 %"><input type="number" value={riga.sconto2} onChange={(e) => aggiornaRiga(riga.id, "sconto2", e.target.value)} style={{ ...inputStyle, width: 50 }} /></td>
+                    <td style={{ padding: 4 }} data-label="Netto manuale"><input type="number" placeholder="opz." value={riga.prezzo_netto_manuale} onChange={(e) => aggiornaRiga(riga.id, "prezzo_netto_manuale", e.target.value)} style={{ ...inputStyle, width: 65 }} /></td>
+                    <td style={{ padding: 4 }} data-label="Immagine">
+                      {riga.immagine_url ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <img src={riga.immagine_url} alt="" style={{ width: 32, height: 32, objectFit: "cover", borderRadius: 4 }} />
+                          <button onClick={() => aggiornaRiga(riga.id, "immagine_url", "")} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 10 }}>✕</button>
+                        </div>
+                      ) : (
+                        <label style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10, color: COLORS.primary, cursor: "pointer" }}>
+                          <Upload size={11} /> {caricandoImmagine === riga.id ? "..." : "Carica"}
+                          <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const file = e.target.files && e.target.files[0]; if (file) caricaImmagineRiga(riga.id, file); e.target.value = ""; }} />
+                        </label>
+                      )}
+                    </td>
+                    <td style={{ padding: 4, fontWeight: 600 }} data-label="Netto">{formattaEuro(netto)}</td>
+                    <td style={{ padding: 4 }} data-label=""><button onClick={() => rimuoviRiga(riga.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 14 }}>✕ Rimuovi riga</button></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
         <p style={{ fontSize: 11, color: COLORS.muted, marginTop: -6, marginBottom: 16 }}>Compila "Netto manuale" per fissare direttamente il prezzo netto di una riga.</p>
-        <button onClick={aggiungiRiga} style={{ padding: "6px 12px", background: "#fff", color: COLORS.primary, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 12, cursor: "pointer", marginBottom: 20 }}>+ Aggiungi riga</button>
+        <button onClick={aggiungiRiga} style={{ padding: "6px 12px", background: "#fff", color: COLORS.primary, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 12, cursor: "pointer", marginBottom: 20 }}>+ Aggiungi riga</button>
 
-        <div style={{ background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 16, marginBottom: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ background: COLORS.bg, border: "1px solid " + COLORS.border, borderRadius: 12, padding: 16, marginBottom: 16, display: "flex", flexDirection: "column", gap: 12 }}>
           <SelettoreVoce label="Imballo" modalita={header.imballo_modalita} percentuale={header.imballo_percentuale} valoreEuro={header.imballo_valore} inputStyle={inputStyle} isMobile={isMobile}
             onChange={(patch) => setHeader({ ...header, imballo_modalita: patch.modalita ?? header.imballo_modalita, imballo_percentuale: patch.percentuale ?? header.imballo_percentuale, imballo_valore: patch.valoreEuro ?? header.imballo_valore })} />
           <SelettoreVoce label="Trasporto" modalita={header.trasporto_modalita} percentuale={header.trasporto_percentuale} valoreEuro={header.trasporto_valore} inputStyle={inputStyle} permettiTesto isMobile={isMobile}
@@ -2081,9 +1523,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
           <div style={{ marginTop: 4 }}>
             <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 6 }}>Stato preventivo</label>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {STATI_PREVENTIVO.map((s) => (
-                <button key={s.valore} onClick={() => setHeader({ ...header, stato: s.valore })} style={{ padding: "6px 12px", borderRadius: 20, border: header.stato === s.valore ? `2px solid ${s.colore}` : "1px solid #e2edf5", background: header.stato === s.valore ? `${s.colore}18` : "#fff", color: s.colore, fontSize: 12, fontWeight: header.stato === s.valore ? 700 : 500, cursor: "pointer" }}>● {s.label}</button>
-              ))}
+              {STATI_PREVENTIVO.map((s) => (<button key={s.valore} onClick={() => setHeader({ ...header, stato: s.valore })} style={{ padding: "6px 12px", borderRadius: 20, border: header.stato === s.valore ? "2px solid " + s.colore : "1px solid #e2edf5", background: header.stato === s.valore ? s.colore + "18" : "#fff", color: s.colore, fontSize: 12, fontWeight: header.stato === s.valore ? 700 : 500, cursor: "pointer" }}>● {s.label}</button>))}
             </div>
           </div>
           <div style={{ marginTop: 12 }}>
@@ -2104,26 +1544,17 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
 
         {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 10 }}>{error}</div>}
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={salva} disabled={saving} style={{ padding: "9px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-            {saving ? "Salvataggio..." : editingId ? "Salva modifiche" : "Salva preventivo"}
-          </button>
-          {editingId && <button onClick={resetForm} style={{ padding: "9px 16px", background: "#fff", color: COLORS.primary, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13, cursor: "pointer" }}>Annulla</button>}
+          <button onClick={salva} disabled={saving} style={{ padding: "9px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>{saving ? "Salvataggio..." : editingId ? "Salva modifiche" : "Salva preventivo"}</button>
+          {editingId && <button onClick={resetForm} style={{ padding: "9px 16px", background: "#fff", color: COLORS.primary, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13, cursor: "pointer" }}>Annulla</button>}
         </div>
       </div>
 
       <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>Preventivi salvati</h3>
-      {loading ? (
-        <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
-      ) : lista.length === 0 ? (
-        <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun preventivo salvato.</p>
-      ) : (
+      {loading ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p> : lista.length === 0 ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun preventivo salvato.</p> : (
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }} className="tabella-responsive">
-          <thead>
-            <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
-              <th style={{ padding: "8px 6px" }}>Stato</th><th style={{ padding: "8px 6px" }}>RIF</th><th style={{ padding: "8px 6px" }}>Data</th>
-              <th style={{ padding: "8px 6px" }}>Cliente</th><th style={{ padding: "8px 6px" }}>Azienda</th><th style={{ padding: "8px 6px" }}></th>
-            </tr>
-          </thead>
+          <thead><tr style={{ textAlign: "left", borderBottom: "2px solid " + COLORS.border }}>
+            <th style={{ padding: "8px 6px" }}>Stato</th><th style={{ padding: "8px 6px" }}>RIF</th><th style={{ padding: "8px 6px" }}>Data</th><th style={{ padding: "8px 6px" }}>Cliente</th><th style={{ padding: "8px 6px" }}>Azienda</th><th style={{ padding: "8px 6px" }}></th>
+          </tr></thead>
           <tbody>
             {lista.map((preventivoSalvato) => {
               const infoStato = STATI_PREVENTIVO.find((s) => s.valore === preventivoSalvato.stato) || STATI_PREVENTIVO[0];
@@ -2136,18 +1567,12 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
                   <td style={{ padding: "8px 6px" }} data-label="Azienda">{nomeAzienda(preventivoSalvato.azienda_id)}</td>
                   <td style={{ padding: "8px 6px" }} data-label="">
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                    {preventivoSalvato.stato === "accettato" && (
-                      preventivoSalvato.fatturato ? (
-                        <span style={{ color: COLORS.success, fontSize: 12 }}>✓ Fatturato</span>
-                      ) : (
-                        <button onClick={() => segnaComeFatturato(preventivoSalvato)} style={{ background: "none", border: "none", color: COLORS.success, cursor: "pointer", fontSize: 12 }}>Segna come fatturato</button>
-                      )
-                    )}
-                    <button onClick={() => stampaPreventivo(preventivoSalvato, clienti, aziende)} style={{ background: "none", border: "none", color: COLORS.success, cursor: "pointer", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}>
-                      <Printer size={13} /> PDF
-                    </button>
-                    <button onClick={() => modifica(preventivoSalvato)} style={{ background: "none", border: "none", color: COLORS.primary, cursor: "pointer", fontSize: 12 }}>Modifica</button>
-                    <button onClick={() => elimina(preventivoSalvato.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 12 }}>Elimina</button>
+                      {preventivoSalvato.stato === "accettato" && (
+                        preventivoSalvato.fatturato ? <span style={{ color: COLORS.success, fontSize: 12 }}>✓ Fatturato</span> : <button onClick={() => segnaComeFatturato(preventivoSalvato)} style={{ background: "none", border: "none", color: COLORS.success, cursor: "pointer", fontSize: 12 }}>Segna come fatturato</button>
+                      )}
+                      <button onClick={() => stampaPreventivo(preventivoSalvato, clienti, aziende)} style={{ background: "none", border: "none", color: COLORS.success, cursor: "pointer", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}><Printer size={13} /> PDF</button>
+                      <button onClick={() => modifica(preventivoSalvato)} style={{ background: "none", border: "none", color: COLORS.primary, cursor: "pointer", fontSize: 12 }}>Modifica</button>
+                      <button onClick={() => elimina(preventivoSalvato.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 12 }}>Elimina</button>
                     </div>
                   </td>
                 </tr>
@@ -2160,9 +1585,6 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
   );
 }
 
-// ============================================================
-// MAPPA CLIENTI
-// ============================================================
 function MappaClienti({ session }) {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
@@ -2170,28 +1592,21 @@ function MappaClienti({ session }) {
   const [sedi, setSedi] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}` });
+  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token });
 
   useEffect(() => {
     (async () => {
-      setLoading(true);
-      setError("");
+      setLoading(true); setError("");
       try {
-        const [rClienti, rSedi] = await Promise.all([
-          fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale,indirizzo,classificazione,latitudine,longitudine`, { headers: headers() }),
-          fetch(`${SUPABASE_URL}/rest/v1/sedi_cliente?select=*`, { headers: headers() }),
+        const results = await Promise.all([
+          fetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale,indirizzo,classificazione,latitudine,longitudine", { headers: headers() }),
+          fetch(SUPABASE_URL + "/rest/v1/sedi_cliente?select=*", { headers: headers() }),
         ]);
-        const data = await rClienti.json();
-        const dataSedi = await rSedi.json();
-        if (!rClienti.ok) throw new Error(data.message || "Errore nel caricamento");
-        setClienti(data);
-        setSedi(Array.isArray(dataSedi) ? dataSedi : []);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
+        const data = await results[0].json();
+        const dataSedi = await results[1].json();
+        if (!results[0].ok) throw new Error(data.message || "Errore nel caricamento");
+        setClienti(data); setSedi(Array.isArray(dataSedi) ? dataSedi : []);
+      } catch (err) { setError(err.message); } finally { setLoading(false); }
     })();
   }, [session]);
 
@@ -2211,18 +1626,13 @@ function MappaClienti({ session }) {
     const conCoordinate = clienti.filter((c) => c.latitudine && c.longitudine);
     const sediConCoordinate = sedi.filter((s) => s.latitudine && s.longitudine);
     const markers = [];
-    conCoordinate.forEach((c) => {
-      const m = L.marker([c.latitudine, c.longitudine]).addTo(mapInstance.current).bindPopup(`<strong>${c.ragione_sociale}</strong><br/>${c.classificazione || ""}<br/>${c.indirizzo || ""}`);
-      markers.push(m);
-    });
+    conCoordinate.forEach((c) => { markers.push(L.marker([c.latitudine, c.longitudine]).addTo(mapInstance.current).bindPopup("<strong>" + c.ragione_sociale + "</strong><br/>" + (c.classificazione || "") + "<br/>" + (c.indirizzo || ""))); });
     sediConCoordinate.forEach((s) => {
       const clienteDellaSede = clienti.find((c) => c.id === s.cliente_id);
-      const m = L.marker([s.latitudine, s.longitudine], { opacity: 0.85 }).addTo(mapInstance.current).bindPopup(`<strong>${clienteDellaSede ? clienteDellaSede.ragione_sociale : ""}</strong><br/>${s.nome_sede || "Sede"}<br/>${s.indirizzo}`);
-      markers.push(m);
+      markers.push(L.marker([s.latitudine, s.longitudine], { opacity: 0.85 }).addTo(mapInstance.current).bindPopup("<strong>" + (clienteDellaSede ? clienteDellaSede.ragione_sociale : "") + "</strong><br/>" + (s.nome_sede || "Sede") + "<br/>" + s.indirizzo));
     });
     if (conCoordinate.length > 0 || sediConCoordinate.length > 0) {
-      const gruppo = L.featureGroup(markers);
-      mapInstance.current.fitBounds(gruppo.getBounds().pad(0.2));
+      mapInstance.current.fitBounds(L.featureGroup(markers).getBounds().pad(0.2));
     }
     return () => { markers.forEach((m) => mapInstance.current && mapInstance.current.removeLayer(m)); };
   }, [clienti, sedi]);
@@ -2235,15 +1645,12 @@ function MappaClienti({ session }) {
       <p style={{ color: COLORS.muted, fontSize: 13, marginBottom: 16 }}>Le coordinate si calcolano automaticamente quando salvi l'indirizzo in anagrafica.</p>
       {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 10 }}>{error}</div>}
       {loading && <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>}
-      <div ref={mapRef} style={{ width: "100%", height: 480, borderRadius: 14, border: `1px solid ${COLORS.border}`, overflow: "hidden", position: "relative", zIndex: 0 }} />
+      <div ref={mapRef} style={{ width: "100%", height: 480, borderRadius: 14, border: "1px solid " + COLORS.border, overflow: "hidden", position: "relative", zIndex: 0 }} />
       {senzaCoordinate.length > 0 && <p style={{ fontSize: 12, color: COLORS.muted, marginTop: 10 }}>{senzaCoordinate.length} cliente/i senza coordinate ancora calcolate.</p>}
     </div>
   );
 }
 
-// ============================================================
-// STATISTICHE
-// ============================================================
 function Statistiche({ session }) {
   const [ordini, setOrdini] = useState([]);
   const [preventivi, setPreventivi] = useState([]);
@@ -2252,47 +1659,39 @@ function Statistiche({ session }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [aziendaSelezionata, setAziendaSelezionata] = useState("");
-
-  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}` });
+  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token });
 
   useEffect(() => {
     (async () => {
-      setLoading(true);
-      setError("");
+      setLoading(true); setError("");
       try {
-        const [rOrdini, rPreventivi, rClienti, rAziende] = await Promise.all([
-          fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati?select=*`, { headers: headers() }),
-          fetch(`${SUPABASE_URL}/rest/v1/preventivi?select=id,cliente_id,azienda_id,data,stato,righe,imballo_modalita,imballo_percentuale,imballo_valore,trasporto_modalita,trasporto_percentuale,trasporto_valore,iva_modalita,iva_percentuale,iva_valore`, { headers: headers() }),
-          fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale`, { headers: headers() }),
-          fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?select=id,nome`, { headers: headers() }),
+        const results = await Promise.all([
+          fetch(SUPABASE_URL + "/rest/v1/ordini_confermati?select=*", { headers: headers() }),
+          fetch(SUPABASE_URL + "/rest/v1/preventivi?select=id,cliente_id,azienda_id,data,stato,righe,imballo_modalita,imballo_percentuale,imballo_valore,trasporto_modalita,trasporto_percentuale,trasporto_valore,iva_modalita,iva_percentuale,iva_valore", { headers: headers() }),
+          fetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale", { headers: headers() }),
+          fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome", { headers: headers() }),
         ]);
-        const [dOrdini, dPreventivi, dClienti, dAziende] = await Promise.all([rOrdini.json(), rPreventivi.json(), rClienti.json(), rAziende.json()]);
+        const [dOrdini, dPreventivi, dClienti, dAziende] = await Promise.all(results.map((r) => r.json()));
         setOrdini(Array.isArray(dOrdini) ? dOrdini : []);
         setPreventivi(Array.isArray(dPreventivi) ? dPreventivi : []);
         setClienti(Array.isArray(dClienti) ? dClienti : []);
         const listaAziende = Array.isArray(dAziende) ? dAziende : [];
         setAziende(listaAziende);
         setAziendaSelezionata((prev) => prev || (listaAziende[0] ? listaAziende[0].id : ""));
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
+      } catch (err) { setError(err.message); } finally { setLoading(false); }
     })();
   }, [session]);
 
-  const nomeCliente = (id) => clienti.find((c) => c.id === id)?.ragione_sociale || "Sconosciuto";
+  const nomeCliente = (id) => { const c = clienti.find((x) => x.id === id); return c ? c.ragione_sociale : "Sconosciuto"; };
   const ricavi = aziendaSelezionata ? combinaRicaviPerAzienda(ordini, preventivi, aziendaSelezionata) : [];
-
   const fatturatoPerCliente = {};
   ricavi.forEach((r) => { const key = nomeCliente(r.cliente_id); fatturatoPerCliente[key] = (fatturatoPerCliente[key] || 0) + r.importo; });
   const classificaClienti = Object.entries(fatturatoPerCliente).map(([nome, totale]) => ({ nome, totale })).sort((a, b) => b.totale - a.totale);
-
   const conteggioStati = { bozza: 0, inviato: 0, accettato: 0, rifiutato: 0 };
   preventivi.filter((pv) => pv.azienda_id === aziendaSelezionata).forEach((pv) => { if (conteggioStati[pv.stato] !== undefined) conteggioStati[pv.stato]++; });
   const datiStati = STATI_PREVENTIVO.map((s) => ({ name: s.label, value: conteggioStati[s.valore], color: s.colore }));
   const fatturatoTotale = ricavi.reduce((s, r) => s + r.importo, 0);
-  const inputStyle = { padding: "8px 12px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13 };
+  const inputStyle = { padding: "8px 12px", border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13 };
 
   return (
     <div style={{ fontFamily: "Arial, sans-serif" }}>
@@ -2302,18 +1701,14 @@ function Statistiche({ session }) {
         {aziende.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
       </select>
       {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 14 }}>{error}</div>}
-      {loading ? (
-        <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
-      ) : !aziendaSelezionata ? (
-        <p style={{ color: COLORS.muted, fontSize: 13 }}>Aggiungi prima un'azienda mandante.</p>
-      ) : (
+      {loading ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p> : !aziendaSelezionata ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Aggiungi prima un'azienda mandante.</p> : (
         <>
-          <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: 20, marginBottom: 20, maxWidth: 300, boxShadow: "0 4px 14px rgba(20,40,60,0.05)" }}>
+          <div style={{ background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, padding: 20, marginBottom: 20, maxWidth: 300, boxShadow: "0 4px 14px rgba(20,40,60,0.05)" }}>
             <div style={{ fontSize: 12, color: COLORS.muted }}>Fatturato totale</div>
             <div style={{ fontSize: 28, fontWeight: 700, color: COLORS.text }}>{formattaEuro(fatturatoTotale)}</div>
           </div>
           <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 20 }}>
-            <div style={{ flex: "1 1 320px", background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: 20, boxShadow: "0 4px 14px rgba(20,40,60,0.05)" }}>
+            <div style={{ flex: "1 1 320px", background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, padding: 20, boxShadow: "0 4px 14px rgba(20,40,60,0.05)" }}>
               <h3 style={{ fontSize: 14, color: COLORS.text, marginBottom: 12 }}>Preventivi per stato</h3>
               <ResponsiveContainer width="100%" height={240}>
                 <PieChart>
@@ -2325,21 +1720,12 @@ function Statistiche({ session }) {
               </ResponsiveContainer>
             </div>
           </div>
-          <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: 20, boxShadow: "0 4px 14px rgba(20,40,60,0.05)" }}>
+          <div style={{ background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, padding: 20, boxShadow: "0 4px 14px rgba(20,40,60,0.05)" }}>
             <h3 style={{ fontSize: 14, color: COLORS.text, marginBottom: 12 }}>Fatturato per cliente</h3>
-            {classificaClienti.length === 0 ? (
-              <p style={{ fontSize: 12, color: COLORS.muted }}>Nessun dato ancora per questa azienda.</p>
-            ) : (
+            {classificaClienti.length === 0 ? <p style={{ fontSize: 12, color: COLORS.muted }}>Nessun dato ancora per questa azienda.</p> : (
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead><tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}><th style={{ padding: "6px 4px" }}>Cliente</th><th style={{ padding: "6px 4px" }}>Fatturato</th></tr></thead>
-                <tbody>
-                  {classificaClienti.map((c) => (
-                    <tr key={c.nome} style={{ borderBottom: "1px solid #f0f5f9" }}>
-                      <td style={{ padding: "6px 4px" }}>{c.nome}</td>
-                      <td style={{ padding: "6px 4px", fontWeight: 600 }}>{formattaEuro(c.totale)}</td>
-                    </tr>
-                  ))}
-                </tbody>
+                <thead><tr style={{ textAlign: "left", borderBottom: "2px solid " + COLORS.border }}><th style={{ padding: "6px 4px" }}>Cliente</th><th style={{ padding: "6px 4px" }}>Fatturato</th></tr></thead>
+                <tbody>{classificaClienti.map((c) => (<tr key={c.nome} style={{ borderBottom: "1px solid #f0f5f9" }}><td style={{ padding: "6px 4px" }}>{c.nome}</td><td style={{ padding: "6px 4px", fontWeight: 600 }}>{formattaEuro(c.totale)}</td></tr>))}</tbody>
               </table>
             )}
           </div>
@@ -2349,9 +1735,6 @@ function Statistiche({ session }) {
   );
 }
 
-// ============================================================
-// FATTURATO
-// ============================================================
 function Fatturato({ session }) {
   const [ordini, setOrdini] = useState([]);
   const [preventivi, setPreventivi] = useState([]);
@@ -2361,54 +1744,44 @@ function Fatturato({ session }) {
   const [error, setError] = useState("");
   const [annoSelezionato, setAnnoSelezionato] = useState(new Date().getFullYear());
   const [aziendaSelezionata, setAziendaSelezionata] = useState("");
-
-  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}` });
+  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token });
 
   useEffect(() => {
     (async () => {
-      setLoading(true);
-      setError("");
+      setLoading(true); setError("");
       try {
-        const [rOrdini, rPreventivi, rClienti, rAziende] = await Promise.all([
-          fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati?select=*`, { headers: headers() }),
-          fetch(`${SUPABASE_URL}/rest/v1/preventivi?select=id,cliente_id,azienda_id,data,stato,righe,imballo_modalita,imballo_percentuale,imballo_valore,trasporto_modalita,trasporto_percentuale,trasporto_valore,iva_modalita,iva_percentuale,iva_valore`, { headers: headers() }),
-          fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale`, { headers: headers() }),
-          fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?select=id,nome`, { headers: headers() }),
+        const results = await Promise.all([
+          fetch(SUPABASE_URL + "/rest/v1/ordini_confermati?select=*", { headers: headers() }),
+          fetch(SUPABASE_URL + "/rest/v1/preventivi?select=id,cliente_id,azienda_id,data,stato,righe,imballo_modalita,imballo_percentuale,imballo_valore,trasporto_modalita,trasporto_percentuale,trasporto_valore,iva_modalita,iva_percentuale,iva_valore", { headers: headers() }),
+          fetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale", { headers: headers() }),
+          fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome", { headers: headers() }),
         ]);
-        const [dOrdini, dPreventivi, dClienti, dAziende] = await Promise.all([rOrdini.json(), rPreventivi.json(), rClienti.json(), rAziende.json()]);
+        const [dOrdini, dPreventivi, dClienti, dAziende] = await Promise.all(results.map((r) => r.json()));
         setOrdini(Array.isArray(dOrdini) ? dOrdini : []);
         setPreventivi(Array.isArray(dPreventivi) ? dPreventivi : []);
         setClienti(Array.isArray(dClienti) ? dClienti : []);
         const listaAziende = Array.isArray(dAziende) ? dAziende : [];
         setAziende(listaAziende);
         setAziendaSelezionata((prev) => prev || (listaAziende[0] ? listaAziende[0].id : ""));
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
+      } catch (err) { setError(err.message); } finally { setLoading(false); }
     })();
   }, [session]);
 
-  const nomeCliente = (id) => clienti.find((c) => c.id === id)?.ragione_sociale || "Sconosciuto";
+  const nomeCliente = (id) => { const c = clienti.find((x) => x.id === id); return c ? c.ragione_sociale : "Sconosciuto"; };
   const ricavi = aziendaSelezionata ? combinaRicaviPerAzienda(ordini, preventivi, aziendaSelezionata) : [];
   const fatturatoTotale = ricavi.reduce((s, r) => s + r.importo, 0);
-
   const perAnno = {};
   ricavi.forEach((r) => { const anno = new Date(r.data).getFullYear(); perAnno[anno] = (perAnno[anno] || 0) + r.importo; });
   const datiAnnuali = Object.entries(perAnno).map(([anno, totale]) => ({ anno, totale })).sort((a, b) => a.anno - b.anno);
   const anniDisponibili = Object.keys(perAnno).map(Number).sort((a, b) => b - a);
-
   const perMese = Array(12).fill(0);
   ricavi.forEach((r) => { const d = new Date(r.data); if (d.getFullYear() === annoSelezionato) perMese[d.getMonth()] += r.importo; });
   const datiMensili = MESI_BREVI.map((m, i) => ({ mese: m, totale: perMese[i] }));
-
   const perCliente = {};
   ricavi.forEach((r) => { const key = nomeCliente(r.cliente_id); perCliente[key] = (perCliente[key] || 0) + r.importo; });
   const topClienti = Object.entries(perCliente).map(([nome, totale]) => ({ nome, totale })).sort((a, b) => b.totale - a.totale).slice(0, 8);
-
-  const cardStyle = { background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: 20, boxShadow: "0 4px 14px rgba(20,40,60,0.05)" };
-  const selectStyle = { padding: "8px 12px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13 };
+  const cardStyle = { background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, padding: 20, boxShadow: "0 4px 14px rgba(20,40,60,0.05)" };
+  const selectStyle = { padding: "8px 12px", border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13 };
 
   return (
     <div style={{ fontFamily: "Arial, sans-serif" }}>
@@ -2418,11 +1791,7 @@ function Fatturato({ session }) {
         {aziende.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
       </select>
       {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 14 }}>{error}</div>}
-      {loading ? (
-        <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
-      ) : !aziendaSelezionata ? (
-        <p style={{ color: COLORS.muted, fontSize: 13 }}>Aggiungi prima un'azienda mandante.</p>
-      ) : (
+      {loading ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p> : !aziendaSelezionata ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Aggiungi prima un'azienda mandante.</p> : (
         <>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 20 }}>
             <div style={{ ...cardStyle, maxWidth: 260 }}>
@@ -2455,9 +1824,7 @@ function Fatturato({ session }) {
           </div>
           <div style={{ ...cardStyle }}>
             <h3 style={{ fontSize: 14, color: COLORS.text, marginBottom: 12 }}>Andamento clienti (top 8)</h3>
-            {topClienti.length === 0 ? (
-              <p style={{ fontSize: 12, color: COLORS.muted }}>Nessun dato ancora per questa azienda.</p>
-            ) : (
+            {topClienti.length === 0 ? <p style={{ fontSize: 12, color: COLORS.muted }}>Nessun dato ancora per questa azienda.</p> : (
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={topClienti} layout="vertical" margin={{ left: 40 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#eef3f7" />
@@ -2475,9 +1842,6 @@ function Fatturato({ session }) {
   );
 }
 
-// ============================================================
-// REGISTRO ORDINI
-// ============================================================
 function RegistroOrdini({ session, apriPreventivo }) {
   const [ordini, setOrdini] = useState([]);
   const [preventivi, setPreventivi] = useState([]);
@@ -2490,49 +1854,33 @@ function RegistroOrdini({ session, apriPreventivo }) {
   const [ordineInModifica, setOrdineInModifica] = useState(null);
   const [formOrdine, setFormOrdine] = useState({ azienda_id: "", importo: "", data_ordine: "", note: "" });
   const [salvandoOrdine, setSalvandoOrdine] = useState(false);
+  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token });
 
-  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}` });
-
-  const load = async () => {
-    setLoading(true);
-    setError("");
+  async function load() {
+    setLoading(true); setError("");
     try {
-      const [rOrdini, rPreventivi, rClienti, rAziende] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati?select=*`, { headers: headers() }),
-        fetch(`${SUPABASE_URL}/rest/v1/preventivi?select=*`, { headers: headers() }),
-        fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale`, { headers: headers() }),
-        fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?select=id,nome`, { headers: headers() }),
+      const results = await Promise.all([
+        fetch(SUPABASE_URL + "/rest/v1/ordini_confermati?select=*", { headers: headers() }),
+        fetch(SUPABASE_URL + "/rest/v1/preventivi?select=*", { headers: headers() }),
+        fetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale", { headers: headers() }),
+        fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome", { headers: headers() }),
       ]);
-      const [dOrdini, dPreventivi, dClienti, dAziende] = await Promise.all([rOrdini.json(), rPreventivi.json(), rClienti.json(), rAziende.json()]);
+      const [dOrdini, dPreventivi, dClienti, dAziende] = await Promise.all(results.map((r) => r.json()));
       setOrdini(Array.isArray(dOrdini) ? dOrdini : []);
       setPreventivi(Array.isArray(dPreventivi) ? dPreventivi : []);
       setClienti(Array.isArray(dClienti) ? dClienti : []);
       setAziende(Array.isArray(dAziende) ? dAziende : []);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+    } catch (err) { setError(err.message); } finally { setLoading(false); }
+  }
   useEffect(() => { load(); }, [session]);
 
-  const nomeCliente = (id) => clienti.find((c) => c.id === id)?.ragione_sociale || "Sconosciuto";
-  const nomeAzienda = (id) => aziende.find((a) => a.id === id)?.nome || "Sconosciuta";
+  const nomeCliente = (id) => { const c = clienti.find((x) => x.id === id); return c ? c.ragione_sociale : "Sconosciuto"; };
+  const nomeAzienda = (id) => { const a = aziende.find((x) => x.id === id); return a ? a.nome : "Sconosciuta"; };
 
-  const righeOrdini = ordini.map((o) => ({
-    id: `ordine-${o.id}`, idOriginale: o.id, tipoOriginale: "ordine", tipo: "Ordine confermato",
-    cliente_id: o.cliente_id, azienda_id: o.azienda_id, data: o.data_ordine,
-    statoLabel: "Confermato", statoColore: COLORS.success, importo: Number(o.importo) || 0,
-  }));
-
+  const righeOrdini = ordini.map((o) => ({ id: "ordine-" + o.id, idOriginale: o.id, tipoOriginale: "ordine", tipo: "Ordine confermato", cliente_id: o.cliente_id, azienda_id: o.azienda_id, data: o.data_ordine, statoLabel: "Confermato", statoColore: COLORS.success, importo: Number(o.importo) || 0 }));
   const righePreventivi = preventivi.map((pv) => {
     const infoStato = STATI_PREVENTIVO.find((s) => s.valore === pv.stato) || STATI_PREVENTIVO[0];
-    return {
-      id: `preventivo-${pv.id}`, idOriginale: pv.id, tipoOriginale: "preventivo", tipo: "Preventivo" + (pv.rif ? ` (${pv.rif})` : ""),
-      cliente_id: pv.cliente_id, cliente_manuale: pv.cliente_manuale, azienda_id: pv.azienda_id, data: pv.data,
-      statoLabel: infoStato.label, statoColore: infoStato.colore, importo: calcolaTotaliPreventivo(pv, pv.righe || []).totaleFinale,
-    };
+    return { id: "preventivo-" + pv.id, idOriginale: pv.id, tipoOriginale: "preventivo", tipo: "Preventivo" + (pv.rif ? " (" + pv.rif + ")" : ""), cliente_id: pv.cliente_id, cliente_manuale: pv.cliente_manuale, azienda_id: pv.azienda_id, data: pv.data, statoLabel: infoStato.label, statoColore: infoStato.colore, importo: calcolaTotaliPreventivo(pv, pv.righe || []).totaleFinale };
   });
 
   const modificaOrdine = (idOrdine) => {
@@ -2541,40 +1889,23 @@ function RegistroOrdini({ session, apriPreventivo }) {
     setOrdineInModifica(idOrdine);
     setFormOrdine({ azienda_id: o.azienda_id || "", importo: o.importo ?? "", data_ordine: o.data_ordine || "", note: o.note || "" });
   };
-
   const salvaModificaOrdine = async () => {
-    setSalvandoOrdine(true);
-    setError("");
+    setSalvandoOrdine(true); setError("");
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati?id=eq.${ordineInModifica}`, {
-        method: "PATCH", headers: { ...headers(), Prefer: "return=representation" },
-        body: JSON.stringify({ azienda_id: formOrdine.azienda_id, importo: Number(formOrdine.importo) || 0, data_ordine: formOrdine.data_ordine, note: formOrdine.note || null }),
-      });
-      setOrdineInModifica(null);
-      load();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSalvandoOrdine(false);
-    }
+      await fetch(SUPABASE_URL + "/rest/v1/ordini_confermati?id=eq." + ordineInModifica, { method: "PATCH", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ azienda_id: formOrdine.azienda_id, importo: Number(formOrdine.importo) || 0, data_ordine: formOrdine.data_ordine, note: formOrdine.note || null }) });
+      setOrdineInModifica(null); load();
+    } catch (err) { setError(err.message); } finally { setSalvandoOrdine(false); }
   };
-
   const eliminaOrdine = async (idOrdine) => {
     if (!window.confirm("Eliminare questo ordine confermato?")) return;
-    try {
-      await fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati?id=eq.${idOrdine}`, { method: "DELETE", headers: headers() });
-      load();
-    } catch (err) {
-      setError(err.message);
-    }
+    try { await fetch(SUPABASE_URL + "/rest/v1/ordini_confermati?id=eq." + idOrdine, { method: "DELETE", headers: headers() }); load(); } catch (err) { setError(err.message); }
   };
 
   const tutteLeRighe = [...righeOrdini, ...righePreventivi]
     .filter((r) => !filtroCliente || r.cliente_id === filtroCliente)
     .filter((r) => !filtroAzienda || r.azienda_id === filtroAzienda)
     .sort((a, b) => new Date(b.data) - new Date(a.data));
-
-  const selectStyle = { padding: "8px 12px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13 };
+  const selectStyle = { padding: "8px 12px", border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13 };
 
   return (
     <div style={{ fontFamily: "Arial, sans-serif" }}>
@@ -2592,7 +1923,7 @@ function RegistroOrdini({ session, apriPreventivo }) {
       </div>
       {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 14 }}>{error}</div>}
       {ordineInModifica && (
-        <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: 20, marginBottom: 20, maxWidth: 500, boxShadow: "0 4px 14px rgba(20,40,60,0.05)" }}>
+        <div style={{ background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, padding: 20, marginBottom: 20, maxWidth: 500, boxShadow: "0 4px 14px rgba(20,40,60,0.05)" }}>
           <h3 style={{ fontSize: 14, color: COLORS.text, marginBottom: 12 }}>Modifica ordine confermato</h3>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
             <select value={formOrdine.azienda_id} onChange={(e) => setFormOrdine({ ...formOrdine, azienda_id: e.target.value })} style={{ ...selectStyle, width: 160 }}>
@@ -2605,22 +1936,15 @@ function RegistroOrdini({ session, apriPreventivo }) {
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={salvaModificaOrdine} disabled={salvandoOrdine} style={{ padding: "8px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{salvandoOrdine ? "Salvataggio..." : "Salva modifiche"}</button>
-            <button onClick={() => setOrdineInModifica(null)} style={{ padding: "8px 16px", background: "#fff", color: COLORS.primary, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 12, cursor: "pointer" }}>Annulla</button>
+            <button onClick={() => setOrdineInModifica(null)} style={{ padding: "8px 16px", background: "#fff", color: COLORS.primary, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 12, cursor: "pointer" }}>Annulla</button>
           </div>
         </div>
       )}
-      {loading ? (
-        <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
-      ) : tutteLeRighe.length === 0 ? (
-        <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun ordine o preventivo trovato.</p>
-      ) : (
+      {loading ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p> : tutteLeRighe.length === 0 ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun ordine o preventivo trovato.</p> : (
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }} className="tabella-responsive">
-          <thead>
-            <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
-              <th style={{ padding: "8px 6px" }}>Tipo</th><th style={{ padding: "8px 6px" }}>Cliente</th><th style={{ padding: "8px 6px" }}>Azienda</th>
-              <th style={{ padding: "8px 6px" }}>Data</th><th style={{ padding: "8px 6px" }}>Stato</th><th style={{ padding: "8px 6px" }}>Importo</th><th style={{ padding: "8px 6px" }}></th>
-            </tr>
-          </thead>
+          <thead><tr style={{ textAlign: "left", borderBottom: "2px solid " + COLORS.border }}>
+            <th style={{ padding: "8px 6px" }}>Tipo</th><th style={{ padding: "8px 6px" }}>Cliente</th><th style={{ padding: "8px 6px" }}>Azienda</th><th style={{ padding: "8px 6px" }}>Data</th><th style={{ padding: "8px 6px" }}>Stato</th><th style={{ padding: "8px 6px" }}>Importo</th><th style={{ padding: "8px 6px" }}></th>
+          </tr></thead>
           <tbody>
             {tutteLeRighe.map((r) => (
               <tr key={r.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
@@ -2649,56 +1973,41 @@ function RegistroOrdini({ session, apriPreventivo }) {
   );
 }
 
-// ============================================================
-// PORTAFOGLIO ORDINI
-// ============================================================
 function PortafoglioOrdini({ session }) {
   const [preventivi, setPreventivi] = useState([]);
   const [clienti, setClienti] = useState([]);
   const [aziende, setAziende] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}` });
+  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token });
 
   const load = async () => {
-    setLoading(true);
-    setError("");
+    setLoading(true); setError("");
     try {
-      const [rPreventivi, rClienti, rAziende] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/preventivi?stato=eq.accettato&fatturato=eq.false&select=*`, { headers: headers() }),
-        fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale`, { headers: headers() }),
-        fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?select=id,nome`, { headers: headers() }),
+      const results = await Promise.all([
+        fetch(SUPABASE_URL + "/rest/v1/preventivi?stato=eq.accettato&fatturato=eq.false&select=*", { headers: headers() }),
+        fetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale", { headers: headers() }),
+        fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome", { headers: headers() }),
       ]);
-      const [dPreventivi, dClienti, dAziende] = await Promise.all([rPreventivi.json(), rClienti.json(), rAziende.json()]);
+      const [dPreventivi, dClienti, dAziende] = await Promise.all(results.map((r) => r.json()));
       setPreventivi(Array.isArray(dPreventivi) ? dPreventivi : []);
       setClienti(Array.isArray(dClienti) ? dClienti : []);
       setAziende(Array.isArray(dAziende) ? dAziende : []);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
-
   useEffect(() => { load(); }, [session]);
 
-  const nomeCliente = (id) => clienti.find((c) => c.id === id)?.ragione_sociale || "Sconosciuto";
-  const nomeAzienda = (id) => aziende.find((a) => a.id === id)?.nome || "Sconosciuta";
+  const nomeCliente = (id) => { const c = clienti.find((x) => x.id === id); return c ? c.ragione_sociale : "Sconosciuto"; };
+  const nomeAzienda = (id) => { const a = aziende.find((x) => x.id === id); return a ? a.nome : "Sconosciuta"; };
 
   const segnaComeFatturato = async (pv) => {
     if (!window.confirm("Creare un ordine confermato da questo preventivo?")) return;
     try {
       const tot = calcolaTotaliPreventivo(pv, pv.righe || []);
-      await fetch(`${SUPABASE_URL}/rest/v1/ordini_confermati`, {
-        method: "POST", headers: { ...headers(), Prefer: "return=representation" },
-        body: JSON.stringify({ cliente_id: pv.cliente_id, azienda_id: pv.azienda_id, importo: tot.totaleFinale, data_ordine: new Date().toISOString().slice(0, 10), note: pv.rif ? `Da preventivo ${pv.rif}` : "Da preventivo" }),
-      });
-      await fetch(`${SUPABASE_URL}/rest/v1/preventivi?id=eq.${pv.id}`, { method: "PATCH", headers: headers(), body: JSON.stringify({ fatturato: true }) });
+      await fetch(SUPABASE_URL + "/rest/v1/ordini_confermati", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: pv.cliente_id, azienda_id: pv.azienda_id, importo: tot.totaleFinale, data_ordine: new Date().toISOString().slice(0, 10), note: pv.rif ? "Da preventivo " + pv.rif : "Da preventivo" }) });
+      await fetch(SUPABASE_URL + "/rest/v1/preventivi?id=eq." + pv.id, { method: "PATCH", headers: headers(), body: JSON.stringify({ fatturato: true }) });
       load();
-    } catch (err) {
-      setError(err.message);
-    }
+    } catch (err) { setError(err.message); }
   };
 
   const totale = preventivi.reduce((s, pv) => s + calcolaTotaliPreventivo(pv, pv.righe || []).totaleFinale, 0);
@@ -2707,23 +2016,16 @@ function PortafoglioOrdini({ session }) {
     <div style={{ fontFamily: "Arial, sans-serif" }}>
       <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 4 }}>Portafoglio ordini</h2>
       <p style={{ color: COLORS.muted, fontSize: 13, marginBottom: 16 }}>Preventivi accettati, in attesa di diventare fatturato</p>
-      <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: 20, marginBottom: 20, maxWidth: 300, boxShadow: "0 4px 14px rgba(20,40,60,0.05)" }}>
+      <div style={{ background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, padding: 20, marginBottom: 20, maxWidth: 300, boxShadow: "0 4px 14px rgba(20,40,60,0.05)" }}>
         <div style={{ fontSize: 12, color: COLORS.muted }}>Totale in portafoglio</div>
         <div style={{ fontSize: 26, fontWeight: 700, color: COLORS.text }}>{formattaEuro(totale)}</div>
       </div>
       {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 14 }}>{error}</div>}
-      {loading ? (
-        <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
-      ) : preventivi.length === 0 ? (
-        <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun preventivo accettato in attesa di fatturazione.</p>
-      ) : (
+      {loading ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p> : preventivi.length === 0 ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun preventivo accettato in attesa di fatturazione.</p> : (
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }} className="tabella-responsive">
-          <thead>
-            <tr style={{ textAlign: "left", borderBottom: `2px solid ${COLORS.border}` }}>
-              <th style={{ padding: "8px 6px" }}>RIF</th><th style={{ padding: "8px 6px" }}>Data</th><th style={{ padding: "8px 6px" }}>Cliente</th>
-              <th style={{ padding: "8px 6px" }}>Azienda</th><th style={{ padding: "8px 6px" }}>Importo</th><th style={{ padding: "8px 6px" }}></th>
-            </tr>
-          </thead>
+          <thead><tr style={{ textAlign: "left", borderBottom: "2px solid " + COLORS.border }}>
+            <th style={{ padding: "8px 6px" }}>RIF</th><th style={{ padding: "8px 6px" }}>Data</th><th style={{ padding: "8px 6px" }}>Cliente</th><th style={{ padding: "8px 6px" }}>Azienda</th><th style={{ padding: "8px 6px" }}>Importo</th><th style={{ padding: "8px 6px" }}></th>
+          </tr></thead>
           <tbody>
             {preventivi.map((pv) => (
               <tr key={pv.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
@@ -2732,9 +2034,7 @@ function PortafoglioOrdini({ session }) {
                 <td style={{ padding: "8px 6px" }} data-label="Cliente">{pv.cliente_id ? nomeCliente(pv.cliente_id) : (pv.cliente_manuale || "—")}</td>
                 <td style={{ padding: "8px 6px" }} data-label="Azienda">{nomeAzienda(pv.azienda_id)}</td>
                 <td style={{ padding: "8px 6px", fontWeight: 600 }} data-label="Importo">{formattaEuro(calcolaTotaliPreventivo(pv, pv.righe || []).totaleFinale)}</td>
-                <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }} data-label="">
-                  <button onClick={() => segnaComeFatturato(pv)} style={{ background: "none", border: "none", color: COLORS.success, cursor: "pointer", fontSize: 12 }}>Segna come fatturato</button>
-                </td>
+                <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }} data-label=""><button onClick={() => segnaComeFatturato(pv)} style={{ background: "none", border: "none", color: COLORS.success, cursor: "pointer", fontSize: 12 }}>Segna come fatturato</button></td>
               </tr>
             ))}
           </tbody>
@@ -2744,9 +2044,6 @@ function PortafoglioOrdini({ session }) {
   );
 }
 
-// ============================================================
-// GRUPPI D'ACQUISTO
-// ============================================================
 function GruppiAcquisto({ session, gruppoIniziale, onGruppoAperto }) {
   const [lista, setLista] = useState([]);
   const [clienti, setClienti] = useState([]);
@@ -2758,29 +2055,22 @@ function GruppiAcquisto({ session, gruppoIniziale, onGruppoAperto }) {
   const emptyForm = { nome: "", note: "", condizioni_per_azienda: {} };
   const [form, setForm] = useState(emptyForm);
   const [aziendeSelezionate, setAziendeSelezionate] = useState([]);
-
-  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}` });
+  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token });
 
   const load = async () => {
-    setLoading(true);
-    setError("");
+    setLoading(true); setError("");
     try {
-      const [rGruppi, rClienti, rAziende] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/gruppi_acquisto?select=*&order=nome.asc`, { headers: headers() }),
-        fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,ragione_sociale,gruppo_id&order=ragione_sociale.asc`, { headers: headers() }),
-        fetch(`${SUPABASE_URL}/rest/v1/aziende_mandanti?select=id,nome&order=nome.asc`, { headers: headers() }),
+      const results = await Promise.all([
+        fetch(SUPABASE_URL + "/rest/v1/gruppi_acquisto?select=*&order=nome.asc", { headers: headers() }),
+        fetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale,gruppo_id&order=ragione_sociale.asc", { headers: headers() }),
+        fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome&order=nome.asc", { headers: headers() }),
       ]);
-      const [dGruppi, dClienti, dAziende] = await Promise.all([rGruppi.json(), rClienti.json(), rAziende.json()]);
+      const [dGruppi, dClienti, dAziende] = await Promise.all(results.map((r) => r.json()));
       setLista(Array.isArray(dGruppi) ? dGruppi : []);
       setClienti(Array.isArray(dClienti) ? dClienti : []);
       setAziende(Array.isArray(dAziende) ? dAziende : []);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
-
   useEffect(() => { load(); }, [session]);
 
   const apriModifica = (gruppo) => {
@@ -2788,148 +2078,98 @@ function GruppiAcquisto({ session, gruppoIniziale, onGruppoAperto }) {
     setForm({ nome: gruppo.nome || "", note: gruppo.note || "", condizioni_per_azienda: gruppo.condizioni_per_azienda || {} });
     setAziendeSelezionate(Object.keys(gruppo.condizioni_per_azienda || {}));
   };
-
   useEffect(() => {
     if (!gruppoIniziale) return;
     const g = lista.find((x) => x.id === gruppoIniziale);
-    if (g) {
-      apriModifica(g);
-      if (onGruppoAperto) onGruppoAperto();
-    }
+    if (g) { apriModifica(g); if (onGruppoAperto) onGruppoAperto(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gruppoIniziale, lista]);
 
   const resetForm = () => { setForm(emptyForm); setEditingId(null); setAziendeSelezionate([]); };
-
   const toggleAzienda = (nomeAz) => {
     setAziendeSelezionate((prev) => {
       const attiva = prev.includes(nomeAz);
       const nuove = attiva ? prev.filter((n) => n !== nomeAz) : [...prev, nomeAz];
-      setForm((f) => {
-        const cond = { ...f.condizioni_per_azienda };
-        if (attiva) delete cond[nomeAz];
-        return { ...f, condizioni_per_azienda: cond };
-      });
+      setForm((f) => { const cond = { ...f.condizioni_per_azienda }; if (attiva) delete cond[nomeAz]; return { ...f, condizioni_per_azienda: cond }; });
       return nuove;
     });
   };
-
-  const aggiornaCondizione = (nomeAz, testo) => {
-    setForm((f) => ({ ...f, condizioni_per_azienda: { ...f.condizioni_per_azienda, [nomeAz]: testo } }));
-  };
+  const aggiornaCondizione = (nomeAz, testo) => setForm((f) => ({ ...f, condizioni_per_azienda: { ...f.condizioni_per_azienda, [nomeAz]: testo } }));
 
   const salva = async () => {
     if (!form.nome.trim()) { setError("Il nome del gruppo è obbligatorio."); return; }
-    setSaving(true);
-    setError("");
+    setSaving(true); setError("");
     try {
       const body = { nome: form.nome, note: form.note || null, condizioni_per_azienda: form.condizioni_per_azienda };
-      let res;
-      if (editingId) {
-        res = await fetch(`${SUPABASE_URL}/rest/v1/gruppi_acquisto?id=eq.${editingId}`, { method: "PATCH", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
-      } else {
-        res = await fetch(`${SUPABASE_URL}/rest/v1/gruppi_acquisto`, { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
-      }
+      const res = editingId
+        ? await fetch(SUPABASE_URL + "/rest/v1/gruppi_acquisto?id=eq." + editingId, { method: "PATCH", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) })
+        : await fetch(SUPABASE_URL + "/rest/v1/gruppi_acquisto", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Errore nel salvataggio");
-      resetForm();
-      load();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
+      resetForm(); load();
+    } catch (err) { setError(err.message); } finally { setSaving(false); }
   };
-
   const elimina = async (id) => {
     if (!window.confirm("Eliminare questo gruppo d'acquisto? I clienti resteranno ma perderanno il collegamento al gruppo.")) return;
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/gruppi_acquisto?id=eq.${id}`, { method: "DELETE", headers: headers() });
-      if (!res.ok) throw new Error("Errore nell'eliminazione");
-      load();
-    } catch (err) {
-      setError(err.message);
-    }
+    try { const res = await fetch(SUPABASE_URL + "/rest/v1/gruppi_acquisto?id=eq." + id, { method: "DELETE", headers: headers() }); if (!res.ok) throw new Error("Errore nell'eliminazione"); load(); } catch (err) { setError(err.message); }
   };
-
   const toggleClienteNelGruppo = async (clienteId, gruppoId, attualmenteDentro) => {
-    try {
-      await fetch(`${SUPABASE_URL}/rest/v1/clienti?id=eq.${clienteId}`, {
-        method: "PATCH",
-        headers: headers(),
-        body: JSON.stringify({ gruppo_id: attualmenteDentro ? null : gruppoId }),
-      });
-      load();
-    } catch (err) {
-      setError(err.message);
-    }
+    try { await fetch(SUPABASE_URL + "/rest/v1/clienti?id=eq." + clienteId, { method: "PATCH", headers: headers(), body: JSON.stringify({ gruppo_id: attualmenteDentro ? null : gruppoId }) }); load(); } catch (err) { setError(err.message); }
   };
 
-  const inputStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
+  const inputStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
 
   return (
     <div style={{ fontFamily: "Arial, sans-serif" }}>
       <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16 }}>Gruppi d'acquisto</h2>
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 320px", background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, maxWidth: 420 }}>
+        <div style={{ flex: "1 1 320px", background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, maxWidth: 420 }}>
           <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>{editingId ? "Modifica gruppo" : "Nuovo gruppo"}</h3>
           <input placeholder="Nome gruppo *" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} style={inputStyle} />
           <textarea placeholder="Note" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} style={{ ...inputStyle, minHeight: 50 }} />
-
           <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 6 }}>Condizioni commerciali riservate per azienda mandante</label>
-          <div style={{ marginBottom: 12, maxHeight: 220, overflowY: "auto", border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 8 }}>
+          <div style={{ marginBottom: 12, maxHeight: 220, overflowY: "auto", border: "1px solid " + COLORS.border, borderRadius: 8, padding: 8 }}>
             {aziende.length === 0 && <span style={{ fontSize: 12, color: "#9aa7b2" }}>Nessuna azienda mandante inserita ancora</span>}
             {aziende.map((a) => (
               <div key={a.id} style={{ marginBottom: 8 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, marginBottom: 4 }}>
-                  <input type="checkbox" checked={aziendeSelezionate.includes(a.nome)} onChange={() => toggleAzienda(a.nome)} />
-                  {a.nome}
+                  <input type="checkbox" checked={aziendeSelezionate.includes(a.nome)} onChange={() => toggleAzienda(a.nome)} /> {a.nome}
                 </label>
                 {aziendeSelezionate.includes(a.nome) && (
-                  <input placeholder={`Condizioni riservate con ${a.nome}`} value={form.condizioni_per_azienda[a.nome] || ""} onChange={(e) => aggiornaCondizione(a.nome, e.target.value)} style={{ ...inputStyle, marginBottom: 0, marginLeft: 22, width: "calc(100% - 22px)", fontSize: 11 }} />
+                  <input placeholder={"Condizioni riservate con " + a.nome} value={form.condizioni_per_azienda[a.nome] || ""} onChange={(e) => aggiornaCondizione(a.nome, e.target.value)} style={{ ...inputStyle, marginBottom: 0, marginLeft: 22, width: "calc(100% - 22px)", fontSize: 11 }} />
                 )}
               </div>
             ))}
           </div>
-
           {editingId && (
             <>
               <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 6 }}>Clienti che fanno parte di questo gruppo</label>
-              <div style={{ marginBottom: 12, maxHeight: 180, overflowY: "auto", border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: 8 }}>
+              <div style={{ marginBottom: 12, maxHeight: 180, overflowY: "auto", border: "1px solid " + COLORS.border, borderRadius: 8, padding: 8 }}>
                 {clienti.length === 0 && <span style={{ fontSize: 12, color: "#9aa7b2" }}>Nessun cliente ancora inserito</span>}
                 {clienti.map((c) => {
                   const dentro = c.gruppo_id === editingId;
                   const inAltroGruppo = c.gruppo_id && c.gruppo_id !== editingId;
                   return (
                     <label key={c.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, marginBottom: 4, opacity: inAltroGruppo ? 0.5 : 1 }}>
-                      <input type="checkbox" checked={dentro} disabled={inAltroGruppo} onChange={() => toggleClienteNelGruppo(c.id, editingId, dentro)} />
-                      {c.ragione_sociale} {inAltroGruppo && <span style={{ fontSize: 10 }}>(in un altro gruppo)</span>}
+                      <input type="checkbox" checked={dentro} disabled={inAltroGruppo} onChange={() => toggleClienteNelGruppo(c.id, editingId, dentro)} /> {c.ragione_sociale} {inAltroGruppo && <span style={{ fontSize: 10 }}>(in un altro gruppo)</span>}
                     </label>
                   );
                 })}
               </div>
             </>
           )}
-
           {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 10 }}>{error}</div>}
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={salva} disabled={saving} style={{ padding: "9px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-              {saving ? "Salvataggio..." : editingId ? "Salva modifiche" : "Crea gruppo"}
-            </button>
-            {editingId && <button onClick={resetForm} style={{ padding: "9px 16px", background: "#fff", color: COLORS.primary, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13, cursor: "pointer" }}>Annulla</button>}
+            <button onClick={salva} disabled={saving} style={{ padding: "9px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>{saving ? "Salvataggio..." : editingId ? "Salva modifiche" : "Crea gruppo"}</button>
+            {editingId && <button onClick={resetForm} style={{ padding: "9px 16px", background: "#fff", color: COLORS.primary, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13, cursor: "pointer" }}>Annulla</button>}
           </div>
         </div>
-
         <div style={{ flex: "2 1 400px" }}>
-          {loading ? (
-            <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p>
-          ) : lista.length === 0 ? (
-            <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun gruppo d'acquisto ancora creato.</p>
-          ) : (
+          {loading ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p> : lista.length === 0 ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun gruppo d'acquisto ancora creato.</p> : (
             lista.map((g) => {
               const membri = clienti.filter((c) => c.gruppo_id === g.id);
               return (
-                <div key={g.id} style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: "0 2px 8px rgba(20,40,60,0.04)" }}>
+                <div key={g.id} style={{ background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: "0 2px 8px rgba(20,40,60,0.04)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                     <div>
                       <div style={{ fontWeight: 700, color: COLORS.primary, fontSize: 14 }}>{g.nome}</div>
@@ -2951,6 +2191,7 @@ function GruppiAcquisto({ session, gruppoIniziale, onGruppoAperto }) {
     </div>
   );
 }
+
 function AppShell({ session, onLogout }) {
   const [menuOpen, setMenuOpen] = useState(true);
   const [page, setPage] = useState("dashboard");
@@ -2958,21 +2199,14 @@ function AppShell({ session, onLogout }) {
   const [preventivoAprireId, setPreventivoAprireId] = useState(null);
   const [gruppoAprireId, setGruppoAprireId] = useState(null);
 
-  const apriPreventivoCliente = (id) => {
-    setPreventivoAprireId(id);
-    setPage("preventivi");
-  };
-
-  const apriGruppoCliente = (id) => {
-    setGruppoAprireId(id);
-    setPage("gruppi");
-  };
+  const apriPreventivoCliente = (id) => { setPreventivoAprireId(id); setPage("preventivi"); };
+  const apriGruppoCliente = (id) => { setGruppoAprireId(id); setPage("gruppi"); };
 
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${session.user.id}&select=role`, {
-          headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}` },
+        const res = await fetch(SUPABASE_URL + "/rest/v1/profiles?id=eq." + session.user.id + "&select=role", {
+          headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token },
         });
         const data = await res.json();
         if (data && data[0]) setRole(data[0].role);
@@ -2996,8 +2230,8 @@ function AppShell({ session, onLogout }) {
   ];
 
   return (
-    <div style={{ minHeight: "100vh", background: `linear-gradient(180deg, ${COLORS.bg} 0%, #eef5fa 100%)`, fontFamily: "Arial, sans-serif" }}>
-      <header style={{ display: "flex", alignItems: "center", padding: "14px 22px", background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.primaryDark})`, boxShadow: "0 2px 12px rgba(11,123,196,0.2)", position: "sticky", top: 0, zIndex: 1000 }}>
+    <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, " + COLORS.bg + " 0%, #eef5fa 100%)", fontFamily: "Arial, sans-serif" }}>
+      <header style={{ display: "flex", alignItems: "center", padding: "14px 22px", background: "linear-gradient(135deg, " + COLORS.primary + ", " + COLORS.primaryDark + ")", boxShadow: "0 2px 12px rgba(11,123,196,0.2)", position: "sticky", top: 0, zIndex: 1000 }}>
         <button onClick={() => setMenuOpen((v) => !v)} style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 8, width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", cursor: "pointer", marginRight: 14 }}>
           <MenuIcon size={18} />
         </button>
@@ -3012,14 +2246,13 @@ function AppShell({ session, onLogout }) {
       <div style={{ display: "flex" }}>
         {menuOpen && <div className="app-sidebar-backdrop" onClick={() => setMenuOpen(false)} />}
         {menuOpen && (
-          <nav className="app-sidebar" style={{ width: 210, background: COLORS.card, borderRight: `1px solid ${COLORS.border}`, minHeight: "calc(100vh - 61px)", padding: "14px 10px" }}>
+          <nav className="app-sidebar" style={{ width: 210, background: COLORS.card, borderRight: "1px solid " + COLORS.border, minHeight: "calc(100vh - 61px)", padding: "14px 10px" }}>
             {menuItems.map((item) => {
               const Icon = item.icon;
               const active = page === item.key;
               return (
-                <div key={item.key} className="nav-item" onClick={() => { setPage(item.key); if (window.innerWidth < 768) setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", marginBottom: 4, borderRadius: 10, fontSize: 14, color: active ? COLORS.primary : COLORS.text, background: active ? "#eaf5fc" : "transparent", cursor: "pointer", fontWeight: active ? 600 : 400, borderLeft: active ? `3px solid ${COLORS.primary}` : "3px solid transparent" }}>
-                  <Icon size={17} />
-                  {item.label}
+                <div key={item.key} className="nav-item" onClick={() => { setPage(item.key); if (window.innerWidth < 768) setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", marginBottom: 4, borderRadius: 10, fontSize: 14, color: active ? COLORS.primary : COLORS.text, background: active ? "#eaf5fc" : "transparent", cursor: "pointer", fontWeight: active ? 600 : 400, borderLeft: active ? "3px solid " + COLORS.primary : "3px solid transparent" }}>
+                  <Icon size={17} /> {item.label}
                 </div>
               );
             })}
@@ -3031,116 +2264,25 @@ function AppShell({ session, onLogout }) {
           {page === "aziende" && <AziendeMandanti session={session} />}
           {page === "clienti" && <ClientiAnagrafica session={session} apriPreventivo={apriPreventivoCliente} apriGruppo={apriGruppoCliente} />}
           {page === "visite" && <CalendarioVisite session={session} />}
-          {page === "preventivi" && (
-            <PreventiviOfferte session={session} preventivoIniziale={preventivoAprireId} onPreventivoAperto={() => setPreventivoAprireId(null)} />
-          )}
+          {page === "preventivi" && (<PreventiviOfferte session={session} preventivoIniziale={preventivoAprireId} onPreventivoAperto={() => setPreventivoAprireId(null)} />)}
           {page === "mappa" && <MappaClienti session={session} />}
           {page === "statistiche" && <Statistiche session={session} />}
           {page === "fatturato" && <Fatturato session={session} />}
           {page === "ordini" && <RegistroOrdini session={session} apriPreventivo={apriPreventivoCliente} />}
           {page === "portafoglio" && <PortafoglioOrdini session={session} />}
-          {page === "gruppi" && (
-            <GruppiAcquisto session={session} gruppoIniziale={gruppoAprireId} onGruppoAperto={() => setGruppoAprireId(null)} />
-          )}
+          {page === "gruppi" && (<GruppiAcquisto session={session} gruppoIniziale={gruppoAprireId} onGruppoAperto={() => setGruppoAprireId(null)} />)}
         </main>
       </div>
     </div>
   );
 }
 
-// ============================================================
-// STILE GLOBALE RESPONSIVE
-// ============================================================
 function StileGlobaleResponsive() {
   return (
-    <style>{`
-      * { box-sizing: border-box; }
-      button { transition: all 0.18s ease; }
-      button:hover:not(:disabled) { filter: brightness(0.96); transform: translateY(-1px); }
-      button:active:not(:disabled) { transform: translateY(0) scale(0.98); }
-      input, select, textarea { transition: border-color 0.18s ease, box-shadow 0.18s ease; }
-      input:focus, select:focus, textarea:focus { outline: none; border-color: #0b7bc4 !important; box-shadow: 0 0 0 3px rgba(11,123,196,0.12); }
-      .dashboard-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
-      .dashboard-card:hover { transform: translateY(-4px); box-shadow: 0 10px 28px rgba(11,123,196,0.14) !important; }
-      .nav-item { transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
-      .nav-item:hover { background: #f2f8fc !important; }
-      table tbody tr { transition: background 0.15s ease; }
-      table tbody tr:hover { background: #f7fbfe; }
-      @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-      .page-content { animation: fadeSlideIn 0.25s ease; }
-      .app-sidebar-backdrop { display: none; }
-      @media (max-width: 768px) {
-        main * { min-width: 0; }
-        body { overflow-x: hidden; }
-        .app-sidebar {
-          position: fixed !important;
-          top: 61px;
-          left: 0;
-          height: calc(100vh - 61px) !important;
-          z-index: 40;
-          box-shadow: 4px 0 16px rgba(0,0,0,0.15);
-        }
-        .app-sidebar-backdrop {
-          display: block !important;
-          position: fixed;
-          top: 61px; left: 0; right: 0; bottom: 0;
-          background: rgba(0,0,0,0.35);
-          z-index: 35;
-        }
-        table { display: block; overflow-x: auto; white-space: nowrap; }
-        .tabella-righe-preventivo, .tabella-responsive { white-space: normal; }
-        .tabella-righe-preventivo thead, .tabella-responsive thead { display: none; }
-        .tabella-righe-preventivo, .tabella-righe-preventivo tbody, .tabella-righe-preventivo tr, .tabella-righe-preventivo td,
-        .tabella-responsive, .tabella-responsive tbody, .tabella-responsive tr, .tabella-responsive td {
-          display: block;
-          width: 100%;
-        }
-        .tabella-righe-preventivo tr, .tabella-responsive tr {
-          border: 1px solid #e2edf5;
-          border-radius: 8px;
-          margin-bottom: 8px;
-          padding: 6px;
-        }
-        .tabella-righe-preventivo td, .tabella-responsive td {
-          display: flex;
-          align-items: center;
-          justify-content: flex-start;
-          gap: 8px;
-          padding: 4px 2px;
-          border: none;
-          font-size: 12.5px;
-          text-align: left;
-        }
-        .tabella-righe-preventivo td::before, .tabella-responsive td::before {
-          content: attr(data-label);
-          font-size: 11px;
-          color: #7c8b98;
-          flex-shrink: 0;
-          min-width: 78px;
-        }
-        .tabella-righe-preventivo td input, .tabella-righe-preventivo td select {
-          width: auto;
-          flex: none;
-          max-width: 130px;
-        }
-        .form-header-preventivo select, .form-header-preventivo input {
-          max-width: none !important;
-          width: 100% !important;
-        }
-        input, select, textarea { font-size: 16px !important; }
-        main { padding: 10px !important; }
-        .email-utente { display: none; }
-        header { padding: 10px 12px !important; }
-        h2 { font-size: 17px !important; margin-bottom: 8px !important; }
-        h3 { font-size: 13px !important; }
-      }
-    `}</style>
+    <style>{"* { box-sizing: border-box; } body { transition: background 0.2s ease; } button { transition: all 0.18s ease; } button:hover:not(:disabled) { filter: brightness(0.96); transform: translateY(-1px); } button:active:not(:disabled) { transform: translateY(0) scale(0.98); } input, select, textarea { transition: border-color 0.18s ease, box-shadow 0.18s ease; } input:focus, select:focus, textarea:focus { outline: none; border-color: #0b7bc4 !important; box-shadow: 0 0 0 3px rgba(11,123,196,0.12); } .dashboard-card { transition: transform 0.2s ease, box-shadow 0.2s ease; } .dashboard-card:hover { transform: translateY(-4px); box-shadow: 0 10px 28px rgba(11,123,196,0.14) !important; } .nav-item { transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease; } .nav-item:hover { background: #f2f8fc !important; } table tbody tr { transition: background 0.15s ease; } table tbody tr:hover { background: #f7fbfe; } @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } } .page-content { animation: fadeSlideIn 0.25s ease; } .app-sidebar-backdrop { display: none; } @media (max-width: 768px) { main * { min-width: 0; } body { overflow-x: hidden; } .app-sidebar { position: fixed !important; top: 61px; left: 0; height: calc(100vh - 61px) !important; z-index: 40; box-shadow: 4px 0 16px rgba(0,0,0,0.15); } .app-sidebar-backdrop { display: block !important; position: fixed; top: 61px; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.35); z-index: 35; } table { display: block; overflow-x: auto; white-space: nowrap; } .tabella-righe-preventivo, .tabella-responsive { white-space: normal; } .tabella-righe-preventivo thead, .tabella-responsive thead { display: none; } .tabella-righe-preventivo, .tabella-righe-preventivo tbody, .tabella-righe-preventivo tr, .tabella-righe-preventivo td, .tabella-responsive, .tabella-responsive tbody, .tabella-responsive tr, .tabella-responsive td { display: block; width: 100%; } .tabella-righe-preventivo tr, .tabella-responsive tr { border: 1px solid #e2edf5; border-radius: 6px; margin-bottom: 6px; padding: 4px; } .tabella-righe-preventivo td, .tabella-responsive td { display: flex; align-items: flex-start; justify-content: flex-start; flex-direction: column; gap: 1px; padding: 3px 4px; border: none; font-size: 11.5px; width: 100%; max-width: 100%; } .tabella-righe-preventivo td::before, .tabella-responsive td::before { content: attr(data-label); font-size: 9px; color: #7c8b98; } .tabella-righe-preventivo td input, .tabella-righe-preventivo td select { width: 100% !important; max-width: 100% !important; flex: none; } .form-header-preventivo select, .form-header-preventivo input { max-width: none !important; width: 100% !important; } input, select, textarea { font-size: 16px !important; } main { padding: 10px !important; } .email-utente { display: none; } header { padding: 10px 12px !important; } h2 { font-size: 17px !important; margin-bottom: 8px !important; } h3 { font-size: 13px !important; } }"}</style>
   );
 }
 
-// ============================================================
-// COMPONENTE RADICE
-// ============================================================
 export default function App() {
   const [session, setSession] = useState(null);
   return (
