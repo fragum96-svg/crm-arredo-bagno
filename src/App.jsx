@@ -352,6 +352,40 @@ function LoginScreen({ onLogin }) {
     }
   };
 
+  const cerchioDecorativo = (stile) => <div style={{ position: "absolute", borderRadius: "50%", ...stile }} />;
+
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, " + COLORS.bg + " 0%, #e8f3fa 100%)", fontFamily: "Arial, sans-serif", position: "relative", overflow: "hidden" }}>
+      {cerchioDecorativo({ top: -80, left: -80, width: 260, height: 260, background: "radial-gradient(circle, " + COLORS.primary + "22, transparent 70%)" })}
+      {cerchioDecorativo({ bottom: -100, right: -60, width: 320, height: 320, background: "radial-gradient(circle, " + COLORS.primaryDark + "20, transparent 70%)" })}
+      {cerchioDecorativo({ top: "30%", right: "10%", width: 140, height: 140, background: "radial-gradient(circle, " + COLORS.primary + "15, transparent 70%)" })}
+
+      <div style={{ width: 360, padding: 36, background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 16, boxShadow: "0 12px 40px rgba(11,123,196,0.12)", position: "relative", zIndex: 1 }}>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: "linear-gradient(135deg, " + COLORS.primary + ", " + COLORS.primaryDark + ")", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
+          <ShieldCheck size={22} color="#fff" />
+        </div>
+
+        <h1 style={{ fontSize: 21, fontWeight: 700, color: COLORS.text, marginBottom: 4 }}>CRM Arredo Bagno</h1>
+        <p style={{ fontSize: 13, color: COLORS.muted, marginBottom: 24 }}>Accedi con le credenziali che ti sono state fornite</p>
+
+        <label style={{ fontSize: 13, color: "#333", display: "block", marginBottom: 6 }}>Email</label>
+        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ width: "100%", padding: "10px 12px", marginBottom: 16, border: "1px solid " + COLORS.border, borderRadius: 10, fontSize: 14, boxSizing: "border-box" }} />
+
+        <label style={{ fontSize: 13, color: "#333", display: "block", marginBottom: 6 }}>Password</label>
+        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ width: "100%", padding: "10px 12px", marginBottom: 16, border: "1px solid " + COLORS.border, borderRadius: 10, fontSize: 14, boxSizing: "border-box" }} />
+
+        {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 12 }}>{error}</div>}
+
+        <button onClick={submit} disabled={loading} style={{ width: "100%", padding: "12px 0", background: "linear-gradient(135deg, " + COLORS.primary + ", " + COLORS.primaryDark + ")", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+          {loading ? "Accesso in corso..." : "Accedi"}
+        </button>
+
+        <p style={{ fontSize: 11, color: "#9aa7b2", marginTop: 18, textAlign: "center" }}>Le credenziali vengono create dall'amministratore.</p>
+      </div>
+    </div>
+  );
+}
+
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: `linear-gradient(135deg, ${COLORS.bg} 0%, #e8f3fa 100%)`, fontFamily: "Arial, sans-serif", position: "relative", overflow: "hidden" }}>
       <div style={{ position: "absolute", top: "-80px", left: "-80px", width: 260, height: 260, borderRadius: "50%", background: `radial-gradient(circle, ${COLORS.primary}22, transparent 70%)` }} />
