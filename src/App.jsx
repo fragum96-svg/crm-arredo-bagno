@@ -129,18 +129,21 @@ function getWeekDays(date) {
 function nuovaRiga() {
   return {
     id: Math.random().toString(36).slice(2), articolo: "", descrizione: "", finitura: "",
-    quantita: 1, unita_misura: "", prezzo_unitario: 0, sconto1: 0, sconto2: 0,
+    quantita: 1, unita_misura: "", prezzo_unitario: 0, sconto1: 0, sconto2: 0, sconto3: 0,
     prezzo_netto_manuale: "", immagine_url: "",
   };
 }
 function calcolaRigaNetto(riga) {
-  const totaleListino = (Number(riga.quantita) || 0) * (Number(riga.prezzo_unitario) || 0);
+  const qta = Number(riga.quantita) || 0;
+  const totaleListino = qta * (Number(riga.prezzo_unitario) || 0);
   if (riga.prezzo_netto_manuale !== undefined && riga.prezzo_netto_manuale !== "" && riga.prezzo_netto_manuale !== null) {
-    return { totaleListino, netto: Number(riga.prezzo_netto_manuale) || 0 };
+    const nettoUnitarioManuale = Number(riga.prezzo_netto_manuale) || 0;
+    return { totaleListino, netto: nettoUnitarioManuale * qta };
   }
   const dopoSconto1 = totaleListino * (1 - (Number(riga.sconto1) || 0) / 100);
   const dopoSconto2 = dopoSconto1 * (1 - (Number(riga.sconto2) || 0) / 100);
-  return { totaleListino, netto: dopoSconto2 };
+  const dopoSconto3 = dopoSconto2 * (1 - (Number(riga.sconto3) || 0) / 100);
+  return { totaleListino, netto: dopoSconto3 };
 }
 function calcolaValoreVoce(modalita, percentuale, valoreEuro, base) {
   if (modalita === "nascosto" || modalita === "escluso") return 0;
@@ -171,7 +174,7 @@ function generaStampaHTML(preventivo, clienti, aziende) {
 
   const intestazioneColonne = soloNetto
     ? "<th>Img</th><th>Articolo</th><th>Descrizione</th><th>Finitura</th><th>Qtà</th><th>U.M.</th><th>Prezzo netto un.</th><th>Prezzo netto totale</th>"
-    : "<th>Img</th><th>Articolo</th><th>Descrizione</th><th>Finitura</th><th>Qtà</th><th>U.M.</th><th>Prezzo listino un.</th><th>Sc.1</th><th>Sc.2</th><th>Prezzo netto un.</th><th>Prezzo netto totale</th>";
+    : "<th>Img</th><th>Articolo</th><th>Descrizione</th><th>Finitura</th><th>Qtà</th><th>U.M.</th><th>Prezzo listino un.</th><th>Sc.1</th><th>Sc.2</th><th>Sc.3</th><th>Prezzo netto un.</th><th>Prezzo netto totale</th>";
 
   const righeHtml = righeArr.map((riga) => {
     const { netto } = calcolaRigaNetto(riga);
@@ -181,7 +184,7 @@ function generaStampaHTML(preventivo, clienti, aziende) {
     if (soloNetto) {
       return "<tr>" + cellaImg + "<td>" + (riga.articolo || "") + "</td><td>" + (riga.descrizione || "") + "</td><td>" + (riga.finitura || "") + "</td><td>" + (riga.quantita || "") + "</td><td>" + (riga.unita_misura || "") + "</td><td>" + formattaNumero(nettoUnitario) + "</td><td>" + formattaNumero(netto) + "</td></tr>";
     }
-    return "<tr>" + cellaImg + "<td>" + (riga.articolo || "") + "</td><td>" + (riga.descrizione || "") + "</td><td>" + (riga.finitura || "") + "</td><td>" + (riga.quantita || "") + "</td><td>" + (riga.unita_misura || "") + "</td><td>" + formattaNumero(riga.prezzo_unitario) + "</td><td>" + (riga.sconto1 || 0) + "%</td><td>" + (riga.sconto2 || 0) + "%</td><td>" + formattaNumero(nettoUnitario) + "</td><td>" + formattaNumero(netto) + "</td></tr>";
+    return "<tr>" + cellaImg + "<td>" + (riga.articolo || "") + "</td><td>" + (riga.descrizione || "") + "</td><td>" + (riga.finitura || "") + "</td><td>" + (riga.quantita || "") + "</td><td>" + (riga.unita_misura || "") + "</td><td>" + formattaNumero(riga.prezzo_unitario) + "</td><td>" + (riga.sconto1 || 0) + "%</td><td>" + (riga.sconto2 || 0) + "%</td><td>" + (riga.sconto3 || 0) + "%</td><td>" + formattaNumero(nettoUnitario) + "</td><td>" + formattaNumero(netto) + "</td></tr>";
   }).join("");
 
   function rigaVoce(label, modalita, valore, valoreGrezzo) {
@@ -1430,9 +1433,10 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
                   <div style={{ display: "flex", gap: 8 }}>
                     <div style={{ flex: 1 }}><label style={rigaLabel}>Sc.1 %</label><input type="number" value={riga.sconto1} onChange={(e) => aggiornaRiga(riga.id, "sconto1", e.target.value)} style={campoMobile} /></div>
                     <div style={{ flex: 1 }}><label style={rigaLabel}>Sc.2 %</label><input type="number" value={riga.sconto2} onChange={(e) => aggiornaRiga(riga.id, "sconto2", e.target.value)} style={campoMobile} /></div>
+                    <div style={{ flex: 1 }}><label style={rigaLabel}>Sc.3 %</label><input type="number" value={riga.sconto3} onChange={(e) => aggiornaRiga(riga.id, "sconto3", e.target.value)} style={campoMobile} /></div>
                   </div>
-                  <label style={rigaLabel}>Netto manuale (opzionale)</label>
-                  <input type="number" placeholder="lascia vuoto per calcolo automatico" value={riga.prezzo_netto_manuale} onChange={(e) => aggiornaRiga(riga.id, "prezzo_netto_manuale", e.target.value)} style={campoMobile} />
+                  <label style={rigaLabel}>Netto unitario manuale (opzionale)</label>
+                  <input type="number" placeholder="prezzo netto per singolo pezzo" value={riga.prezzo_netto_manuale} onChange={(e) => aggiornaRiga(riga.id, "prezzo_netto_manuale", e.target.value)} style={campoMobile} />
                   <label style={rigaLabel}>Immagine articolo (opzionale)</label>
                   {riga.immagine_url ? (
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
@@ -1454,7 +1458,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 12 }} className="tabella-righe-preventivo">
             <thead><tr style={{ textAlign: "left", borderBottom: "2px solid " + COLORS.border }}>
               <th style={{ padding: 6 }}>Art.</th><th style={{ padding: 6 }}>Descrizione</th><th style={{ padding: 6 }}>Finitura</th><th style={{ padding: 6 }}>Qtà</th><th style={{ padding: 6 }}>U.M.</th>
-              <th style={{ padding: 6 }}>Prezzo un.</th><th style={{ padding: 6 }}>Sc.1 %</th><th style={{ padding: 6 }}>Sc.2 %</th><th style={{ padding: 6 }}>Netto manuale</th><th style={{ padding: 6 }}>Immagine</th>
+              <th style={{ padding: 6 }}>Prezzo un.</th><th style={{ padding: 6 }}>Sc.1 %</th><th style={{ padding: 6 }}>Sc.2 %</th><th style={{ padding: 6 }}>Sc.3 %</th><th style={{ padding: 6 }}>Netto un. manuale</th><th style={{ padding: 6 }}>Immagine</th>
               <th style={{ padding: 6 }}>Netto</th><th style={{ padding: 6 }}></th>
             </tr></thead>
             <tbody>
@@ -1477,7 +1481,8 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
                     <td style={{ padding: 4 }} data-label="Prezzo un."><input type="number" value={riga.prezzo_unitario} onChange={(e) => aggiornaRiga(riga.id, "prezzo_unitario", e.target.value)} style={{ ...inputStyle, width: 65 }} /></td>
                     <td style={{ padding: 4 }} data-label="Sc.1 %"><input type="number" value={riga.sconto1} onChange={(e) => aggiornaRiga(riga.id, "sconto1", e.target.value)} style={{ ...inputStyle, width: 50 }} /></td>
                     <td style={{ padding: 4 }} data-label="Sc.2 %"><input type="number" value={riga.sconto2} onChange={(e) => aggiornaRiga(riga.id, "sconto2", e.target.value)} style={{ ...inputStyle, width: 50 }} /></td>
-                    <td style={{ padding: 4 }} data-label="Netto manuale"><input type="number" placeholder="opz." value={riga.prezzo_netto_manuale} onChange={(e) => aggiornaRiga(riga.id, "prezzo_netto_manuale", e.target.value)} style={{ ...inputStyle, width: 65 }} /></td>
+                    <td style={{ padding: 4 }} data-label="Sc.3 %"><input type="number" value={riga.sconto3} onChange={(e) => aggiornaRiga(riga.id, "sconto3", e.target.value)} style={{ ...inputStyle, width: 50 }} /></td>
+                    <td style={{ padding: 4 }} data-label="Netto un. manuale"><input type="number" placeholder="opz." value={riga.prezzo_netto_manuale} onChange={(e) => aggiornaRiga(riga.id, "prezzo_netto_manuale", e.target.value)} style={{ ...inputStyle, width: 65 }} /></td>
                     <td style={{ padding: 4 }} data-label="Immagine">
                       {riga.immagine_url ? (
                         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -2283,8 +2288,37 @@ function StileGlobaleResponsive() {
   );
 }
 
+async function rinnovaSessione(refreshToken) {
+  try {
+    const res = await fetch(SUPABASE_URL + "/auth/v1/token?grant_type=refresh_token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    const data = await res.json();
+    if (!res.ok) return null;
+    return data;
+  } catch (e) {
+    return null;
+  }
+}
+
 export default function App() {
   const [session, setSession] = useState(null);
+
+  useEffect(() => {
+    if (!session || !session.refresh_token) return;
+    const secondiValidita = session.expires_in || 3600;
+    const msPrimaDiScadenza = Math.max((secondiValidita - 300) * 1000, 30000);
+    const timer = setTimeout(async () => {
+      const nuovaSessione = await rinnovaSessione(session.refresh_token);
+      if (nuovaSessione && nuovaSessione.access_token) {
+        setSession((prev) => ({ ...prev, ...nuovaSessione }));
+      }
+    }, msPrimaDiScadenza);
+    return () => clearTimeout(timer);
+  }, [session]);
+
   return (
     <>
       <StileGlobaleResponsive />
