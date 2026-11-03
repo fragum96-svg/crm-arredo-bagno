@@ -596,6 +596,11 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
   const [documenti, setDocumenti] = useState([]);
   const [ordini, setOrdini] = useState([]);
   const [attivita, setAttivita] = useState([]);
+  const [fatturatoCliente,setFatturatoCliente]=useState([]);
+  const [portafoglioCliente,setPortafoglioCliente]=useState([]);
+  const [opportunitaCliente,setOpportunitaCliente]=useState([]);
+  const [annoEconomico,setAnnoEconomico]=useState(new Date().getFullYear());
+  const [erroreEconomico,setErroreEconomico]=useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [nota, setNota] = useState("");
@@ -616,8 +621,16 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
         fetch(SUPABASE_URL + "/rest/v1/ordini_confermati?cliente_id=eq." + clienteId + "&select=*&order=data_ordine.desc", { headers: headers() }),
         fetch(SUPABASE_URL + "/rest/v1/attivita_cliente?cliente_id=eq." + clienteId + "&select=*&order=data.desc", { headers: headers() }),
         fetch(SUPABASE_URL + "/rest/v1/sedi_cliente?cliente_id=eq." + clienteId + "&select=*&order=created_at.asc", { headers: headers() }),
+        fetch(SUPABASE_URL + "/rest/v1/fatturato_commerciale?cliente_id=eq." + clienteId + "&select=*&order=anno.desc", { headers: headers() }),
+        fetch(SUPABASE_URL + "/rest/v1/portafoglio_ordini?cliente_id=eq." + clienteId + "&select=*&order=data_rilevazione.desc", { headers: headers() }),
+        fetch(SUPABASE_URL + "/rest/v1/opportunita_commerciali?cliente_id=eq." + clienteId + "&select=*&order=created_at.desc", { headers: headers() }),
       ]);
-      const [dCliente, dVisite, dPreventivi, dDocumenti, dOrdini, dAttivita, dSedi] = await Promise.all(results.map((r) => r.json()));
+      const [dCliente, dVisite, dPreventivi, dDocumenti, dOrdini, dAttivita, dSedi, dFatturato, dPortafoglio, dOpportunita] = await Promise.all(results.map((r) => r.json()));
+      const erroriExtra=results.slice(7).map((r,i)=>!r.ok?(["Fatturato","Portafoglio","Opportunità"][i]+": "+([dFatturato,dPortafoglio,dOpportunita][i]?.message||r.status)):null).filter(Boolean);
+      setErroreEconomico(erroriExtra.join(" · "));
+      setFatturatoCliente(Array.isArray(dFatturato)?dFatturato:[]);
+      setPortafoglioCliente(Array.isArray(dPortafoglio)?dPortafoglio:[]);
+      setOpportunitaCliente(Array.isArray(dOpportunita)?dOpportunita:[]);
       setCliente(dCliente && dCliente[0]);
       setVisite(Array.isArray(dVisite) ? dVisite : []);
       setPreventivi(Array.isArray(dPreventivi) ? dPreventivi : []);
@@ -686,6 +699,20 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
     try { await fetch(SUPABASE_URL + "/rest/v1/sedi_cliente?id=eq." + id, { method: "DELETE", headers: headers() }); load(); } catch (err) { setError(err.message); }
   };
 
+  const fatturatoAnno=fatturatoCliente.filter(f=>Number(f.anno)===Number(annoEconomico));
+  const totaleFatturato=fatturatoAnno.reduce((t,f)=>t+Number(f.importo||0),0);
+  const ultimeFotografie=new Map();
+  const oggiRilevazione=new Date().toISOString().slice(0,10);
+  portafoglioCliente.filter(p=>p.data_rilevazione<=oggiRilevazione).forEach(p=>{
+    const prev=ultimeFotografie.get(p.azienda_id);
+    if(!prev||p.data_rilevazione>prev.data_rilevazione)ultimeFotografie.set(p.azienda_id,p);
+  });
+  const portafoglioAttuale=[...ultimeFotografie.values()].reduce((t,p)=>t+Number(p.importo||0),0);
+  const opportunitaAperte=opportunitaCliente.filter(o=>!["confermata","persa"].includes(o.fase));
+  const valoreOpportunita=opportunitaAperte.reduce((t,o)=>t+Number(o.valore_stimato||0),0);
+  const righeEconomiche=aziendeOptions.filter(a=>fatturatoAnno.some(f=>f.azienda_id===a.id)||ultimeFotografie.has(a.id)||opportunitaCliente.some(o=>o.azienda_id===a.id));
+  const fasiNomi={primo_contatto:"Primo contatto",trattativa:"Trattativa",offerta_inviata:"Offerta inviata",confermata:"Confermata",persa:"Persa",sospesa:"Sospesa"};
+  const kpiStyle={background:"#f6f9ff",border:"1px solid #e1e9f5",borderRadius:12,padding:16,minWidth:150,flex:1};
   const nomeAzienda = (id) => { const a = aziendeOptions.find((x) => x.id === id); return a ? a.nome : "—"; };
   const inputStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
   const sezione = (titolo, contenuto) => (
@@ -710,6 +737,26 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
         {cliente.classificazione && <span style={{ fontSize: 12, color: COLORS.muted, background: COLORS.bg, padding: "3px 10px", borderRadius: 12 }}>{cliente.classificazione}</span>}
       </div>
       {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 14 }}>{error}</div>}
+
+      {sezione("Panoramica commerciale", (
+        <div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:14}}>
+            <span style={{fontSize:12,color:COLORS.muted}}>Fatturato registrato, portafoglio rilevato e opportunità commerciali</span>
+            <label style={{fontSize:12,color:COLORS.muted}}>Anno fatturato {" "}<select value={annoEconomico} onChange={e=>setAnnoEconomico(Number(e.target.value))} style={{border:"1px solid #dce5f1",borderRadius:8,padding:7}}>{Array.from(new Set([new Date().getFullYear(),...fatturatoCliente.map(f=>Number(f.anno))])).sort((a,b)=>b-a).map(y=><option key={y} value={y}>{y}</option>)}</select></label>
+          </div>
+          {erroreEconomico&&<p style={{color:COLORS.danger,fontSize:12}}>Dati economici parziali: {erroreEconomico}</p>}
+          <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:18}}>
+            <div style={kpiStyle}><div style={{fontSize:11,color:COLORS.muted}}>Fatturato {annoEconomico}</div><strong style={{fontSize:21}}>{formattaEuro(totaleFatturato)}</strong></div>
+            <div style={kpiStyle}><div style={{fontSize:11,color:COLORS.muted}}>Portafoglio ultimo rilevamento</div><strong style={{fontSize:21}}>{formattaEuro(portafoglioAttuale)}</strong></div>
+            <div style={kpiStyle}><div style={{fontSize:11,color:COLORS.muted}}>Trattative aperte ({opportunitaAperte.length})</div><strong style={{fontSize:21}}>{formattaEuro(valoreOpportunita)}</strong></div>
+          </div>
+          <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12,textAlign:"left"}}><thead><tr style={{color:COLORS.muted,borderBottom:"1px solid #dce5f1"}}><th style={{padding:9}}>Mandante</th><th style={{padding:9}}>Fatturato {annoEconomico}</th><th style={{padding:9}}>Portafoglio</th><th style={{padding:9}}>Opportunità aperte</th></tr></thead><tbody>{righeEconomiche.map(a=><tr key={a.id} style={{borderBottom:"1px solid #edf1f6"}}><td style={{padding:9,fontWeight:600}}>{a.nome}</td><td style={{padding:9}}>{formattaEuro(fatturatoAnno.filter(f=>f.azienda_id===a.id).reduce((t,f)=>t+Number(f.importo||0),0))}</td><td style={{padding:9}}>{formattaEuro(ultimeFotografie.get(a.id)?.importo||0)}</td><td style={{padding:9}}>{formattaEuro(opportunitaAperte.filter(o=>o.azienda_id===a.id).reduce((t,o)=>t+Number(o.valore_stimato||0),0))}</td></tr>)}{righeEconomiche.length===0&&<tr><td colSpan={4} style={{padding:12,color:COLORS.muted}}>Nessun dato commerciale registrato per questo cliente.</td></tr>}</tbody></table></div>
+          <p style={{fontSize:11,color:COLORS.muted,marginTop:12}}>Gli importi sono separati: non vengono sommati tra loro. Il portafoglio mostra l'ultima rilevazione disponibile per ciascuna mandante, non la somma dello storico.</p>
+        </div>
+      ))}
+      {sezione("Opportunità commerciali", (
+        opportunitaCliente.length===0?<p style={{fontSize:12,color:COLORS.muted}}>Nessuna opportunità collegata a questo cliente.</p>:<div>{opportunitaCliente.map(o=><div key={o.id} style={{display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap",padding:"11px 0",borderBottom:"1px solid #edf1f6",fontSize:12}}><div><strong>{o.titolo}</strong><div style={{color:COLORS.muted,marginTop:4}}>{nomeAzienda(o.azienda_id)} · {fasiNomi[o.fase]||o.fase}{o.prossima_azione?" · "+o.prossima_azione:""}</div></div><strong>{formattaEuro(o.valore_stimato)}</strong></div>)}</div>
+      ))}
 
       {sezione("Dati anagrafici", (
         <div style={{ fontSize: 13, color: COLORS.text, lineHeight: 1.8 }}>
