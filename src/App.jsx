@@ -2145,6 +2145,122 @@ function NoteCRM({ session }) {
   </div>;
 }
 
+function ControlloCommerciale({ session }) {
+  const annoCorrente = new Date().getFullYear();
+  const [anno, setAnno] = useState(annoCorrente);
+  const [aziendaId, setAziendaId] = useState("");
+  const [aziende, setAziende] = useState([]);
+  const [clienti, setClienti] = useState([]);
+  const [fatturati, setFatturati] = useState([]);
+  const [portafogli, setPortafogli] = useState([]);
+  const [tab, setTab] = useState("fatturato");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [editing, setEditing] = useState(null);
+  const oggi = new Date();
+  const dataOggi = [oggi.getFullYear(),String(oggi.getMonth()+1).padStart(2,"0"),String(oggi.getDate()).padStart(2,"0")].join("-");
+  const vuoto = {cliente_id:"", periodicita:"mensile",periodo:String(oggi.getMonth()+1),anno:String(annoCorrente),importo:"",data_rilevazione:dataOggi,note:""};
+  const [form,setForm] = useState(vuoto);
+  const headers = () => ({ "Content-Type":"application/json", apikey:SUPABASE_ANON_KEY, Authorization:"Bearer "+session.access_token });
+  const request = async (path, options={}) => {
+    const response = await fetch(SUPABASE_URL+"/rest/v1/"+path,{...options,headers:{...headers(),...(options.headers||{})}});
+    const raw = await response.text();
+    let result = null;
+    try {result=raw?JSON.parse(raw):null;} catch {result=raw;}
+    if(!response.ok) throw new Error(result?.message || result?.details || "Errore durante la comunicazione con Supabase");
+    return result;
+  };
+  const load = async () => {
+    setLoading(true);setError("");
+    try {
+      const [a,c,f,p]=await Promise.all([
+        request("aziende_mandanti?select=id,nome,colore&order=nome.asc"),
+        request("clienti?select=id,ragione_sociale,aziende_collaborate&order=ragione_sociale.asc"),
+        request("fatturato_commerciale?select=*&order=anno.desc,periodo.desc"),
+        request("portafoglio_ordini?select=*&order=data_rilevazione.desc")
+      ]);
+      setAziende(a||[]);setClienti(c||[]);setFatturati(f||[]);setPortafogli(p||[]);
+      setAziendaId(old => (a||[]).some(x=>x.id===old)?old:((a||[])[0]?.id||""));
+    } catch(e){setError(e.message);} finally {setLoading(false);}
+  };
+  useEffect(()=>{load();},[session.access_token]);
+  const azienda=aziende.find(a=>a.id===aziendaId);
+  const clientiAmmessi=clienti.filter(c=>Array.isArray(c.aziende_collaborate)&&c.aziende_collaborate.includes(azienda?.nome));
+  const nomeCliente=id=>clienti.find(c=>c.id===id)?.ragione_sociale||"Cliente non trovato";
+  const euro=n=>Number(n||0).toLocaleString("it-IT",{style:"currency",currency:"EUR"});
+  const fAnno=fatturati.filter(f=>f.azienda_id===aziendaId&&f.anno===Number(anno));
+  const fTotale=fAnno.reduce((sum,f)=>sum+Number(f.importo||0),0);
+  const ultime=new Map();
+  portafogli.filter(p=>p.azienda_id===aziendaId&&p.data_rilevazione<=dataOggi).forEach(p=>{
+    const prev=ultime.get(p.cliente_id);
+    if(!prev||p.data_rilevazione>prev.data_rilevazione) ultime.set(p.cliente_id,p);
+  });
+  const pTotale=Array.from(ultime.values()).reduce((sum,p)=>sum+Number(p.importo||0),0);
+  const righe=tab==="fatturato"?fAnno:[...portafogli.filter(p=>p.azienda_id===aziendaId)].sort((a,b)=>b.data_rilevazione.localeCompare(a.data_rilevazione));
+  const nuovo=(tipo=tab)=>{setTab(tipo);setEditing(null);setError("");setSuccess("");setForm({...vuoto,anno:String(anno)});};
+  const modifica=(r,tipo)=>{setTab(tipo);setEditing(r.id);setForm({cliente_id:r.cliente_id,periodicita:r.periodicita||"mensile",periodo:String(r.periodo||1),anno:String(r.anno||anno),importo:String(r.importo),data_rilevazione:r.data_rilevazione||dataOggi,note:r.note||""});setError("");setSuccess("");};
+  const salva=async()=>{
+    setError("");setSuccess("");
+    if(!aziendaId||!form.cliente_id){setError("Seleziona un'azienda e un cliente.");return;}
+    if(!clientiAmmessi.some(c=>c.id===form.cliente_id)){setError("Il cliente non risulta associato alla mandante.");return;}
+    if(form.importo.trim()===""||!Number.isFinite(Number(form.importo))||Number(form.importo)<0){setError("Inserisci un importo valido, anche zero.");return;}
+    if(tab==="fatturato"&&(!Number.isInteger(Number(form.anno))||Number(form.anno)<2000||Number(form.anno)>2100)){setError("Anno non valido.");return;}
+    if(tab==="portafoglio"&&(!form.data_rilevazione||form.data_rilevazione>dataOggi)){setError("Inserisci una data di rilevazione valida, non futura.");return;}
+    const table=tab==="fatturato"?"fatturato_commerciale":"portafoglio_ordini";
+    const body=tab==="fatturato"?{cliente_id:form.cliente_id,azienda_id:aziendaId,anno:Number(form.anno),periodicita:form.periodicita,periodo:Number(form.periodo),importo:Number(form.importo),note:form.note||null}:{cliente_id:form.cliente_id,azienda_id:aziendaId,data_rilevazione:form.data_rilevazione,importo:Number(form.importo),note:form.note||null};
+    setSaving(true);
+    try {await request(table+(editing?"?id=eq."+editing:""),{method:editing?"PATCH":"POST",body:JSON.stringify(body)});await load();setEditing(null);setForm({...vuoto,anno:String(anno)});setSuccess("Registrazione salvata correttamente.");}
+    catch(e){setError(e.message.includes("registrazione_unica")||e.message.includes("rilevazione_unica")?"Esiste già una registrazione per questo cliente e periodo/data.":e.message);}
+    finally {setSaving(false);}
+  };
+  const elimina=async(r,tipo)=>{
+    if(!window.confirm("Eliminare definitivamente questa registrazione?"))return;
+    setError("");setSuccess("");
+    try {await request((tipo==="fatturato"?"fatturato_commerciale":"portafoglio_ordini")+"?id=eq."+r.id,{method:"DELETE"});await load();if(editing===r.id)nuovo(tipo);setSuccess("Registrazione eliminata.");}catch(e){setError(e.message);}
+  };
+  const box={background:"#fff",border:"1px solid #e5eaf3",borderRadius:14,padding:18};
+  const input={width:"100%",padding:"10px 11px",border:"1px solid #dbe3ee",borderRadius:9,background:"#fff",color:"#26344d",fontSize:13};
+  const label={display:"block",fontSize:12,fontWeight:650,color:"#58677e",marginBottom:5};
+  const btn={border:0,borderRadius:9,padding:"10px 15px",background:"#3479ee",color:"#fff",fontWeight:700,cursor:"pointer"};
+  return <div style={{display:"grid",gap:16}}>
+    <div><h2 style={{margin:"0 0 5px",fontSize:23,color:"#15243c"}}>Controllo Commerciale</h2><p style={{margin:0,color:"#8490a3",fontSize:12}}>Fatturato e portafoglio ordini registrati manualmente · IVA esclusa</p></div>
+    <div style={{...box,display:"flex",gap:12,flexWrap:"wrap",alignItems:"end"}}>
+      <div style={{flex:"1 1 220px"}}><label style={label}>Azienda mandante</label><select style={input} value={aziendaId} onChange={e=>{setAziendaId(e.target.value);setEditing(null);setForm({...vuoto,anno:String(anno)});}}><option value="">Seleziona azienda</option>{aziende.map(a=><option key={a.id} value={a.id}>{a.nome}</option>)}</select></div>
+      <div style={{width:125}}><label style={label}>Anno fatturato</label><select style={input} value={anno} onChange={e=>{setAnno(Number(e.target.value));setEditing(null);setForm({...vuoto,anno:e.target.value});}}>{Array.from({length:8},(_,i)=>annoCorrente+1-i).map(y=><option key={y} value={y}>{y}</option>)}</select></div>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(185px,1fr))",gap:12}}>
+      {[{titolo:"Fatturato nell'anno",valore:fTotale,sub:"Somma dei periodi registrati"},{titolo:"Portafoglio attuale",valore:pTotale,sub:"Ultima rilevazione per cliente"},{titolo:"Volume commerciale",valore:fTotale+pTotale,sub:"Fatturato + portafoglio attuale"},{titolo:"Clienti associati",valore:clientiAmmessi.length,sub:"Abilitati per la mandante",numero:true}].map(x=><div key={x.titolo} style={box}><div style={{color:"#7b879a",fontSize:12}}>{x.titolo}</div><strong style={{display:"block",fontSize:23,margin:"9px 0",color:"#1c2d4b"}}>{x.numero?x.valore:euro(x.valore)}</strong><span style={{fontSize:11,color:"#96a0af"}}>{x.sub}</span></div>)}
+    </div>
+    {loading?<div style={box}>Caricamento dati…</div>:<>
+      {aziende.length===0&&<div style={box}>Inserisci prima un'azienda mandante nella sezione Mandanti.</div>}
+      {azienda&&clientiAmmessi.length===0&&<div style={{...box,color:"#8a641b",background:"#fffaf0"}}>Nessun cliente associato a {azienda.nome}. Crea un cliente di prova e seleziona questa mandante nella sua scheda.</div>}
+      <div style={{...box,display:"grid",gap:13}}>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{[{id:"fatturato",label:"Fatturato"},{id:"portafoglio",label:"Portafoglio ordini"}].map(t=><button key={t.id} onClick={()=>nuovo(t.id)} style={{...btn,background:tab===t.id?"#3479ee":"#eef3fb",color:tab===t.id?"#fff":"#40526e"}}>{t.label}</button>)}</div>
+        <h3 style={{margin:0,fontSize:15}}>{editing?"Modifica registrazione":"Nuova registrazione"} · {tab==="fatturato"?"Fatturato":"Portafoglio ordini"}</h3>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:12}}>
+          <div><label style={label}>Cliente *</label><select style={input} value={form.cliente_id} onChange={e=>setForm(f=>({...f,cliente_id:e.target.value}))}><option value="">Seleziona cliente</option>{clientiAmmessi.map(c=><option key={c.id} value={c.id}>{c.ragione_sociale}</option>)}</select></div>
+          {tab==="fatturato"?<>
+            <div><label style={label}>Periodicità</label><select style={input} value={form.periodicita} onChange={e=>setForm(f=>({...f,periodicita:e.target.value,periodo:"1"}))}><option value="mensile">Mensile</option><option value="trimestrale">Trimestrale</option></select></div>
+            <div><label style={label}>Anno</label><input style={input} type="number" min="2000" max="2100" value={form.anno} onChange={e=>setForm(f=>({...f,anno:e.target.value}))}/></div>
+            <div><label style={label}>{form.periodicita==="mensile"?"Mese":"Trimestre"}</label><select style={input} value={form.periodo} onChange={e=>setForm(f=>({...f,periodo:e.target.value}))}>{(form.periodicita==="mensile"?MESI:["1° trimestre","2° trimestre","3° trimestre","4° trimestre"]).map((m,i)=><option key={i} value={i+1}>{m}</option>)}</select></div>
+          </>:<div><label style={label}>Data rilevazione *</label><input style={input} type="date" max={dataOggi} value={form.data_rilevazione} onChange={e=>setForm(f=>({...f,data_rilevazione:e.target.value}))}/></div>}
+          <div><label style={label}>Importo netto (€) *</label><input style={input} type="number" min="0" step="0.01" placeholder="0,00" value={form.importo} onChange={e=>setForm(f=>({...f,importo:e.target.value}))}/></div>
+        </div>
+        <div><label style={label}>Note (facoltative)</label><textarea style={{...input,minHeight:60}} value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} placeholder="Dettagli della rilevazione"/></div>
+        {error&&<div style={{color:"#b42318",fontSize:12}}>{error}</div>}{success&&<div style={{color:"#147d52",fontSize:12}}>{success}</div>}
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button style={btn} onClick={salva} disabled={saving||!aziendaId||clientiAmmessi.length===0}>{saving?"Salvataggio…":editing?"Salva modifiche":"Registra importo"}</button>{editing&&<button style={{...btn,background:"#edf1f7",color:"#475569"}} onClick={()=>nuovo(tab)}>Annulla modifica</button>}</div>
+        <p style={{fontSize:11,color:"#8995a8",margin:0}}>{tab==="fatturato"?"Non è possibile inserire un trimestre se esistono già mesi dello stesso trimestre (e viceversa).":"Il portafoglio è una fotografia: i valori di date diverse non vengono sommati tra loro."}</p>
+      </div>
+      <div style={box}>
+        <h3 style={{margin:"0 0 13px",fontSize:15}}>Storico {tab==="fatturato"?"fatturato · "+anno:"portafoglio"}</h3>
+        <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:580}}><thead><tr style={{background:"#f5f7fb",textAlign:"left"}}><th style={{padding:10}}>Cliente</th><th style={{padding:10}}>Periodo / data</th><th style={{padding:10,textAlign:"right"}}>Importo</th><th style={{padding:10}}>Note</th><th style={{padding:10}}>Azioni</th></tr></thead><tbody>{righe.map(r=><tr key={r.id} style={{borderBottom:"1px solid #eef1f6"}}><td style={{padding:10}}>{nomeCliente(r.cliente_id)}</td><td style={{padding:10}}>{tab==="fatturato"?(r.periodicita==="mensile"?MESI[r.periodo-1]:"T"+r.periodo)+" "+r.anno:r.data_rilevazione.split("-").reverse().join("/")}</td><td style={{padding:10,textAlign:"right",fontWeight:700}}>{euro(r.importo)}</td><td style={{padding:10,color:"#78869b"}}>{r.note||"—"}</td><td style={{padding:10,whiteSpace:"nowrap"}}><button onClick={()=>modifica(r,tab)} style={{border:0,background:"transparent",color:"#2c70e2",cursor:"pointer",marginRight:8}}>Modifica</button><button onClick={()=>elimina(r,tab)} style={{border:0,background:"transparent",color:"#bd3e3e",cursor:"pointer"}}>Elimina</button></td></tr>)}</tbody></table>{righe.length===0&&<p style={{fontSize:12,color:"#8895a8"}}>Nessuna registrazione per questa selezione.</p>}</div>
+      </div>
+    </>}
+  </div>;
+}
+
 function AppShell({ session, onLogout }) {
   const [menuOpen, setMenuOpen] = useState(typeof window === "undefined" ? true : window.innerWidth > 768);
   const [page, setPage] = useState("dashboard");
@@ -2160,7 +2276,7 @@ function AppShell({ session, onLogout }) {
     {id:"mandanti",nome:"Mandanti",icon:Building2,items:[{key:"aziende",label:"Aziende mandanti",icon:Building2}]},
     {id:"opportunita",nome:"Opportunità",icon:Target,items:[{key:"preventivi",label:"Preventivi e offerte",icon:FileText},{key:"portafoglio",label:"Portafoglio ordini",icon:Briefcase},{key:"ordini",label:"Registro ordini",icon:ClipboardList}]},
     {id:"agenda",nome:"Agenda",icon:CalendarDays,items:[{key:"visite",label:"Calendario e appuntamenti",icon:CalendarDays},{key:"storico_visite",label:"Storico visite",icon:ClipboardList}]},
-    {id:"report",nome:"Report",icon:BarChart3,items:[{key:"fatturato",label:"Fatturato",icon:Wallet},{key:"statistiche",label:"Statistiche",icon:TrendingUp}]},
+    {id:"report",nome:"Report",icon:BarChart3,items:[{key:"controllo",label:"Controllo Commerciale",icon:Wallet},{key:"fatturato",label:"Fatturato (ordini CRM)",icon:Wallet},{key:"statistiche",label:"Statistiche",icon:TrendingUp}]},
   ];
   const scegli = key => { setPage(key); if(window.innerWidth<768)setMenuOpen(false); };
   const avatar=(session.user.email||"FG").split("@")[0].slice(0,2).toUpperCase();
@@ -2187,6 +2303,7 @@ function AppShell({ session, onLogout }) {
         {page==="mappa"&&<MappaClienti session={session}/>}
         {page==="statistiche"&&<Statistiche session={session}/>}
         {page==="fatturato"&&<Fatturato session={session}/>}
+        {page==="controllo"&&<ControlloCommerciale session={session}/>}
         {page==="ordini"&&<RegistroOrdini session={session} apriPreventivo={apriPreventivoCliente}/>}
         {page==="portafoglio"&&<PortafoglioOrdini session={session}/>}
         {page==="gruppi"&&<GruppiAcquisto session={session} gruppoIniziale={gruppoAprireId} onGruppoAperto={()=>setGruppoAprireId(null)}/>}
