@@ -1117,7 +1117,7 @@ function CalendarioVisite({ session }) {
   const [appuntamenti, setAppuntamenti] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [viewMode, setViewMode] = useState("settimana");
+  const [viewMode, setViewMode] = useState(() => typeof window !== "undefined" && window.innerWidth <= 700 ? "giorno" : "settimana");
   const [mobileAgenda, setMobileAgenda] = useState(() => typeof window !== "undefined" && window.innerWidth <= 700);
   useEffect(() => { const sync = () => setMobileAgenda(window.innerWidth <= 700); window.addEventListener("resize", sync); return () => window.removeEventListener("resize", sync); }, []);
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -1190,18 +1190,70 @@ function CalendarioVisite({ session }) {
       {campo("Note", <textarea style={inputStyle} rows={2} value={form.note} onChange={e=>setForm({...form,note:e.target.value})}/>)}
     </div><div style={{ display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap" }}><button disabled={saving} onClick={save} style={{ background: COLORS.primary, color: "white", border: 0, borderRadius: 8, padding: "10px 18px", cursor: "pointer" }}>{saving ? "Salvataggio..." : "Salva appuntamento"}</button><button onClick={()=>{setMostraForm(false);setError("");}} style={{ border: "1px solid "+COLORS.border, background: "white", borderRadius: 8, padding: "10px 16px", cursor: "pointer" }}>Annulla</button>{editingId && <button onClick={()=>remove(editingId)} style={{ marginLeft: "auto", color: COLORS.danger, border: "1px solid "+COLORS.border, background: "white", borderRadius: 8, padding: "10px 16px", cursor: "pointer" }}>Elimina</button>}</div></div>}
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 14 }}><div style={{ display: "flex", gap: 8, alignItems: "center" }}><button onClick={()=>cambiaPeriodo(-1)} style={{...inputStyle,width:36,cursor:"pointer"}}>‹</button><button onClick={()=>cambiaPeriodo(1)} style={{...inputStyle,width:36,cursor:"pointer"}}>›</button><button onClick={()=>setCurrentDate(new Date())} style={{...inputStyle,width:"auto",cursor:"pointer"}}>Oggi</button><strong style={{ marginLeft: 8, fontSize: 15, textTransform: "capitalize" }}>{titoloPeriodo}</strong></div><div style={{ display: "flex", gap: 5 }}>{["mese","settimana","giorno"].map(v=><button key={v} onClick={()=>setViewMode(v)} style={{ border:"1px solid "+COLORS.border, borderRadius:8, padding:"8px 12px", cursor:"pointer", background:viewMode===v?COLORS.primary:"white", color:viewMode===v?"white":COLORS.text, textTransform:"capitalize" }}>{v}</button>)}</div></div>
-    {mobileAgenda && !loading ? <div className="agenda-mobile-list">
-      {(viewMode === "giorno" ? [currentDate] : viewMode === "settimana" ? getWeekDays(currentDate) : getMonthGrid(currentDate).filter(d=>d.getMonth()===currentDate.getMonth())).map(d=>{
-        const iso=isoLocale(d), eventi=eventiGiorno(d), isToday=iso===oggi();
-        return <section className="agenda-mobile-day" key={iso}>
-          <div className="agenda-mobile-day-head"><button onClick={()=>{setCurrentDate(new Date(d));setViewMode("giorno")}}>{d.toLocaleDateString("it-IT",{weekday:"long",day:"numeric",month:"long"})}{isToday?" · Oggi":""}</button><button onClick={()=>apriNuovo(iso)}>+ Aggiungi</button></div>
-          {eventi.length ? eventi.map(e=><button key={e.id} className="agenda-mobile-event" onClick={()=>apriModifica(e)} style={{borderLeftColor:coloreEvento(e),background:coloreEvento(e)+"10"}}><strong>{ora(e.inizio)} – {ora(e.fine)}</strong><span>{e.titolo}</span>{e.cliente_id&&<small>{nomeCliente(e.cliente_id)}</small>}</button>) : <p className="agenda-mobile-empty">Nessun appuntamento</p>}
-        </section>;
-      })}
+    {mobileAgenda && !loading ? <div className="agenda-hybrid">
+      <div className="agenda-hybrid-week">
+        {getWeekDays(currentDate).map(d=>{
+          const iso=isoLocale(d), selected=iso===isoLocale(currentDate), events=eventiGiorno(d);
+          return <button key={iso} type="button" className={"agenda-hybrid-date"+(selected?" selected":"")} onClick={()=>setCurrentDate(new Date(d))}>
+            <span>{d.toLocaleDateString("it-IT",{weekday:"short"}).replace(".","")}</span><strong>{d.getDate()}</strong>
+            <i className="agenda-hybrid-dots">{events.slice(0,3).map((e,j)=><b key={j} style={{background:selected?"#fff":coloreEvento(e)}}/>)}</i>
+          </button>;
+        })}
+      </div>
+      {viewMode==="mese" ? <div className="agenda-hybrid-month">
+        <div className="agenda-hybrid-month-title">{MESI[currentDate.getMonth()]} {currentDate.getFullYear()}</div>
+        <div className="agenda-hybrid-month-grid">
+          {GIORNI_SETTIMANA.map(g=><span key={g} className="agenda-hybrid-month-label">{g}</span>)}
+          {getMonthGrid(currentDate).map(d=><button key={isoLocale(d)} className={isoLocale(d)===isoLocale(currentDate)?"selected":""} style={{opacity:d.getMonth()===currentDate.getMonth()?1:.4}} onClick={()=>{setCurrentDate(new Date(d));setViewMode("giorno")}}>{d.getDate()}{eventiGiorno(d).length>0&&<i/>}</button>)}
+        </div>
+      </div> : null}
+      <div className="agenda-hybrid-heading"><div><strong>{currentDate.toLocaleDateString("it-IT",{weekday:"long",day:"numeric",month:"long"})}</strong><small>{eventiGiorno(currentDate).length} appuntamenti</small></div><button onClick={()=>apriNuovo(isoLocale(currentDate))}>+ Aggiungi</button></div>
+      <div className="agenda-hybrid-timeline">
+        {Array.from({length:13},(_,i)=>i+7).map(h=>{
+          const items=eventiGiorno(currentDate).filter(e=>new Date(e.inizio).getHours()===h);
+          return <div className="agenda-hybrid-hour" key={h}>
+            <span className="agenda-hybrid-time">{String(h).padStart(2,"0")}:00</span>
+            <div className="agenda-hybrid-slot" onClick={()=>{const iso=isoLocale(currentDate);apriNuovo(iso);setForm({...nuovo(iso),oraInizio:String(h).padStart(2,"0")+":00",oraFine:String(Math.min(h+1,23)).padStart(2,"0")+":00"});}}>
+              {items.map(e=><button key={e.id} type="button" className="agenda-hybrid-event" onClick={ev=>{ev.stopPropagation();apriModifica(e);}} style={{borderLeftColor:coloreEvento(e),background:coloreEvento(e)+"15"}}>
+                <small>{ora(e.inizio)} – {ora(e.fine)}</small><strong>{e.titolo}</strong>
+                {e.cliente_id&&<span>{nomeCliente(e.cliente_id)}</span>}
+              </button>)}
+            </div>
+          </div>;
+        })}
+        {eventiGiorno(currentDate).filter(e=>new Date(e.inizio).getHours()<7||new Date(e.inizio).getHours()>19).length>0&&
+          <div className="agenda-hybrid-extra"><strong>Altri orari</strong>{eventiGiorno(currentDate).filter(e=>new Date(e.inizio).getHours()<7||new Date(e.inizio).getHours()>19).map(e=><button key={e.id} onClick={()=>apriModifica(e)}>{ora(e.inizio)} · {e.titolo}</button>)}</div>}
+      </div>
     </div> : loading ? <p>Caricamento appuntamenti...</p> : <div style={{ display: "grid", gridTemplateColumns: viewMode==="giorno"?"1fr":"repeat(7,minmax(0,1fr))", border:"1px solid "+COLORS.border, borderRadius:12, overflowX:"auto", background:"white" }}>
       {viewMode!=="giorno" && GIORNI_SETTIMANA.map(g=><div key={g} style={{ textAlign:"center", padding:10, fontSize:11, color:COLORS.muted, borderBottom:"1px solid "+COLORS.border }}>{g}</div>)}
       {giorni.map(d=>{ const eventi=eventiGiorno(d), iso=isoLocale(d), isToday=iso===oggi(); return <div key={iso} style={{ minWidth:viewMode==="giorno"?"auto":95, minHeight:viewMode==="mese"?110:260, borderRight:"1px solid "+COLORS.border, borderBottom:"1px solid "+COLORS.border, padding:7, background:isToday?"#f0f8ff":"white", opacity:viewMode==="mese"&&d.getMonth()!==currentDate.getMonth()?.6:1 }}><button onClick={()=>{setCurrentDate(new Date(d));setViewMode("giorno")}} style={{ background:"none",border:0,cursor:"pointer",fontSize:12,fontWeight:isToday?800:600,color:COLORS.text,marginBottom:8 }}>{viewMode==="giorno"?d.toLocaleDateString("it-IT",{weekday:"long",day:"numeric",month:"long"}):d.getDate()}</button>{eventi.map(eventCard)}<button onClick={()=>apriNuovo(iso)} style={{ display:"block",background:"transparent",border:"1px dashed "+COLORS.border,color:COLORS.muted,borderRadius:6,fontSize:11,padding:"5px",cursor:"pointer",width:"100%",marginTop:5 }}>+ Aggiungi</button></div>})}
     </div>}
+    <style>{`@media(max-width:700px){
+      .agenda-hybrid{width:100%;min-width:0}
+      .agenda-hybrid-week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;background:#fff;padding:8px 5px;border:1px solid #dce5f1;border-radius:14px;margin-bottom:16px}
+      .agenda-hybrid-date{min-width:0;border:0;background:transparent;border-radius:11px;padding:9px 0;display:flex;flex-direction:column;align-items:center;gap:5px;color:#53647e;cursor:pointer}
+      .agenda-hybrid-date span{font-size:11px;text-transform:capitalize}.agenda-hybrid-date strong{font-size:16px}
+      .agenda-hybrid-date.selected{background:#173b72;color:#fff}
+      .agenda-hybrid-dots{display:flex;gap:3px;height:5px}.agenda-hybrid-dots b{width:4px;height:4px;border-radius:50%;display:block}
+      .agenda-hybrid-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0 12px}
+      .agenda-hybrid-heading>div{display:grid;gap:3px}.agenda-hybrid-heading strong{font-size:16px;text-transform:capitalize}.agenda-hybrid-heading small{font-size:11px;color:#7a8aa2}
+      .agenda-hybrid-heading button{border:0;background:#e6efff;color:#1e63c9;border-radius:9px;padding:9px 12px;font-size:12px;font-weight:700}
+      .agenda-hybrid-timeline{background:#fff;border:1px solid #dce5f1;border-radius:14px;padding:8px 10px 12px;overflow:hidden}
+      .agenda-hybrid-hour{display:grid;grid-template-columns:49px minmax(0,1fr);min-height:62px}
+      .agenda-hybrid-time{font-size:11px;color:#75859c;padding-top:0;text-align:right;padding-right:9px;transform:translateY(-5px)}
+      .agenda-hybrid-slot{border-top:1px solid #e9edf4;border-left:1px solid #e9edf4;min-width:0;padding:5px;cursor:pointer;display:grid;gap:5px;align-content:start}
+      .agenda-hybrid-event{border:0;border-left:4px solid #347be8;border-radius:8px;min-width:0;width:100%;display:flex;flex-direction:column;align-items:flex-start;text-align:left;padding:9px 10px;gap:3px;color:#172b49;overflow-wrap:anywhere}
+      .agenda-hybrid-event small{font-size:11px;font-weight:700}.agenda-hybrid-event strong{font-size:13px}.agenda-hybrid-event span{font-size:11px;color:#52647d}
+      .agenda-hybrid-extra{display:grid;gap:6px;padding:10px}.agenda-hybrid-extra button{border:0;background:#edf3ff;padding:10px;text-align:left;border-radius:8px}
+      .agenda-hybrid-month{background:#fff;border:1px solid #dce5f1;border-radius:14px;padding:12px;margin-bottom:15px}
+      .agenda-hybrid-month-title{font-weight:700;text-align:center;margin-bottom:10px}
+      .agenda-hybrid-month-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;text-align:center}
+      .agenda-hybrid-month-label{font-size:11px;color:#7d8aa0;padding:8px 0}
+      .agenda-hybrid-month-grid button{border:0;background:transparent;border-radius:9px;min-height:43px;font-size:13px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:3px}
+      .agenda-hybrid-month-grid button.selected{background:#173b72;color:#fff}
+      .agenda-hybrid-month-grid button i{width:4px;height:4px;background:#3480f2;border-radius:50%}
+      .agenda-responsive input[type=date],.agenda-responsive input[type=time]{min-width:0!important;width:100%!important;max-width:100%!important;box-sizing:border-box!important}
+    }`}</style>
     <style>{`@media(max-width:700px){.agenda-responsive{max-width:100%;overflow:hidden}.agenda-responsive input[type="date"],.agenda-responsive input[type="time"]{width:100%!important;min-width:0!important;max-width:100%!important;display:block!important;box-sizing:border-box!important;-webkit-appearance:none;appearance:none}.agenda-responsive label{min-width:0!important;max-width:100%!important}.agenda-mobile-list{display:grid;gap:10px}.agenda-mobile-day{background:white;border:1px solid #dce5f1;border-radius:13px;padding:12px;min-width:0}.agenda-mobile-day-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:9px}.agenda-mobile-day-head button{border:0;background:transparent;color:#182a47;font-size:13px;font-weight:700;text-align:left;text-transform:capitalize}.agenda-mobile-day-head button:last-child{color:#2e72dd;white-space:nowrap;font-size:12px}.agenda-mobile-event{display:flex;flex-direction:column;align-items:flex-start;text-align:left;width:100%;min-width:0;gap:5px;border:1px solid #dce5f1;border-left:4px solid #3b82f6;border-radius:9px;padding:11px 12px;margin:7px 0;overflow-wrap:anywhere;color:#17233b}.agenda-mobile-event strong{font-size:12px}.agenda-mobile-event span{font-size:14px;font-weight:650}.agenda-mobile-event small{font-size:12px;color:#687b95}.agenda-mobile-empty{font-size:12px;color:#8a98ad;margin:8px 0 3px}.agenda-responsive input,.agenda-responsive textarea{font-size:16px!important}.agenda-responsive select{font-size:16px!important}}`}</style>
     <p style={{ fontSize: 11, color: COLORS.muted, marginTop: 12 }}>Gli appuntamenti sono salvati nella nuova tabella “appuntamenti”. Lo storico della tabella “visite” resta invariato. Le notifiche automatiche non sono ancora attive.</p>
   </div>;
