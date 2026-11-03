@@ -342,19 +342,19 @@ function AdminPanel({ session }) {
 }
 
 function Dashboard({ session, goTo }) {
-  const [data, setData] = useState({ clienti: [], aziende: [], appuntamenti: [], preventivi: [], ordini: [], note: [] });
+  const [data, setData] = useState({ clienti: [], aziende: [], appuntamenti: [], preventivi: [], ordini: [], note: [], fatturatoManuale: [], portafoglioManuale: [] });
   const [loading, setLoading] = useState(true);
   const [errore, setErrore] = useState("");
   useEffect(() => {
     let attivo = true;
     (async () => {
       try {
-        const percorsi = ["clienti?select=id,ragione_sociale", "aziende_mandanti?select=id,nome,colore", "appuntamenti?select=id,titolo,inizio,fine,tipo,stato,cliente_id,azienda_id&order=inizio.asc", "preventivi?select=*", "ordini_confermati?select=*", "note_crm?select=id,titolo,contenuto,created_at&order=created_at.desc&limit=3"];
+        const percorsi = ["clienti?select=id,ragione_sociale", "aziende_mandanti?select=id,nome,colore", "appuntamenti?select=id,titolo,inizio,fine,tipo,stato,cliente_id,azienda_id&order=inizio.asc", "preventivi?select=*", "ordini_confermati?select=*", "note_crm?select=id,titolo,contenuto,created_at&order=created_at.desc&limit=3", "fatturato_commerciale?select=azienda_id,cliente_id,anno,periodicita,periodo,importo", "portafoglio_ordini?select=azienda_id,cliente_id,data_rilevazione,importo"];
         const risposte = await Promise.all(percorsi.map(x => fetch(SUPABASE_URL + "/rest/v1/" + x, { headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token } })));
         const valori = await Promise.all(risposte.map(r => r.json()));
         const obbligatori = [0,1,2,3];
         for (const i of obbligatori) if (!risposte[i].ok) throw new Error(valori[i]?.message || "Impossibile caricare la dashboard");
-        if (attivo) setData({ clienti: valori[0], aziende: valori[1], appuntamenti: valori[2], preventivi: valori[3], ordini: risposte[4].ok ? valori[4] : [], note: risposte[5].ok ? valori[5] : [] });
+        if (attivo) setData({ clienti: valori[0], aziende: valori[1], appuntamenti: valori[2], preventivi: valori[3], ordini: risposte[4].ok ? valori[4] : [], note: risposte[5].ok ? valori[5] : [], fatturatoManuale: risposte[6].ok ? valori[6] : [], portafoglioManuale: risposte[7].ok ? valori[7] : [] });
       } catch (e) { if (attivo) setErrore(e.message); }
       finally { if (attivo) setLoading(false); }
     })();
@@ -370,14 +370,35 @@ function Dashboard({ session, goTo }) {
   const importo = x => { try { return calcolaTotaliPreventivo(x, x.righe || []).totaleFinale || 0; } catch { return 0; } };
   const totalePipeline = portafoglio.reduce((a,x) => a+importo(x),0);
   const pipeline = data.aziende.map(a => ({ ...a, valore: portafoglio.filter(x => x.azienda_id === a.id).reduce((t,x) => t+importo(x),0) })).sort((a,b)=>b.valore-a.valore);
-  const ricavi = data.aziende.flatMap(a => { try { return combinaRicaviPerAzienda(data.ordini, data.preventivi, a.id); } catch { return []; } });
-  const mensili = MESI_BREVI.map((mese,i) => ({ mese, valore: ricavi.filter(x => { const d = new Date(x.data); return d.getFullYear() === anno && d.getMonth() === i; }).reduce((t,x)=>t+(Number(x.importo)||0),0) }));
-  const fatturatoYTD = mensili.slice(0,oggi.getMonth()+1).reduce((a,x)=>a+x.valore,0);
+  // Il fatturato manuale è la fonte della dashboard: non sommare ordini e preventivi.
+  // Un trimestre non viene distribuito artificialmente tra i mesi.
+  const fatturatiAnno = data.fatturatoManuale.filter(f => Number(f.anno) === anno);
+  const fatturatoYTD = fatturatiAnno.reduce((tot, f) => tot + Number(f.importo || 0), 0);
+  const trimestri = ["T1", "T2", "T3", "T4"].map((periodo, i) => ({
+    periodo,
+    valore: fatturatiAnno.filter(f => f.periodicita === "trimestrale"
+      ? Number(f.periodo) === i + 1
+      : Math.floor((Number(f.periodo) - 1) / 3) === i
+    ).reduce((tot, f) => tot + Number(f.importo || 0), 0)
+  }));
+  // Portafoglio = ultima fotografia per cliente e mandante, mai somma delle rilevazioni storiche.
+  const oggiISO = [anno, String(oggi.getMonth()+1).padStart(2,"0"), String(oggi.getDate()).padStart(2,"0")].join("-");
+  const ultimeRilevazioni = new Map();
+  data.portafoglioManuale.filter(p => p.data_rilevazione <= oggiISO).forEach(p => {
+    const key = p.azienda_id + ":" + p.cliente_id;
+    const precedente = ultimeRilevazioni.get(key);
+    if (!precedente || p.data_rilevazione > precedente.data_rilevazione) ultimeRilevazioni.set(key, p);
+  });
+  const portafoglioAttuale = [...ultimeRilevazioni.values()].reduce((tot,p) => tot + Number(p.importo || 0), 0);
+  const fatturatoMandanti = data.aziende.map(a => ({
+    ...a,
+    valore: fatturatiAnno.filter(f => f.azienda_id === a.id).reduce((tot,f) => tot + Number(f.importo || 0), 0)
+  })).sort((a,b)=>b.valore-a.valore);
   const euro = n => (Number(n)||0).toLocaleString("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:0});
   const panel = { background:"#fff",border:"1px solid #e6eaf1",borderRadius:14,padding:18,minWidth:0,boxShadow:"0 2px 8px rgba(20,38,70,.025)" };
   const metriche = [
-    { nome:"Fatturato YTD",valore:euro(fatturatoYTD),icona:TrendingUp,pagina:"fatturato",colore:"#3679f5",nota:"Anno " + anno },
-    { nome:"Portafoglio ordini",valore:euro(totalePipeline),icona:Wallet,pagina:"portafoglio",colore:"#4b70f5",nota:"Accettati non fatturati" },
+    { nome:"Fatturato YTD",valore:euro(fatturatoYTD),icona:TrendingUp,pagina:"controllo",colore:"#3679f5",nota:"Registrazioni anno " + anno },
+    { nome:"Portafoglio ordini",valore:euro(portafoglioAttuale),icona:Wallet,pagina:"controllo",colore:"#4b70f5",nota:"Ultima rilevazione per cliente" },
     { nome:"Opportunità",valore:opportunita.length,icona:Target,pagina:"preventivi",colore:"#5b79eb",nota:"Preventivi aperti" },
     { nome:"Visite mese",valore:visiteMese,icona:CalendarDays,pagina:"visite",colore:"#3985ec",nota:"Da agenda commerciale" },
   ];
@@ -386,8 +407,8 @@ function Dashboard({ session, goTo }) {
     {errore && <p style={{color:"#c0392b"}}>{errore}</p>}
     <div className="matrice-metrics">{metriche.map(m=>{const I=m.icona;return <button key={m.nome} className="matrice-metric" onClick={()=>goTo(m.pagina)}><span className="matrice-metric-icon"><I size={19}/></span><span><small>{m.nome}</small><strong>{loading?"…":m.valore}</strong><em>{m.nota}</em></span></button>})}</div>
     <div className="matrice-two">
-      <section style={panel}><div className="matrice-section-head"><h3>Pipeline per mandante</h3><button onClick={()=>goTo("portafoglio")}>Dettagli <ArrowUpRight size={13}/></button></div><div className="matrice-total">Totale: <strong>{loading?"…":euro(totalePipeline)}</strong></div>{pipeline.length===0?<p className="matrice-empty">Nessuna azienda mandante presente.</p>:pipeline.map((a,i)=><div className="matrice-pipeline-row" key={a.id}><span className="matrice-dot" style={{background:a.colore||["#3478ed","#6c63db","#22a98b","#e4a34e"][i%4]}}/><span className="matrice-pipeline-name" title={a.nome}>{a.nome}</span><div className="matrice-track"><div style={{width:(totalePipeline>0?100*a.valore/totalePipeline:0)+"%",background:a.colore||"#3d79ed"}}/></div><strong>{euro(a.valore)}</strong><span className="matrice-percent">{totalePipeline?Math.round(a.valore/totalePipeline*100):0}%</span></div>)}</section>
-      <section style={panel}><div className="matrice-section-head"><h3>Andamento fatturato</h3><button onClick={()=>goTo("fatturato")}>Dettagli <ArrowUpRight size={13}/></button></div><p className="matrice-chart-sub">Anno {anno} · Dati registrati nel CRM</p><div style={{height:215,width:"100%"}}><ResponsiveContainer width="100%" height="100%"><AreaChart data={mensili} margin={{top:12,right:5,left:-16,bottom:0}}><defs><linearGradient id="matriceTrend" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4686f6" stopOpacity={0.22}/><stop offset="100%" stopColor="#4686f6" stopOpacity={0.01}/></linearGradient></defs><CartesianGrid stroke="#eef1f7" vertical={false}/><XAxis dataKey="mese" tick={{fontSize:10,fill:"#8792a5"}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:"#8792a5"}} axisLine={false} tickLine={false} tickFormatter={v=>v>=1000?Math.round(v/1000)+"k":v}/><Tooltip formatter={v=>euro(v)}/><Area type="monotone" dataKey="valore" stroke="#367bf3" strokeWidth={2.5} fill="url(#matriceTrend)"/></AreaChart></ResponsiveContainer></div></section>
+      <section style={panel}><div className="matrice-section-head"><h3>Fatturato per mandante</h3><button onClick={()=>goTo("controllo")}>Dettagli <ArrowUpRight size={13}/></button></div><div className="matrice-total">Totale: <strong>{loading?"…":euro(fatturatoYTD)}</strong></div>{fatturatoMandanti.length===0?<p className="matrice-empty">Nessuna azienda mandante presente.</p>:fatturatoMandanti.map((a,i)=><div className="matrice-pipeline-row" key={a.id}><span className="matrice-dot" style={{background:a.colore||["#3478ed","#6c63db","#22a98b","#e4a34e"][i%4]}}/><span className="matrice-pipeline-name" title={a.nome}>{a.nome}</span><div className="matrice-track"><div style={{width:(fatturatoYTD>0?100*a.valore/fatturatoYTD:0)+"%",background:a.colore||"#3d79ed"}}/></div><strong>{euro(a.valore)}</strong><span className="matrice-percent">{fatturatoYTD?Math.round(a.valore/fatturatoYTD*100):0}%</span></div>)}</section>
+      <section style={panel}><div className="matrice-section-head"><h3>Andamento fatturato</h3><button onClick={()=>goTo("controllo")}>Dettagli <ArrowUpRight size={13}/></button></div><p className="matrice-chart-sub">Anno {anno} · Registrazioni manuali aggregate per trimestre</p><div style={{height:215,width:"100%"}}><ResponsiveContainer width="100%" height="100%"><AreaChart data={trimestri} margin={{top:12,right:5,left:-16,bottom:0}}><defs><linearGradient id="matriceTrend" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4686f6" stopOpacity={0.22}/><stop offset="100%" stopColor="#4686f6" stopOpacity={0.01}/></linearGradient></defs><CartesianGrid stroke="#eef1f7" vertical={false}/><XAxis dataKey="periodo" tick={{fontSize:10,fill:"#8792a5"}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:"#8792a5"}} axisLine={false} tickLine={false} tickFormatter={v=>v>=1000?Math.round(v/1000)+"k":v}/><Tooltip formatter={v=>euro(v)}/><Area type="monotone" dataKey="valore" stroke="#367bf3" strokeWidth={2.5} fill="url(#matriceTrend)"/></AreaChart></ResponsiveContainer></div></section>
     </div>
     <div className="matrice-two matrice-bottom">
       <section style={panel}><div className="matrice-section-head"><h3>Agenda di oggi</h3><button onClick={()=>goTo("visite")}><Plus size={15}/> Vedi agenda</button></div>{agenda.length===0?<p className="matrice-empty">Nessun appuntamento previsto oggi.</p>:agenda.slice(0,5).map(x=><div className="matrice-event" key={x.id}><span className="matrice-event-time">{new Date(x.inizio).toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"})}</span><span className="matrice-event-mark"/><span className="matrice-event-name">{x.titolo}</span></div>)}</section>
@@ -2350,6 +2371,22 @@ export default function App() {
 
   return (
     <>
+      <style>{`
+        input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+        textarea {
+          font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif !important;
+          font-size: 14px !important;
+          font-weight: 450 !important;
+          letter-spacing: 0.005em;
+          line-height: 1.45;
+        }
+        input::placeholder, textarea::placeholder { color: #9aa7b9; font-weight: 400; }
+        input:focus, textarea:focus { border-color: #4784e9 !important; box-shadow: 0 0 0 3px rgba(71,132,233,.12) !important; }
+        @media(max-width:768px) {
+          input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+          textarea { font-size: 16px !important; }
+        }
+      `}</style>
       <StileGlobaleResponsive />
       {!session ? (
         <LoginScreen onLogin={(data) => setSession(data)} />
