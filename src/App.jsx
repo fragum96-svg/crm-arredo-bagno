@@ -1,3 +1,162 @@
+
+non mi scarica script sql da caricare
+Nessun problema! 😊 Ti metto direttamente qui il codice SQL, così non devi scaricare nulla.
+
+Apri Supabase → progetto crm-arredobagno-sviluppo → SQL Editor → New query.
+
+Copia e incolla questo codice:
+
+
+-- ESEGUIRE SOLO nel progetto Supabase di SVILUPPO.
+
+create table if not exists public.note_crm (
+  id uuid primary key default gen_random_uuid(),
+  titolo text not null,
+  contenuto text not null default '',
+  cliente_id uuid references public.clienti(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.note_crm enable row level security;
+
+create policy "note_crm_select"
+on public.note_crm for select
+to authenticated using (true);
+
+create policy "note_crm_insert"
+on public.note_crm for insert
+to authenticated with check (true);
+
+create policy "note_crm_update"
+on public.note_crm for update
+to authenticated using (true)
+with check (true);
+
+create policy "note_crm_delete"
+on public.note_crm for delete
+to authenticated using (true);
+
+Poi premi Run.
+
+Attenzione: controlla che il progetto selezionato sia quello di sviluppo, non quello originale con i tuoi clienti.
+
+Quando compare Success, scrivimi «SQL fatto» e passiamo all'aggiornamento di GitHub.
+
+ok mi dice success. ora avanti con l'altro codice
+Perfetto! ✅ La tabella per le Note è stata creata correttamente.
+
+Adesso installiamo il nuovo CRM con menu blu notte, logo CRM, storico visite sotto Agenda e sezione Note.
+
+1. Scarica il nuovo codice
+App_CRM_Navy_Note.jsx
+
+ Scarica il nuovo codice del CRM
+
+2. Sostituisci il codice su GitHub
+Apri il tuo repository GitHub.
+
+Importantissimo: seleziona il ramo sviluppo-v1.1, NON main.
+
+Entra nella cartella src.
+
+Apri App.jsx e clicca sulla matita ✏️.
+
+Premi Ctrl + A per selezionare tutto il codice.
+
+Apri il file che hai appena scaricato, copia tutto e incollalo al posto del vecchio codice.
+
+Clicca su Commit changes.
+
+Come messaggio scrivi Nuova interfaccia CRM e sezione Note.
+
+Conferma il commit sul ramo sviluppo-v1.1.
+
+3. Verifichiamo il risultato
+Dopo il commit, aspetta che Vercel completi il deployment.
+
+Poi apri il CRM di sviluppo e controlla che si visualizzi correttamente.
+
+Dimmi quando hai fatto il commit e se il CRM si apre. Poi proveremo insieme a creare la prima nota e verificare che venga salvata su Supabase.
+
+
+App_CRM_Navy_Note.jsx
+Codice
+non mi scarica neanche questo ora non so perchè prima lo vedevo
+
+Elaborato per 11s
+Tranquillo, ho controllato: il file esiste ed è completo. Probabilmente il problema riguarda il download dei file .jsx da ChatGPT.
+
+Ti ho preparato due alternative.
+
+Versione ZIP — consigliata
+
+Contiene il codice completo del nuovo CRM
+
+Scarica CRM_Navy_Note.zip
+
+Versione TXT — alternativa
+
+Puoi aprirla e copiare direttamente tutto il codice
+
+Scarica il codice in formato TXT
+
+Prova prima lo ZIP. Una volta scaricato, fai clic destro → Estrai tutto. All'interno troverai App_CRM_Navy_Note.jsx.
+
+Non modificare ancora GitHub.
+
+Dimmi soltanto se riesci a scaricare e aprire lo ZIP. Poi procediamo insieme.
+
+
+CRM_Navy_Note_codice.txt
+Documento
+il codice txt lo posso copiare e incollare?
+Sì, esatto! ✅ Puoi copiare e incollare direttamente il contenuto del file TXT. Anche se è un .txt, contiene il codice JSX del CRM.
+
+Procedi così:
+
+Apri il file CRM_Navy_Note_codice.txt.
+
+Premi Ctrl + A e poi Ctrl + C per copiare tutto.
+
+Apri GitHub e seleziona il ramo sviluppo-v1.1.
+
+Vai in src/App.jsx e clicca sulla matita ✏️.
+
+Premi Ctrl + A e poi Ctrl + V per sostituire il vecchio codice.
+
+Clicca su Commit changes e conferma sul ramo sviluppo-v1.1.
+
+Importante: su GitHub il file deve continuare a chiamarsi App.jsx, non .txt.
+
+Dopo il commit, aspetta che Vercel completi l'aggiornamento.
+
+Dimmi quando hai fatto e verifichiamo insieme che tutto funzioni!
+
+dammi il testo per copiare e incollare
+Certo! Il codice completo del nuovo CRM è però molto lungo: circa 194.000 caratteri. Incollarlo tutto in un messaggio rischierebbe di troncarlo e provocare errori nel CRM.
+
+Ti lascio il file TXT pronto da aprire e copiare:
+
+Apri il codice completo del CRM in formato TXT
+
+Una volta aperto:
+
+Premi Ctrl + A per selezionare tutto.
+
+Premi Ctrl + C per copiare.
+
+Su GitHub, nel ramo sviluppo-v1.1, apri src/App.jsx.
+
+Clicca sulla matita, premi Ctrl + A e poi Ctrl + V.
+
+Salva con Commit changes.
+
+Se il collegamento non si apre, dimmelo: possiamo procedere con un metodo alternativo, senza dover copiare 194.000 caratteri nella chat.
+
+
+CRM_Navy_Note_codice.txt
+Documento
 import { useState, useEffect, useRef } from "react";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
@@ -6,7 +165,7 @@ import {
 } from "recharts";
 import {
   Users, Building2, CalendarDays, FileText, LogOut, Menu as MenuIcon, LayoutDashboard, ShieldCheck,
-  Printer, Map as MapIcon, Upload, TrendingUp, Wallet, ClipboardList, Briefcase, Users2, ChevronDown, ChevronRight, Search, Bell, Plus, Clock3, Target, ArrowUpRight,
+  Printer, Map as MapIcon, Upload, TrendingUp, Wallet, ClipboardList, Briefcase, Users2, ChevronDown, ChevronRight, Search, Bell, Plus, Clock3, Target, ArrowUpRight, StickyNote, Settings, BarChart3,
 } from "lucide-react";
 
 
@@ -342,19 +501,19 @@ function AdminPanel({ session }) {
 }
 
 function Dashboard({ session, goTo }) {
-  const [data, setData] = useState({ clienti: [], aziende: [], appuntamenti: [], preventivi: [], ordini: [] });
+  const [data, setData] = useState({ clienti: [], aziende: [], appuntamenti: [], preventivi: [], ordini: [], note: [] });
   const [loading, setLoading] = useState(true);
   const [errore, setErrore] = useState("");
   useEffect(() => {
     let attivo = true;
     (async () => {
       try {
-        const percorsi = ["clienti?select=id,ragione_sociale", "aziende_mandanti?select=id,nome,colore", "appuntamenti?select=id,titolo,inizio,fine,tipo,stato,cliente_id,azienda_id&order=inizio.asc", "preventivi?select=*", "ordini_confermati?select=*"];
+        const percorsi = ["clienti?select=id,ragione_sociale", "aziende_mandanti?select=id,nome,colore", "appuntamenti?select=id,titolo,inizio,fine,tipo,stato,cliente_id,azienda_id&order=inizio.asc", "preventivi?select=*", "ordini_confermati?select=*", "note_crm?select=id,titolo,contenuto,created_at&order=created_at.desc&limit=3"];
         const risposte = await Promise.all(percorsi.map(x => fetch(SUPABASE_URL + "/rest/v1/" + x, { headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token } })));
         const valori = await Promise.all(risposte.map(r => r.json()));
         const obbligatori = [0,1,2,3];
         for (const i of obbligatori) if (!risposte[i].ok) throw new Error(valori[i]?.message || "Impossibile caricare la dashboard");
-        if (attivo) setData({ clienti: valori[0], aziende: valori[1], appuntamenti: valori[2], preventivi: valori[3], ordini: risposte[4].ok ? valori[4] : [] });
+        if (attivo) setData({ clienti: valori[0], aziende: valori[1], appuntamenti: valori[2], preventivi: valori[3], ordini: risposte[4].ok ? valori[4] : [], note: risposte[5].ok ? valori[5] : [] });
       } catch (e) { if (attivo) setErrore(e.message); }
       finally { if (attivo) setLoading(false); }
     })();
@@ -393,6 +552,7 @@ function Dashboard({ session, goTo }) {
       <section style={panel}><div className="matrice-section-head"><h3>Agenda di oggi</h3><button onClick={()=>goTo("visite")}><Plus size={15}/> Vedi agenda</button></div>{agenda.length===0?<p className="matrice-empty">Nessun appuntamento previsto oggi.</p>:agenda.slice(0,5).map(x=><div className="matrice-event" key={x.id}><span className="matrice-event-time">{new Date(x.inizio).toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"})}</span><span className="matrice-event-mark"/><span className="matrice-event-name">{x.titolo}</span></div>)}</section>
       <section style={panel}><div className="matrice-section-head"><h3>Opportunità in trattativa</h3><button onClick={()=>goTo("preventivi")}>Tutte <ArrowUpRight size={13}/></button></div>{opportunita.length===0?<p className="matrice-empty">Nessun preventivo aperto al momento.</p>:opportunita.slice(0,4).map((x,i)=><div className="matrice-opportunity" key={x.id}><span className="matrice-opportunity-mark" style={{background:i%2?"#a58de8":"#3982ee"}}/><div><strong>{data.clienti.find(c=>c.id===x.cliente_id)?.ragione_sociale||"Preventivo"}</strong><small>{x.stato==="inviato"?"Preventivo inviato":"Bozza"}</small></div><b>{euro(importo(x))}</b></div>)}</section>
     </div>
+    <section className="crm-recent-notes" style={{...panel,marginTop:2}}><div className="matrice-section-head"><h3><StickyNote size={17} style={{verticalAlign:"middle",marginRight:8,color:"#e5a528"}}/>Note recenti</h3><button onClick={()=>goTo("note")}><Plus size={15}/> Nuova nota</button></div>{data.note.length===0?<p className="matrice-empty">Nessuna nota salvata. Crea la prima dalla sezione Note.</p>:data.note.map(n=><button className="crm-note-preview" key={n.id} onClick={()=>goTo("note")}><FileText size={15}/><span><strong>{n.titolo}</strong><small>{n.contenuto||""}</small></span><time>{new Date(n.created_at).toLocaleDateString("it-IT")}</time></button>)}</section>
   </div>;
 }
 
@@ -2111,29 +2271,65 @@ function GruppiAcquisto({ session, gruppoIniziale, onGruppoAperto }) {
   );
 }
 
+function StoricoVisiteCRM({ session }) {
+  const [visite,setVisite]=useState([]);
+  const [clienti,setClienti]=useState([]);
+  const [errore,setErrore]=useState("");
+  useEffect(()=>{let active=true;(async()=>{try{const h={apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+session.access_token};const [rv,rc]=await Promise.all([fetch(SUPABASE_URL+"/rest/v1/visite?select=*&order=data_visita.desc",{headers:h}),fetch(SUPABASE_URL+"/rest/v1/clienti?select=id,ragione_sociale",{headers:h})]);const [v,c]=await Promise.all([rv.json(),rc.json()]);if(!rv.ok||!rc.ok)throw new Error(v?.message||c?.message||"Errore nel caricamento");if(active){setVisite(v);setClienti(c)}}catch(e){if(active)setErrore(e.message)}})();return()=>{active=false}},[session]);
+  return <div><div className="matrice-welcome"><div><h1>Storico visite</h1><p>Registro delle visite commerciali salvate in precedenza.</p></div></div>{errore&&<p style={{color:"#b42318"}}>{errore}</p>}<div style={{background:"#fff",padding:20,borderRadius:14,border:"1px solid #dce5f3"}}>{visite.length===0?<p className="matrice-empty">Nessuna visita storica registrata.</p>:visite.map(v=><article key={v.id} style={{padding:"15px 4px",borderBottom:"1px solid #edf1f7"}}><strong>{clienti.find(c=>c.id===v.cliente_id)?.ragione_sociale||"Cliente non specificato"}</strong><span style={{marginLeft:12,fontSize:12,color:"#66758d"}}>{v.data_visita?new Date(v.data_visita+"T12:00:00").toLocaleDateString("it-IT"):""}</span>{v.argomenti_trattati&&<p style={{fontSize:12,margin:"8px 0"}}>Argomenti: {v.argomenti_trattati}</p>}{v.cataloghi_lasciati&&<p style={{fontSize:12,margin:"8px 0"}}>Cataloghi: {v.cataloghi_lasciati}</p>}{v.note&&<p style={{fontSize:12,margin:"8px 0"}}>Note: {v.note}</p>}</article>)}</div></div>;
+}
+
+function NoteCRM({ session }) {
+  const [note, setNote] = useState([]);
+  const [clienti, setClienti] = useState([]);
+  const [form, setForm] = useState({ titolo:"", contenuto:"", cliente_id:"" });
+  const [editing, setEditing] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const headers = () => ({ "Content-Type":"application/json", apikey:SUPABASE_ANON_KEY, Authorization:"Bearer "+session.access_token });
+  const fetchJson = async (url, options={}) => { const res=await fetch(SUPABASE_URL+"/rest/v1/"+url,{...options,headers:headers()}); const raw=await res.text(); const json=raw?JSON.parse(raw):null; if(!res.ok)throw new Error(json?.message||"Errore di connessione");return json; };
+  const load = async () => { try { setError(""); const [n,c]=await Promise.all([fetchJson("note_crm?select=*&order=updated_at.desc"),fetchJson("clienti?select=id,ragione_sociale&order=ragione_sociale.asc")]);setNote(n||[]);setClienti(c||[]); }catch(e){setError(e.message+". Verifica di aver creato la tabella note_crm in Supabase sviluppo.");} };
+  useEffect(()=>{load();},[]);
+  const reset = () => {setEditing(null);setForm({titolo:"",contenuto:"",cliente_id:""});};
+  const save = async e => {e.preventDefault();if(!form.titolo.trim())return;setBusy(true);setError("");try{const payload={titolo:form.titolo.trim(),contenuto:form.contenuto,cliente_id:form.cliente_id||null,updated_at:new Date().toISOString()};await fetchJson("note_crm"+(editing?"?id=eq."+editing:""),{method:editing?"PATCH":"POST",body:JSON.stringify(payload)});reset();await load();}catch(e){setError(e.message);}finally{setBusy(false);} };
+  const remove = async id => {if(!window.confirm("Eliminare definitivamente questa nota?"))return;try{await fetchJson("note_crm?id=eq."+id,{method:"DELETE"});if(editing===id)reset();await load();}catch(e){setError(e.message);} };
+  const edit = n => {setEditing(n.id);setForm({titolo:n.titolo||"",contenuto:n.contenuto||"",cliente_id:n.cliente_id||""});window.scrollTo({top:0,behavior:"smooth"});};
+  const input = {width:"100%",padding:"11px 12px",border:"1px solid #dbe3f0",borderRadius:10,fontSize:13,background:"#fff",color:"#17233b"};
+  const filtered=note.filter(n=>(n.titolo+" "+(n.contenuto||"")).toLowerCase().includes(search.toLowerCase()));
+  return <div className="crm-notes-page"><div className="matrice-welcome"><div><h1>Le tue note</h1><p>Appunti commerciali, idee, promemoria e informazioni sui clienti.</p></div></div>
+    {error&&<p style={{color:"#b42318",background:"#fff1f0",padding:12,borderRadius:9}}>{error}</p>}
+    <div className="crm-notes-layout"><form className="crm-notes-editor" onSubmit={save}><h3>{editing?"Modifica nota":"Nuova nota"}</h3><label>Titolo<input required style={input} value={form.titolo} onChange={e=>setForm({...form,titolo:e.target.value})} placeholder="Es. Incontro studio di architettura"/></label><label>Cliente collegato (facoltativo)<select style={input} value={form.cliente_id} onChange={e=>setForm({...form,cliente_id:e.target.value})}><option value="">Nessun cliente</option>{clienti.map(c=><option key={c.id} value={c.id}>{c.ragione_sociale}</option>)}</select></label><label>Contenuto<textarea style={{...input,minHeight:190,resize:"vertical"}} value={form.contenuto} onChange={e=>setForm({...form,contenuto:e.target.value})} placeholder="Scrivi qui i tuoi appunti..."/></label><div style={{display:"flex",gap:8}}><button className="crm-primary-btn" disabled={busy} type="submit">{busy?"Salvataggio...":editing?"Salva modifiche":"Salva nota"}</button>{editing&&<button type="button" className="crm-secondary-btn" onClick={reset}>Annulla</button>}</div></form>
+    <div className="crm-notes-list"><div className="crm-notes-list-head"><h3>Note salvate ({filtered.length})</h3><input style={{...input,maxWidth:250}} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cerca nelle note..."/></div>{filtered.length===0?<p className="matrice-empty">Nessuna nota da mostrare.</p>:filtered.map(n=><article key={n.id} className="crm-note-card"><div className="crm-note-card-top"><div><h4>{n.titolo}</h4><small>{new Date(n.updated_at||n.created_at).toLocaleDateString("it-IT",{day:"2-digit",month:"short",year:"numeric"})}{n.cliente_id?" · "+(clienti.find(c=>c.id===n.cliente_id)?.ragione_sociale||"Cliente"):""}</small></div><div><button onClick={()=>edit(n)}>Modifica</button><button onClick={()=>remove(n.id)} className="crm-danger-btn">Elimina</button></div></div><p>{n.contenuto||"Nessun contenuto"}</p></article>)}</div></div>
+  </div>;
+}
+
 function AppShell({ session, onLogout }) {
   const [menuOpen, setMenuOpen] = useState(typeof window === "undefined" ? true : window.innerWidth > 768);
   const [page, setPage] = useState("dashboard");
   const [role, setRole] = useState("user");
   const [preventivoAprireId, setPreventivoAprireId] = useState(null);
   const [gruppoAprireId, setGruppoAprireId] = useState(null);
-  const [aperti, setAperti] = useState({ gestione:true, opportunita:true, analisi:true, strumenti:true });
+  const [aperti, setAperti] = useState({ clienti:true, mandanti:true, opportunita:true, agenda:true, report:true });
   const apriPreventivoCliente = id => { setPreventivoAprireId(id); setPage("preventivi"); };
   const apriGruppoCliente = id => { setGruppoAprireId(id); setPage("gruppi"); };
   useEffect(() => { (async () => { try { const r=await fetch(SUPABASE_URL+"/rest/v1/profiles?id=eq."+session.user.id+"&select=role",{headers:{apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+session.access_token}}); const d=await r.json(); if(d&&d[0])setRole(d[0].role); } catch(e){} })(); },[session]);
   const sezioni = [
-    {id:"gestione",nome:"Gestione",icon:Users,items:[{key:"clienti",label:"Elenco clienti",icon:Users},{key:"gruppi",label:"Gruppi d'acquisto",icon:Users2},{key:"mappa",label:"Mappa clienti",icon:MapIcon}]},
+    {id:"clienti",nome:"Clienti",icon:Users,items:[{key:"clienti",label:"Anagrafica",icon:Users},{key:"gruppi",label:"Gruppi d'acquisto",icon:Users2},{key:"mappa",label:"Mappa clienti",icon:MapIcon}]},
+    {id:"mandanti",nome:"Mandanti",icon:Building2,items:[{key:"aziende",label:"Aziende mandanti",icon:Building2}]},
     {id:"opportunita",nome:"Opportunità",icon:Target,items:[{key:"preventivi",label:"Preventivi e offerte",icon:FileText},{key:"portafoglio",label:"Portafoglio ordini",icon:Briefcase},{key:"ordini",label:"Registro ordini",icon:ClipboardList}]},
-    {id:"analisi",nome:"Analisi",icon:TrendingUp,items:[{key:"fatturato",label:"Fatturato",icon:Wallet},{key:"statistiche",label:"Statistiche",icon:TrendingUp}]},
-    {id:"strumenti",nome:"Attività e altre",icon:CalendarDays,items:[{key:"visite",label:"Agenda e visite",icon:CalendarDays},{key:"aziende",label:"Aziende mandanti",icon:Building2},...(role==="admin"?[{key:"admin",label:"Amministrazione",icon:ShieldCheck}]:[])]},
+    {id:"agenda",nome:"Agenda",icon:CalendarDays,items:[{key:"visite",label:"Calendario e appuntamenti",icon:CalendarDays},{key:"storico_visite",label:"Storico visite",icon:ClipboardList}]},
+    {id:"report",nome:"Report",icon:BarChart3,items:[{key:"fatturato",label:"Fatturato",icon:Wallet},{key:"statistiche",label:"Statistiche",icon:TrendingUp}]},
   ];
   const scegli = key => { setPage(key); if(window.innerWidth<768)setMenuOpen(false); };
   const avatar=(session.user.email||"FG").split("@")[0].slice(0,2).toUpperCase();
   return <div className="matrice-shell">
     <aside className={"matrice-sidebar"+(menuOpen?" is-open":"")}>
-      <div className="matrice-brand"><div className="matrice-brand-icon">◈</div><div><strong>MATRICE</strong><span>CRM</span></div><button className="matrice-close-menu" onClick={()=>setMenuOpen(false)}>×</button></div>
+      <div className="matrice-brand"><div className="matrice-brand-icon"><BarChart3 size={29} strokeWidth={3}/></div><div><strong>CRM</strong></div><button className="matrice-close-menu" onClick={()=>setMenuOpen(false)}>×</button></div>
       <div className="matrice-nav-scroll"><button className={"matrice-nav-main"+(page==="dashboard"?" active":"")} onClick={()=>scegli("dashboard")}><LayoutDashboard size={17}/> Dashboard</button>
         {sezioni.map(g=>{const Icon=g.icon;return <div className="matrice-nav-group" key={g.id}><button className="matrice-nav-group-title" onClick={()=>setAperti(p=>({...p,[g.id]:!p[g.id]}))}><Icon size={17}/><span>{g.nome}</span>{aperti[g.id]?<ChevronDown size={15}/>:<ChevronRight size={15}/>}</button>{aperti[g.id]&&<div className="matrice-subnav">{g.items.map(item=>{const I=item.icon;return <button key={item.key} onClick={()=>scegli(item.key)} className={page===item.key?"active":""}><I size={14}/><span>{item.label}</span></button>})}</div>}</div>})}
+        <button className={"matrice-nav-main crm-notes-nav"+(page==="note"?" active":"")} onClick={()=>scegli("note")}><StickyNote size={17}/> Note</button>
+        {role==="admin"&&<button className={"matrice-nav-main"+(page==="admin"?" active":"")} onClick={()=>scegli("admin")}><Settings size={17}/> Amministrazione</button>}
       </div><div className="matrice-sidebar-foot"><span className="matrice-status-dot"/> CRM sviluppo <small>Ambiente di test</small></div>
     </aside>
     {menuOpen&&<div className="matrice-backdrop" onClick={()=>setMenuOpen(false)}/>}
@@ -2144,6 +2340,8 @@ function AppShell({ session, onLogout }) {
         {page==="aziende"&&<AziendeMandanti session={session}/>}
         {page==="clienti"&&<ClientiAnagrafica session={session} apriPreventivo={apriPreventivoCliente} apriGruppo={apriGruppoCliente}/>}
         {page==="visite"&&<CalendarioVisite session={session}/>}
+        {page==="storico_visite"&&<StoricoVisiteCRM session={session}/>}
+        {page==="note"&&<NoteCRM session={session}/>}
         {page==="preventivi"&&<PreventiviOfferte session={session} preventivoIniziale={preventivoAprireId} onPreventivoAperto={()=>setPreventivoAprireId(null)}/>}
         {page==="mappa"&&<MappaClienti session={session}/>}
         {page==="statistiche"&&<Statistiche session={session}/>}
@@ -2157,7 +2355,7 @@ function AppShell({ session, onLogout }) {
 
 function StileGlobaleResponsive() {
   return (
-    <style>{'\n.matrice-shell{display:flex;min-height:100vh;background:#f6f8fc;color:#17233b;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}.matrice-shell button{font-family:inherit}.matrice-sidebar{width:244px;flex:0 0 244px;background:#fff;border-right:1px solid #e6eaf1;min-height:100vh;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;z-index:50}.matrice-brand{height:72px;display:flex;align-items:center;gap:9px;padding:0 18px;border-bottom:1px solid #eef0f5}.matrice-brand-icon{font-size:25px;color:#4a78d7}.matrice-brand strong{font-size:16px;letter-spacing:.035em;font-weight:800}.matrice-brand span{font-size:11px;color:#8a95a8;margin-left:5px;font-weight:700}.matrice-close-menu{display:none}.matrice-nav-scroll{padding:14px 10px;overflow-y:auto;flex:1}.matrice-nav-main,.matrice-nav-group-title,.matrice-subnav button{width:100%;display:flex;align-items:center;text-align:left;border:0;background:transparent;color:#34415a;cursor:pointer;border-radius:8px}.matrice-nav-main{padding:12px 12px;gap:11px;font-size:13px;font-weight:650}.matrice-nav-main.active,.matrice-subnav button.active{background:#e8f1ff;color:#2769df}.matrice-nav-group{margin-top:13px}.matrice-nav-group-title{padding:9px 11px;gap:10px;font-size:12.5px;font-weight:700}.matrice-nav-group-title span{flex:1}.matrice-subnav{margin:3px 0 0 24px;padding-left:8px;border-left:1px solid #e6ebf4}.matrice-subnav button{padding:8px 9px;gap:9px;font-size:12px;line-height:1.3;margin-bottom:2px}.matrice-nav-main:hover,.matrice-nav-group-title:hover,.matrice-subnav button:hover{background:#f2f6fd}.matrice-sidebar-foot{padding:14px 17px;border-top:1px solid #eef0f5;color:#586780;font-size:11px}.matrice-sidebar-foot small{display:block;margin:4px 0 0 16px;color:#9aa4b5}.matrice-status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#29b98d;margin-right:7px}.matrice-workspace{min-width:0;flex:1}.matrice-topbar{height:72px;background:#fff;border-bottom:1px solid #e6eaf1;display:flex;align-items:center;padding:0 28px;gap:12px;position:sticky;top:0;z-index:30}.matrice-topbar-label{font-size:13px;font-weight:650;color:#637089}.matrice-menu-button,.matrice-topbar-actions button{border:0;background:transparent;color:#41516e;cursor:pointer;padding:7px;display:flex;align-items:center}.matrice-menu-button{display:none}.matrice-topbar-actions{display:flex;align-items:center;gap:13px;margin-left:auto}.matrice-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#1b3868;color:#fff;font-size:11px;font-weight:750}.matrice-main{padding:26px 30px;max-width:1600px;margin:auto}.matrice-welcome{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:23px}.matrice-welcome h1{font-size:24px;letter-spacing:-.6px;margin:0 0 5px;font-weight:760;color:#15243c}.matrice-welcome p{font-size:12px;color:#8390a3;margin:0}.matrice-add{display:flex;align-items:center;gap:6px;padding:9px 12px;border:1px solid #dce6f7;border-radius:9px;background:#fff;color:#2b70e6;font-size:12px;font-weight:650;cursor:pointer}.matrice-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:16px}.matrice-metric{min-width:0;text-align:left;border:1px solid #e6eaf1;border-radius:13px;background:#fff;padding:17px;display:flex;gap:12px;align-items:flex-start;cursor:pointer;box-shadow:0 2px 8px rgba(20,38,70,.025)}.matrice-metric-icon{display:flex;align-items:center;justify-content:center;flex:0 0 37px;height:37px;background:#eaf2ff;color:#3e7bef;border-radius:9px}.matrice-metric span:last-child{min-width:0}.matrice-metric small,.matrice-metric em{display:block;font-size:11px;color:#8490a2;font-style:normal}.matrice-metric strong{display:block;color:#15243c;font-size:21px;line-height:1.6;white-space:nowrap;letter-spacing:-.5px}.matrice-metric em{font-size:10px}.matrice-two{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}.matrice-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:13px}.matrice-section-head h3{font-size:14px;font-weight:750;margin:0;color:#17233b}.matrice-section-head button{border:0;background:transparent;display:flex;align-items:center;gap:3px;font-size:11px;color:#3677e9;cursor:pointer}.matrice-total{font-size:11px;color:#8490a2;margin-bottom:16px}.matrice-total strong{color:#25334d;margin-left:5px}.matrice-pipeline-row{display:flex;align-items:center;gap:8px;margin-bottom:14px;font-size:11px}.matrice-dot{width:9px;height:9px;flex:0 0 9px;border-radius:50%}.matrice-pipeline-name{width:105px;flex:0 0 105px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#44536c}.matrice-track{height:7px;border-radius:9px;background:#edf2fa;flex:1;min-width:15px;overflow:hidden}.matrice-track div{height:100%;border-radius:9px}.matrice-pipeline-row strong{width:75px;text-align:right;font-size:11px;white-space:nowrap}.matrice-percent{width:30px;text-align:right;color:#7e8ba0;font-size:10px}.matrice-chart-sub{font-size:11px;color:#8c98a9;margin:-6px 0 8px}.matrice-empty{color:#8b97a8;font-size:12px;padding:17px 0}.matrice-event{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f0f2f7;font-size:12px}.matrice-event-time{color:#65748c;min-width:42px}.matrice-event-mark{width:6px;height:20px;border-radius:4px;background:#4d8cf5}.matrice-event-name{font-weight:600;color:#34415a}.matrice-opportunity{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #f0f2f7}.matrice-opportunity-mark{height:8px;width:8px;border-radius:50%;flex-shrink:0}.matrice-opportunity div{min-width:0;flex:1}.matrice-opportunity strong,.matrice-opportunity small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.matrice-opportunity strong{font-size:12px;color:#33415a}.matrice-opportunity small{font-size:10px;color:#8995a8;margin-top:3px}.matrice-opportunity b{font-size:12px;white-space:nowrap}.matrice-backdrop{display:none}@media(max-width:1150px){.matrice-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.matrice-two{grid-template-columns:1fr}}@media(max-width:768px){.matrice-sidebar{position:fixed;left:0;top:0;transform:translateX(-100%);transition:transform .2s;box-shadow:4px 0 25px rgba(25,43,77,.12)}.matrice-sidebar.is-open{transform:translateX(0)}.matrice-close-menu{display:block;margin-left:auto;border:0;background:transparent;font-size:25px;color:#8793a7}.matrice-backdrop{display:block;position:fixed;inset:0;background:rgba(20,32,56,.32);z-index:45}.matrice-menu-button{display:flex}.matrice-topbar{height:60px;padding:0 14px}.matrice-main{padding:17px 13px!important}.matrice-welcome h1{font-size:20px}.matrice-welcome p{font-size:11px}.matrice-add{font-size:0}.matrice-add svg{width:17px}.matrice-metrics{gap:9px}.matrice-metric{padding:11px;gap:8px}.matrice-metric-icon{width:30px;height:30px;flex-basis:30px}.matrice-metric strong{font-size:16px}.matrice-metric small{font-size:10px}.matrice-metric em{font-size:9px}.matrice-pipeline-name{width:75px;flex-basis:75px}.matrice-pipeline-row strong{width:63px;font-size:10px}}\n' + "* { box-sizing: border-box; } body { transition: background 0.2s ease; } button { transition: all 0.18s ease; } button:hover:not(:disabled) { filter: brightness(0.96); transform: translateY(-1px); } button:active:not(:disabled) { transform: translateY(0) scale(0.98); } input, select, textarea { transition: border-color 0.18s ease, box-shadow 0.18s ease; } input:focus, select:focus, textarea:focus { outline: none; border-color: #0b7bc4 !important; box-shadow: 0 0 0 3px rgba(11,123,196,0.12); } .dashboard-card { transition: transform 0.2s ease, box-shadow 0.2s ease; } .dashboard-card:hover { transform: translateY(-4px); box-shadow: 0 10px 28px rgba(11,123,196,0.14) !important; } .nav-item { transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease; } .nav-item:hover { background: #f2f8fc !important; } table tbody tr { transition: background 0.15s ease; } table tbody tr:hover { background: #f7fbfe; } @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } } .page-content { animation: fadeSlideIn 0.25s ease; } .app-sidebar-backdrop { display: none; } @media (max-width: 768px) { main * { min-width: 0; } body { overflow-x: hidden; } .app-sidebar { position: fixed !important; top: 61px; left: 0; height: calc(100vh - 61px) !important; z-index: 40; box-shadow: 4px 0 16px rgba(0,0,0,0.15); } .app-sidebar-backdrop { display: block !important; position: fixed; top: 61px; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.35); z-index: 35; } table { display: block; overflow-x: auto; white-space: nowrap; } .tabella-righe-preventivo, .tabella-responsive { white-space: normal; } .tabella-righe-preventivo thead, .tabella-responsive thead { display: none; } .tabella-righe-preventivo, .tabella-righe-preventivo tbody, .tabella-righe-preventivo tr, .tabella-righe-preventivo td, .tabella-responsive, .tabella-responsive tbody, .tabella-responsive tr, .tabella-responsive td { display: block; width: 100%; } .tabella-righe-preventivo tr, .tabella-responsive tr { border: 1px solid #e2edf5; border-radius: 6px; margin-bottom: 6px; padding: 4px; } .tabella-righe-preventivo td, .tabella-responsive td { display: flex; align-items: flex-start; justify-content: flex-start; flex-direction: column; gap: 1px; padding: 3px 4px; border: none; font-size: 11.5px; width: 100%; max-width: 100%; } .tabella-righe-preventivo td::before, .tabella-responsive td::before { content: attr(data-label); font-size: 9px; color: #7c8b98; } .tabella-righe-preventivo td input, .tabella-righe-preventivo td select { width: 100% !important; max-width: 100% !important; flex: none; } .form-header-preventivo select, .form-header-preventivo input { max-width: none !important; width: 100% !important; } input, select, textarea { font-size: 16px !important; } main:not(.matrice-main) { padding: 10px !important; } .email-utente { display: none; } header { padding: 10px 12px !important; } h2 { font-size: 17px !important; margin-bottom: 8px !important; } h3 { font-size: 13px !important; } }"}</style>
+    <style>{'\n.matrice-shell{background:linear-gradient(115deg,#eef2fa,#e3eaf7 72%,#f1f4fb)!important}\n.matrice-sidebar{background:linear-gradient(160deg,#101d34 0%,#172943 100%)!important;border-right:1px solid #253956!important;color:#eaf2ff!important;width:272px!important;flex-basis:272px!important}\n.matrice-brand{border-bottom:1px solid #30415d!important;color:#fff!important}\n.matrice-brand strong{font-size:28px!important;letter-spacing:.4px!important;color:#fff!important}\n.matrice-brand-icon{color:#dbeafe!important;background:transparent!important}\n.matrice-nav-main,.matrice-nav-group-title,.matrice-subnav button{color:#e1eaf8!important}\n.matrice-nav-main:hover,.matrice-nav-group-title:hover,.matrice-subnav button:hover{background:#273d5b!important}\n.matrice-nav-main.active,.matrice-subnav button.active{background:linear-gradient(90deg,#1462ce,#2479e7)!important;color:white!important}\n.matrice-subnav{border-left:1px solid #3c4f6b!important}\n.matrice-sidebar-foot{border-top:1px solid #344762!important;color:#b3c4df!important}\n.matrice-sidebar-foot small{color:#8fa5c4!important}\n.matrice-topbar{background:rgba(237,243,253,.88)!important;border-bottom:1px solid #dce5f3!important}\n.matrice-metric{box-shadow:0 7px 22px rgba(24,48,84,.07)!important}\n.matrice-metric:first-child{background:linear-gradient(125deg,#16263e,#354d6c)!important;border-color:#334b6c!important}\n.matrice-metric:first-child strong,.matrice-metric:first-child small,.matrice-metric:first-child em{color:#fff!important}\n.matrice-metric:first-child .matrice-metric-icon{background:#285ea2!important;color:#fff!important}\n.matrice-dashboard>div.matrice-two>section,.crm-recent-notes{box-shadow:0 8px 25px rgba(22,45,82,.065)!important;border-color:#dce5f3!important}\n.crm-notes-nav{margin-top:15px!important;border-top:1px solid #344762!important;padding-top:18px!important}\n.crm-recent-notes{margin-top:6px!important}\n.crm-note-preview{display:flex;align-items:center;gap:12px;width:100%;border:0;border-bottom:1px solid #e9edf4;background:transparent;padding:10px 5px;text-align:left;color:#293b56;cursor:pointer}\n.crm-note-preview span{flex:1;min-width:0}.crm-note-preview strong,.crm-note-preview small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.crm-note-preview strong{font-size:12px}.crm-note-preview small{font-size:11px;color:#8793a8}.crm-note-preview time{font-size:11px;color:#8290a5}\n.crm-notes-layout{display:grid;grid-template-columns:minmax(270px,370px) minmax(0,1fr);gap:20px;align-items:start}\n.crm-notes-editor,.crm-notes-list{background:#fff;border:1px solid #dce5f3;border-radius:15px;padding:22px;box-shadow:0 6px 22px rgba(24,48,84,.06)}\n.crm-notes-editor h3,.crm-notes-list h3{margin:0 0 19px;font-size:17px;color:#17233b}\n.crm-notes-editor label{display:block;font-size:12px;font-weight:650;color:#465570;margin-bottom:15px}.crm-notes-editor label input,.crm-notes-editor label select,.crm-notes-editor label textarea{display:block;margin-top:7px}\n.crm-primary-btn,.crm-secondary-btn{border-radius:9px;border:1px solid #2474e6;padding:10px 15px;cursor:pointer;font-weight:650}.crm-primary-btn{background:#2474e6;color:white}.crm-secondary-btn{background:white;color:#2474e6}\n.crm-notes-list-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}.crm-notes-list-head h3{margin:0}\n.crm-note-card{border:1px solid #e4eaf4;border-radius:12px;padding:17px;margin-bottom:12px;background:#fbfcff}.crm-note-card-top{display:flex;justify-content:space-between;gap:12px}.crm-note-card h4{font-size:14px;margin:0 0 5px}.crm-note-card small{color:#8592a7;font-size:11px}.crm-note-card p{font-size:12px;line-height:1.7;white-space:pre-wrap;color:#4c5a70;margin:12px 0 0}.crm-note-card-top button{background:transparent;border:0;color:#2573dc;cursor:pointer;font-size:11px;padding:5px}.crm-note-card-top .crm-danger-btn{color:#b42318}\n@media(max-width:850px){.crm-notes-layout{grid-template-columns:1fr}.matrice-sidebar{width:272px!important}}\n'}{'\n.matrice-shell{display:flex;min-height:100vh;background:#f6f8fc;color:#17233b;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}.matrice-shell button{font-family:inherit}.matrice-sidebar{width:244px;flex:0 0 244px;background:#fff;border-right:1px solid #e6eaf1;min-height:100vh;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;z-index:50}.matrice-brand{height:72px;display:flex;align-items:center;gap:9px;padding:0 18px;border-bottom:1px solid #eef0f5}.matrice-brand-icon{font-size:25px;color:#4a78d7}.matrice-brand strong{font-size:16px;letter-spacing:.035em;font-weight:800}.matrice-brand span{font-size:11px;color:#8a95a8;margin-left:5px;font-weight:700}.matrice-close-menu{display:none}.matrice-nav-scroll{padding:14px 10px;overflow-y:auto;flex:1}.matrice-nav-main,.matrice-nav-group-title,.matrice-subnav button{width:100%;display:flex;align-items:center;text-align:left;border:0;background:transparent;color:#34415a;cursor:pointer;border-radius:8px}.matrice-nav-main{padding:12px 12px;gap:11px;font-size:13px;font-weight:650}.matrice-nav-main.active,.matrice-subnav button.active{background:#e8f1ff;color:#2769df}.matrice-nav-group{margin-top:13px}.matrice-nav-group-title{padding:9px 11px;gap:10px;font-size:12.5px;font-weight:700}.matrice-nav-group-title span{flex:1}.matrice-subnav{margin:3px 0 0 24px;padding-left:8px;border-left:1px solid #e6ebf4}.matrice-subnav button{padding:8px 9px;gap:9px;font-size:12px;line-height:1.3;margin-bottom:2px}.matrice-nav-main:hover,.matrice-nav-group-title:hover,.matrice-subnav button:hover{background:#f2f6fd}.matrice-sidebar-foot{padding:14px 17px;border-top:1px solid #eef0f5;color:#586780;font-size:11px}.matrice-sidebar-foot small{display:block;margin:4px 0 0 16px;color:#9aa4b5}.matrice-status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#29b98d;margin-right:7px}.matrice-workspace{min-width:0;flex:1}.matrice-topbar{height:72px;background:#fff;border-bottom:1px solid #e6eaf1;display:flex;align-items:center;padding:0 28px;gap:12px;position:sticky;top:0;z-index:30}.matrice-topbar-label{font-size:13px;font-weight:650;color:#637089}.matrice-menu-button,.matrice-topbar-actions button{border:0;background:transparent;color:#41516e;cursor:pointer;padding:7px;display:flex;align-items:center}.matrice-menu-button{display:none}.matrice-topbar-actions{display:flex;align-items:center;gap:13px;margin-left:auto}.matrice-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#1b3868;color:#fff;font-size:11px;font-weight:750}.matrice-main{padding:26px 30px;max-width:1600px;margin:auto}.matrice-welcome{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:23px}.matrice-welcome h1{font-size:24px;letter-spacing:-.6px;margin:0 0 5px;font-weight:760;color:#15243c}.matrice-welcome p{font-size:12px;color:#8390a3;margin:0}.matrice-add{display:flex;align-items:center;gap:6px;padding:9px 12px;border:1px solid #dce6f7;border-radius:9px;background:#fff;color:#2b70e6;font-size:12px;font-weight:650;cursor:pointer}.matrice-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:16px}.matrice-metric{min-width:0;text-align:left;border:1px solid #e6eaf1;border-radius:13px;background:#fff;padding:17px;display:flex;gap:12px;align-items:flex-start;cursor:pointer;box-shadow:0 2px 8px rgba(20,38,70,.025)}.matrice-metric-icon{display:flex;align-items:center;justify-content:center;flex:0 0 37px;height:37px;background:#eaf2ff;color:#3e7bef;border-radius:9px}.matrice-metric span:last-child{min-width:0}.matrice-metric small,.matrice-metric em{display:block;font-size:11px;color:#8490a2;font-style:normal}.matrice-metric strong{display:block;color:#15243c;font-size:21px;line-height:1.6;white-space:nowrap;letter-spacing:-.5px}.matrice-metric em{font-size:10px}.matrice-two{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}.matrice-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:13px}.matrice-section-head h3{font-size:14px;font-weight:750;margin:0;color:#17233b}.matrice-section-head button{border:0;background:transparent;display:flex;align-items:center;gap:3px;font-size:11px;color:#3677e9;cursor:pointer}.matrice-total{font-size:11px;color:#8490a2;margin-bottom:16px}.matrice-total strong{color:#25334d;margin-left:5px}.matrice-pipeline-row{display:flex;align-items:center;gap:8px;margin-bottom:14px;font-size:11px}.matrice-dot{width:9px;height:9px;flex:0 0 9px;border-radius:50%}.matrice-pipeline-name{width:105px;flex:0 0 105px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#44536c}.matrice-track{height:7px;border-radius:9px;background:#edf2fa;flex:1;min-width:15px;overflow:hidden}.matrice-track div{height:100%;border-radius:9px}.matrice-pipeline-row strong{width:75px;text-align:right;font-size:11px;white-space:nowrap}.matrice-percent{width:30px;text-align:right;color:#7e8ba0;font-size:10px}.matrice-chart-sub{font-size:11px;color:#8c98a9;margin:-6px 0 8px}.matrice-empty{color:#8b97a8;font-size:12px;padding:17px 0}.matrice-event{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f0f2f7;font-size:12px}.matrice-event-time{color:#65748c;min-width:42px}.matrice-event-mark{width:6px;height:20px;border-radius:4px;background:#4d8cf5}.matrice-event-name{font-weight:600;color:#34415a}.matrice-opportunity{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #f0f2f7}.matrice-opportunity-mark{height:8px;width:8px;border-radius:50%;flex-shrink:0}.matrice-opportunity div{min-width:0;flex:1}.matrice-opportunity strong,.matrice-opportunity small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.matrice-opportunity strong{font-size:12px;color:#33415a}.matrice-opportunity small{font-size:10px;color:#8995a8;margin-top:3px}.matrice-opportunity b{font-size:12px;white-space:nowrap}.matrice-backdrop{display:none}@media(max-width:1150px){.matrice-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.matrice-two{grid-template-columns:1fr}}@media(max-width:768px){.matrice-sidebar{position:fixed;left:0;top:0;transform:translateX(-100%);transition:transform .2s;box-shadow:4px 0 25px rgba(25,43,77,.12)}.matrice-sidebar.is-open{transform:translateX(0)}.matrice-close-menu{display:block;margin-left:auto;border:0;background:transparent;font-size:25px;color:#8793a7}.matrice-backdrop{display:block;position:fixed;inset:0;background:rgba(20,32,56,.32);z-index:45}.matrice-menu-button{display:flex}.matrice-topbar{height:60px;padding:0 14px}.matrice-main{padding:17px 13px!important}.matrice-welcome h1{font-size:20px}.matrice-welcome p{font-size:11px}.matrice-add{font-size:0}.matrice-add svg{width:17px}.matrice-metrics{gap:9px}.matrice-metric{padding:11px;gap:8px}.matrice-metric-icon{width:30px;height:30px;flex-basis:30px}.matrice-metric strong{font-size:16px}.matrice-metric small{font-size:10px}.matrice-metric em{font-size:9px}.matrice-pipeline-name{width:75px;flex-basis:75px}.matrice-pipeline-row strong{width:63px;font-size:10px}}\n' + "* { box-sizing: border-box; } body { transition: background 0.2s ease; } button { transition: all 0.18s ease; } button:hover:not(:disabled) { filter: brightness(0.96); transform: translateY(-1px); } button:active:not(:disabled) { transform: translateY(0) scale(0.98); } input, select, textarea { transition: border-color 0.18s ease, box-shadow 0.18s ease; } input:focus, select:focus, textarea:focus { outline: none; border-color: #0b7bc4 !important; box-shadow: 0 0 0 3px rgba(11,123,196,0.12); } .dashboard-card { transition: transform 0.2s ease, box-shadow 0.2s ease; } .dashboard-card:hover { transform: translateY(-4px); box-shadow: 0 10px 28px rgba(11,123,196,0.14) !important; } .nav-item { transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease; } .nav-item:hover { background: #f2f8fc !important; } table tbody tr { transition: background 0.15s ease; } table tbody tr:hover { background: #f7fbfe; } @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } } .page-content { animation: fadeSlideIn 0.25s ease; } .app-sidebar-backdrop { display: none; } @media (max-width: 768px) { main * { min-width: 0; } body { overflow-x: hidden; } .app-sidebar { position: fixed !important; top: 61px; left: 0; height: calc(100vh - 61px) !important; z-index: 40; box-shadow: 4px 0 16px rgba(0,0,0,0.15); } .app-sidebar-backdrop { display: block !important; position: fixed; top: 61px; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.35); z-index: 35; } table { display: block; overflow-x: auto; white-space: nowrap; } .tabella-righe-preventivo, .tabella-responsive { white-space: normal; } .tabella-righe-preventivo thead, .tabella-responsive thead { display: none; } .tabella-righe-preventivo, .tabella-righe-preventivo tbody, .tabella-righe-preventivo tr, .tabella-righe-preventivo td, .tabella-responsive, .tabella-responsive tbody, .tabella-responsive tr, .tabella-responsive td { display: block; width: 100%; } .tabella-righe-preventivo tr, .tabella-responsive tr { border: 1px solid #e2edf5; border-radius: 6px; margin-bottom: 6px; padding: 4px; } .tabella-righe-preventivo td, .tabella-responsive td { display: flex; align-items: flex-start; justify-content: flex-start; flex-direction: column; gap: 1px; padding: 3px 4px; border: none; font-size: 11.5px; width: 100%; max-width: 100%; } .tabella-righe-preventivo td::before, .tabella-responsive td::before { content: attr(data-label); font-size: 9px; color: #7c8b98; } .tabella-righe-preventivo td input, .tabella-righe-preventivo td select { width: 100% !important; max-width: 100% !important; flex: none; } .form-header-preventivo select, .form-header-preventivo input { max-width: none !important; width: 100% !important; } input, select, textarea { font-size: 16px !important; } main:not(.matrice-main) { padding: 10px !important; } .email-utente { display: none; } header { padding: 10px 12px !important; } h2 { font-size: 17px !important; margin-bottom: 8px !important; } h3 { font-size: 13px !important; } }"}</style>
   );
 }
 
