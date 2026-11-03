@@ -2,11 +2,11 @@ import { useState, useEffect, useRef } from "react";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area,
 } from "recharts";
 import {
   Users, Building2, CalendarDays, FileText, LogOut, Menu as MenuIcon, LayoutDashboard, ShieldCheck,
-  Printer, Map as MapIcon, Upload, TrendingUp, Wallet, ClipboardList, Briefcase, Users2,
+  Printer, Map as MapIcon, Upload, TrendingUp, Wallet, ClipboardList, Briefcase, Users2, ChevronDown, ChevronRight, Search, Bell, Plus, Clock3, Target, ArrowUpRight,
 } from "lucide-react";
 
 
@@ -15,8 +15,8 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 
 const COLORS = {
-  primary: "#0b7bc4", primaryDark: "#075985", bg: "#f7fafc", card: "#ffffff",
-  border: "#e2edf5", text: "#233242", muted: "#7c8b98", danger: "#c0392b", success: "#1a7a3c",
+  primary: "#3577ec", primaryDark: "#205ed3", bg: "#f6f8fc", card: "#ffffff",
+  border: "#e6eaf1", text: "#17233b", muted: "#78859a", danger: "#c0392b", success: "#1a7a3c",
 };
 
 const MESI_BREVI = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
@@ -342,71 +342,58 @@ function AdminPanel({ session }) {
 }
 
 function Dashboard({ session, goTo }) {
-  const [counts, setCounts] = useState({ clienti: 0, aziende: 0, visiteMese: 0, preventivi: 0 });
-  const [portafoglio, setPortafoglio] = useState(0);
+  const [data, setData] = useState({ clienti: [], aziende: [], appuntamenti: [], preventivi: [], ordini: [] });
   const [loading, setLoading] = useState(true);
-  const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token });
-
+  const [errore, setErrore] = useState("");
   useEffect(() => {
+    let attivo = true;
     (async () => {
-      setLoading(true);
       try {
-        const inizioMese = new Date(); inizioMese.setDate(1);
-        const inizioMeseStr = inizioMese.toISOString().slice(0, 10);
-        const results = await Promise.all([
-          fetch(SUPABASE_URL + "/rest/v1/clienti?select=id", { headers: headers() }),
-          fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id", { headers: headers() }),
-          fetch(SUPABASE_URL + "/rest/v1/visite?select=id&data_visita=gte." + inizioMeseStr, { headers: headers() }),
-          fetch(SUPABASE_URL + "/rest/v1/preventivi?select=id,stato,fatturato,righe,imballo_modalita,imballo_percentuale,imballo_valore,trasporto_modalita,trasporto_percentuale,trasporto_valore,iva_modalita,iva_percentuale,iva_valore", { headers: headers() }),
-        ]);
-        const [dClienti, dAziende, dVisite, dPreventivi] = await Promise.all(results.map((r) => r.json()));
-        setCounts({
-          clienti: Array.isArray(dClienti) ? dClienti.length : 0,
-          aziende: Array.isArray(dAziende) ? dAziende.length : 0,
-          visiteMese: Array.isArray(dVisite) ? dVisite.length : 0,
-          preventivi: Array.isArray(dPreventivi) ? dPreventivi.length : 0,
-        });
-        const accettatiNonFatturati = (Array.isArray(dPreventivi) ? dPreventivi : []).filter((pv) => pv.stato === "accettato" && !pv.fatturato);
-        setPortafoglio(accettatiNonFatturati.reduce((s, pv) => s + calcolaTotaliPreventivo(pv, pv.righe || []).totaleFinale, 0));
-      } catch (e) {} finally { setLoading(false); }
+        const percorsi = ["clienti?select=id,ragione_sociale", "aziende_mandanti?select=id,nome,colore", "appuntamenti?select=id,titolo,inizio,fine,tipo,stato,cliente_id,azienda_id&order=inizio.asc", "preventivi?select=*", "ordini_confermati?select=*"];
+        const risposte = await Promise.all(percorsi.map(x => fetch(SUPABASE_URL + "/rest/v1/" + x, { headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token } })));
+        const valori = await Promise.all(risposte.map(r => r.json()));
+        const obbligatori = [0,1,2,3];
+        for (const i of obbligatori) if (!risposte[i].ok) throw new Error(valori[i]?.message || "Impossibile caricare la dashboard");
+        if (attivo) setData({ clienti: valori[0], aziende: valori[1], appuntamenti: valori[2], preventivi: valori[3], ordini: risposte[4].ok ? valori[4] : [] });
+      } catch (e) { if (attivo) setErrore(e.message); }
+      finally { if (attivo) setLoading(false); }
     })();
+    return () => { attivo = false; };
   }, [session]);
-
-  const cards = [
-    { key: "clienti", label: "Clienti", value: counts.clienti, icon: Users, color: "#0b7bc4" },
-    { key: "aziende", label: "Aziende mandanti", value: counts.aziende, icon: Building2, color: "#0e9488" },
-    { key: "visite", label: "Visite questo mese", value: counts.visiteMese, icon: CalendarDays, color: "#c77d0b" },
-    { key: "preventivi", label: "Preventivi totali", value: counts.preventivi, icon: FileText, color: "#7c4dbd" },
+  const oggi = new Date();
+  const anno = oggi.getFullYear();
+  const giorno = d => { const x = new Date(d); return x.getFullYear() === oggi.getFullYear() && x.getMonth() === oggi.getMonth() && x.getDate() === oggi.getDate(); };
+  const visiteMese = data.appuntamenti.filter(x => x.tipo === "visita" && x.stato !== "annullato" && new Date(x.inizio).getMonth() === oggi.getMonth() && new Date(x.inizio).getFullYear() === anno).length;
+  const agenda = data.appuntamenti.filter(x => giorno(x.inizio) && x.stato !== "annullato").sort((a,b) => new Date(a.inizio)-new Date(b.inizio));
+  const opportunita = data.preventivi.filter(x => x.stato === "inviato" || x.stato === "bozza");
+  const portafoglio = data.preventivi.filter(x => x.stato === "accettato" && !x.fatturato);
+  const importo = x => { try { return calcolaTotaliPreventivo(x, x.righe || []).totaleFinale || 0; } catch { return 0; } };
+  const totalePipeline = portafoglio.reduce((a,x) => a+importo(x),0);
+  const pipeline = data.aziende.map(a => ({ ...a, valore: portafoglio.filter(x => x.azienda_id === a.id).reduce((t,x) => t+importo(x),0) })).sort((a,b)=>b.valore-a.valore);
+  const ricavi = data.aziende.flatMap(a => { try { return combinaRicaviPerAzienda(data.ordini, data.preventivi, a.id); } catch { return []; } });
+  const mensili = MESI_BREVI.map((mese,i) => ({ mese, valore: ricavi.filter(x => { const d = new Date(x.data); return d.getFullYear() === anno && d.getMonth() === i; }).reduce((t,x)=>t+(Number(x.importo)||0),0) }));
+  const fatturatoYTD = mensili.slice(0,oggi.getMonth()+1).reduce((a,x)=>a+x.valore,0);
+  const euro = n => (Number(n)||0).toLocaleString("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:0});
+  const panel = { background:"#fff",border:"1px solid #e6eaf1",borderRadius:14,padding:18,minWidth:0,boxShadow:"0 2px 8px rgba(20,38,70,.025)" };
+  const metriche = [
+    { nome:"Fatturato YTD",valore:euro(fatturatoYTD),icona:TrendingUp,pagina:"fatturato",colore:"#3679f5",nota:"Anno " + anno },
+    { nome:"Portafoglio ordini",valore:euro(totalePipeline),icona:Wallet,pagina:"portafoglio",colore:"#4b70f5",nota:"Accettati non fatturati" },
+    { nome:"Opportunità",valore:opportunita.length,icona:Target,pagina:"preventivi",colore:"#5b79eb",nota:"Preventivi aperti" },
+    { nome:"Visite mese",valore:visiteMese,icona:CalendarDays,pagina:"visite",colore:"#3985ec",nota:"Da agenda commerciale" },
   ];
-
-  return (
-    <div style={{ fontFamily: "Arial, sans-serif" }}>
-      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}><LayoutDashboard size={20} color={COLORS.primary} /> Dashboard</h2>
-      <p style={{ color: COLORS.muted, fontSize: 13, marginBottom: 20 }}>Riepilogo generale della tua attività</p>
-      <div className="dashboard-card" style={{ background: "linear-gradient(135deg, " + COLORS.primary + ", " + COLORS.primaryDark + ")", borderRadius: 14, padding: 20, marginBottom: 20, maxWidth: 320, cursor: "pointer" }} onClick={() => goTo("preventivi")}>
-        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.85)" }}>Portafoglio ordini (accettati, non fatturati)</div>
-        <div style={{ fontSize: 26, fontWeight: 700, color: "#fff" }}>{loading ? "…" : formattaEuro(portafoglio)}</div>
-      </div>
-      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-        <button onClick={() => goTo("visite")} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 20px", background: "linear-gradient(135deg, " + COLORS.primary + ", " + COLORS.primaryDark + ")", color: "#fff", border: "none", borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer" }}><CalendarDays size={16} /> Vai al Calendario</button>
-        <button onClick={() => goTo("preventivi")} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 20px", background: "#fff", color: COLORS.primary, border: "1px solid " + COLORS.border, borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer" }}><FileText size={16} /> Nuovo Preventivo</button>
-        <button onClick={() => goTo("statistiche")} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 20px", background: "#fff", color: COLORS.primary, border: "1px solid " + COLORS.border, borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer" }}><TrendingUp size={16} /> Statistiche</button>
-        <button onClick={() => goTo("fatturato")} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 20px", background: "#fff", color: COLORS.primary, border: "1px solid " + COLORS.border, borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer" }}><Wallet size={16} /> Fatturato</button>
-      </div>
-      <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-        {cards.map((c) => {
-          const Icon = c.icon;
-          return (
-            <div key={c.key} className="dashboard-card" onClick={() => goTo(c.key)} style={{ flex: "1 1 200px", minWidth: 180, background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, padding: 20, cursor: "pointer", boxShadow: "0 4px 14px rgba(20,40,60,0.05)" }}>
-              <div style={{ width: 38, height: 38, borderRadius: 10, background: c.color + "18", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}><Icon size={20} color={c.color} /></div>
-              <div style={{ fontSize: 26, fontWeight: 700, color: COLORS.text }}>{loading ? "…" : c.value}</div>
-              <div style={{ fontSize: 13, color: COLORS.muted, marginTop: 2 }}>{c.label}</div>
-            </div>
-          );
-        })}
-      </div>
+  return <div className="matrice-dashboard">
+    <div className="matrice-welcome"><div><h1>Ciao Francesco <span aria-hidden="true">👋</span></h1><p>Oggi è {oggi.toLocaleDateString("it-IT",{weekday:"long",day:"numeric",month:"long"})}. Ecco il riepilogo della tua attività.</p></div><button className="matrice-add" onClick={()=>goTo("visite")}><Plus size={16}/> Apri agenda</button></div>
+    {errore && <p style={{color:"#c0392b"}}>{errore}</p>}
+    <div className="matrice-metrics">{metriche.map(m=>{const I=m.icona;return <button key={m.nome} className="matrice-metric" onClick={()=>goTo(m.pagina)}><span className="matrice-metric-icon"><I size={19}/></span><span><small>{m.nome}</small><strong>{loading?"…":m.valore}</strong><em>{m.nota}</em></span></button>})}</div>
+    <div className="matrice-two">
+      <section style={panel}><div className="matrice-section-head"><h3>Pipeline per mandante</h3><button onClick={()=>goTo("portafoglio")}>Dettagli <ArrowUpRight size={13}/></button></div><div className="matrice-total">Totale: <strong>{loading?"…":euro(totalePipeline)}</strong></div>{pipeline.length===0?<p className="matrice-empty">Nessuna azienda mandante presente.</p>:pipeline.map((a,i)=><div className="matrice-pipeline-row" key={a.id}><span className="matrice-dot" style={{background:a.colore||["#3478ed","#6c63db","#22a98b","#e4a34e"][i%4]}}/><span className="matrice-pipeline-name" title={a.nome}>{a.nome}</span><div className="matrice-track"><div style={{width:(totalePipeline>0?100*a.valore/totalePipeline:0)+"%",background:a.colore||"#3d79ed"}}/></div><strong>{euro(a.valore)}</strong><span className="matrice-percent">{totalePipeline?Math.round(a.valore/totalePipeline*100):0}%</span></div>)}</section>
+      <section style={panel}><div className="matrice-section-head"><h3>Andamento fatturato</h3><button onClick={()=>goTo("fatturato")}>Dettagli <ArrowUpRight size={13}/></button></div><p className="matrice-chart-sub">Anno {anno} · Dati registrati nel CRM</p><div style={{height:215,width:"100%"}}><ResponsiveContainer width="100%" height="100%"><AreaChart data={mensili} margin={{top:12,right:5,left:-16,bottom:0}}><defs><linearGradient id="matriceTrend" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4686f6" stopOpacity={0.22}/><stop offset="100%" stopColor="#4686f6" stopOpacity={0.01}/></linearGradient></defs><CartesianGrid stroke="#eef1f7" vertical={false}/><XAxis dataKey="mese" tick={{fontSize:10,fill:"#8792a5"}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:"#8792a5"}} axisLine={false} tickLine={false} tickFormatter={v=>v>=1000?Math.round(v/1000)+"k":v}/><Tooltip formatter={v=>euro(v)}/><Area type="monotone" dataKey="valore" stroke="#367bf3" strokeWidth={2.5} fill="url(#matriceTrend)"/></AreaChart></ResponsiveContainer></div></section>
     </div>
-  );
+    <div className="matrice-two matrice-bottom">
+      <section style={panel}><div className="matrice-section-head"><h3>Agenda di oggi</h3><button onClick={()=>goTo("visite")}><Plus size={15}/> Vedi agenda</button></div>{agenda.length===0?<p className="matrice-empty">Nessun appuntamento previsto oggi.</p>:agenda.slice(0,5).map(x=><div className="matrice-event" key={x.id}><span className="matrice-event-time">{new Date(x.inizio).toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"})}</span><span className="matrice-event-mark"/><span className="matrice-event-name">{x.titolo}</span></div>)}</section>
+      <section style={panel}><div className="matrice-section-head"><h3>Opportunità in trattativa</h3><button onClick={()=>goTo("preventivi")}>Tutte <ArrowUpRight size={13}/></button></div>{opportunita.length===0?<p className="matrice-empty">Nessun preventivo aperto al momento.</p>:opportunita.slice(0,4).map((x,i)=><div className="matrice-opportunity" key={x.id}><span className="matrice-opportunity-mark" style={{background:i%2?"#a58de8":"#3982ee"}}/><div><strong>{data.clienti.find(c=>c.id===x.cliente_id)?.ragione_sociale||"Preventivo"}</strong><small>{x.stato==="inviato"?"Preventivo inviato":"Bozza"}</small></div><b>{euro(importo(x))}</b></div>)}</section>
+    </div>
+  </div>;
 }
 
 function AziendeMandanti({ session }) {
@@ -2125,93 +2112,52 @@ function GruppiAcquisto({ session, gruppoIniziale, onGruppoAperto }) {
 }
 
 function AppShell({ session, onLogout }) {
-  const [menuOpen, setMenuOpen] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(typeof window === "undefined" ? true : window.innerWidth > 768);
   const [page, setPage] = useState("dashboard");
   const [role, setRole] = useState("user");
   const [preventivoAprireId, setPreventivoAprireId] = useState(null);
   const [gruppoAprireId, setGruppoAprireId] = useState(null);
-
-  const apriPreventivoCliente = (id) => { setPreventivoAprireId(id); setPage("preventivi"); };
-  const apriGruppoCliente = (id) => { setGruppoAprireId(id); setPage("gruppi"); };
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(SUPABASE_URL + "/rest/v1/profiles?id=eq." + session.user.id + "&select=role", {
-          headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token },
-        });
-        const data = await res.json();
-        if (data && data[0]) setRole(data[0].role);
-      } catch (e) {}
-    })();
-  }, [session]);
-
-  const menuItems = [
-    { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { key: "clienti", label: "Clienti", icon: Users },
-    { key: "aziende", label: "Aziende mandanti", icon: Building2 },
-    { key: "visite", label: "Visite", icon: CalendarDays },
-    { key: "preventivi", label: "Preventivi", icon: FileText },
-    { key: "portafoglio", label: "Portafoglio ordini", icon: Briefcase },
-    { key: "gruppi", label: "Gruppi d'acquisto", icon: Users2 },
-    { key: "ordini", label: "Registro ordini", icon: ClipboardList },
-    { key: "mappa", label: "Mappa", icon: MapIcon },
-    { key: "statistiche", label: "Statistiche", icon: TrendingUp },
-    { key: "fatturato", label: "Fatturato", icon: Wallet },
-    ...(role === "admin" ? [{ key: "admin", label: "Pannello Admin", icon: ShieldCheck }] : []),
+  const [aperti, setAperti] = useState({ gestione:true, opportunita:true, analisi:true, strumenti:true });
+  const apriPreventivoCliente = id => { setPreventivoAprireId(id); setPage("preventivi"); };
+  const apriGruppoCliente = id => { setGruppoAprireId(id); setPage("gruppi"); };
+  useEffect(() => { (async () => { try { const r=await fetch(SUPABASE_URL+"/rest/v1/profiles?id=eq."+session.user.id+"&select=role",{headers:{apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+session.access_token}}); const d=await r.json(); if(d&&d[0])setRole(d[0].role); } catch(e){} })(); },[session]);
+  const sezioni = [
+    {id:"gestione",nome:"Gestione",icon:Users,items:[{key:"clienti",label:"Elenco clienti",icon:Users},{key:"gruppi",label:"Gruppi d'acquisto",icon:Users2},{key:"mappa",label:"Mappa clienti",icon:MapIcon}]},
+    {id:"opportunita",nome:"Opportunità",icon:Target,items:[{key:"preventivi",label:"Preventivi e offerte",icon:FileText},{key:"portafoglio",label:"Portafoglio ordini",icon:Briefcase},{key:"ordini",label:"Registro ordini",icon:ClipboardList}]},
+    {id:"analisi",nome:"Analisi",icon:TrendingUp,items:[{key:"fatturato",label:"Fatturato",icon:Wallet},{key:"statistiche",label:"Statistiche",icon:TrendingUp}]},
+    {id:"strumenti",nome:"Attività e altre",icon:CalendarDays,items:[{key:"visite",label:"Agenda e visite",icon:CalendarDays},{key:"aziende",label:"Aziende mandanti",icon:Building2},...(role==="admin"?[{key:"admin",label:"Amministrazione",icon:ShieldCheck}]:[])]},
   ];
-
-  return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, " + COLORS.bg + " 0%, #eef5fa 100%)", fontFamily: "Arial, sans-serif" }}>
-      <header style={{ display: "flex", alignItems: "center", padding: "14px 22px", background: "linear-gradient(135deg, " + COLORS.primary + ", " + COLORS.primaryDark + ")", boxShadow: "0 2px 12px rgba(11,123,196,0.2)", position: "sticky", top: 0, zIndex: 1000 }}>
-        <button onClick={() => setMenuOpen((v) => !v)} style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 8, width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", cursor: "pointer", marginRight: 14 }}>
-          <MenuIcon size={18} />
-        </button>
-        <span style={{ fontWeight: 700, color: "#fff", fontSize: 16 }}>CRM Arredo Bagno</span>
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 14 }}>
-          <span className="email-utente" style={{ fontSize: 12, color: "rgba(255,255,255,0.85)" }}>{session.user.email}</span>
-          <button onClick={onLogout} style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 8, padding: "7px 12px", fontSize: 12, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-            <LogOut size={14} /> Esci
-          </button>
-        </div>
-      </header>
-      <div style={{ display: "flex" }}>
-        {menuOpen && <div className="app-sidebar-backdrop" onClick={() => setMenuOpen(false)} />}
-        {menuOpen && (
-          <nav className="app-sidebar" style={{ width: 210, background: COLORS.card, borderRight: "1px solid " + COLORS.border, minHeight: "calc(100vh - 61px)", padding: "14px 10px" }}>
-            {menuItems.map((item) => {
-              const Icon = item.icon;
-              const active = page === item.key;
-              return (
-                <div key={item.key} className="nav-item" onClick={() => { setPage(item.key); if (window.innerWidth < 768) setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", marginBottom: 4, borderRadius: 10, fontSize: 14, color: active ? COLORS.primary : COLORS.text, background: active ? "#eaf5fc" : "transparent", cursor: "pointer", fontWeight: active ? 600 : 400, borderLeft: active ? "3px solid " + COLORS.primary : "3px solid transparent" }}>
-                  <Icon size={17} /> {item.label}
-                </div>
-              );
-            })}
-          </nav>
-        )}
-        <main key={page} className="page-content" style={{ flex: 1, padding: 28 }}>
-          {page === "dashboard" && <Dashboard session={session} goTo={setPage} />}
-          {page === "admin" && role === "admin" && <AdminPanel session={session} />}
-          {page === "aziende" && <AziendeMandanti session={session} />}
-          {page === "clienti" && <ClientiAnagrafica session={session} apriPreventivo={apriPreventivoCliente} apriGruppo={apriGruppoCliente} />}
-          {page === "visite" && <CalendarioVisite session={session} />}
-          {page === "preventivi" && (<PreventiviOfferte session={session} preventivoIniziale={preventivoAprireId} onPreventivoAperto={() => setPreventivoAprireId(null)} />)}
-          {page === "mappa" && <MappaClienti session={session} />}
-          {page === "statistiche" && <Statistiche session={session} />}
-          {page === "fatturato" && <Fatturato session={session} />}
-          {page === "ordini" && <RegistroOrdini session={session} apriPreventivo={apriPreventivoCliente} />}
-          {page === "portafoglio" && <PortafoglioOrdini session={session} />}
-          {page === "gruppi" && (<GruppiAcquisto session={session} gruppoIniziale={gruppoAprireId} onGruppoAperto={() => setGruppoAprireId(null)} />)}
-        </main>
-      </div>
-    </div>
-  );
+  const scegli = key => { setPage(key); if(window.innerWidth<768)setMenuOpen(false); };
+  const avatar=(session.user.email||"FG").split("@")[0].slice(0,2).toUpperCase();
+  return <div className="matrice-shell">
+    <aside className={"matrice-sidebar"+(menuOpen?" is-open":"")}>
+      <div className="matrice-brand"><div className="matrice-brand-icon">◈</div><div><strong>MATRICE</strong><span>CRM</span></div><button className="matrice-close-menu" onClick={()=>setMenuOpen(false)}>×</button></div>
+      <div className="matrice-nav-scroll"><button className={"matrice-nav-main"+(page==="dashboard"?" active":"")} onClick={()=>scegli("dashboard")}><LayoutDashboard size={17}/> Dashboard</button>
+        {sezioni.map(g=>{const Icon=g.icon;return <div className="matrice-nav-group" key={g.id}><button className="matrice-nav-group-title" onClick={()=>setAperti(p=>({...p,[g.id]:!p[g.id]}))}><Icon size={17}/><span>{g.nome}</span>{aperti[g.id]?<ChevronDown size={15}/>:<ChevronRight size={15}/>}</button>{aperti[g.id]&&<div className="matrice-subnav">{g.items.map(item=>{const I=item.icon;return <button key={item.key} onClick={()=>scegli(item.key)} className={page===item.key?"active":""}><I size={14}/><span>{item.label}</span></button>})}</div>}</div>})}
+      </div><div className="matrice-sidebar-foot"><span className="matrice-status-dot"/> CRM sviluppo <small>Ambiente di test</small></div>
+    </aside>
+    {menuOpen&&<div className="matrice-backdrop" onClick={()=>setMenuOpen(false)}/>}
+    <div className="matrice-workspace"><header className="matrice-topbar"><button className="matrice-menu-button" onClick={()=>setMenuOpen(v=>!v)} aria-label="Apri o chiudi menu"><MenuIcon size={19}/></button><span className="matrice-topbar-label">{page==="dashboard"?"Panoramica":sezioni.flatMap(x=>x.items).find(x=>x.key===page)?.label||"CRM"}</span><div className="matrice-topbar-actions"><button title="Vai ai clienti" onClick={()=>scegli("clienti")}><Search size={18}/></button><button title="Apri agenda" onClick={()=>scegli("visite")}><Bell size={18}/></button><span className="matrice-avatar" title={session.user.email}>{avatar}</span><button className="matrice-logout" onClick={onLogout} title="Esci"><LogOut size={17}/></button></div></header>
+      <main key={page} className="page-content matrice-main">
+        {page==="dashboard"&&<Dashboard session={session} goTo={scegli}/>}
+        {page==="admin"&&role==="admin"&&<AdminPanel session={session}/>}
+        {page==="aziende"&&<AziendeMandanti session={session}/>}
+        {page==="clienti"&&<ClientiAnagrafica session={session} apriPreventivo={apriPreventivoCliente} apriGruppo={apriGruppoCliente}/>}
+        {page==="visite"&&<CalendarioVisite session={session}/>}
+        {page==="preventivi"&&<PreventiviOfferte session={session} preventivoIniziale={preventivoAprireId} onPreventivoAperto={()=>setPreventivoAprireId(null)}/>}
+        {page==="mappa"&&<MappaClienti session={session}/>}
+        {page==="statistiche"&&<Statistiche session={session}/>}
+        {page==="fatturato"&&<Fatturato session={session}/>}
+        {page==="ordini"&&<RegistroOrdini session={session} apriPreventivo={apriPreventivoCliente}/>}
+        {page==="portafoglio"&&<PortafoglioOrdini session={session}/>}
+        {page==="gruppi"&&<GruppiAcquisto session={session} gruppoIniziale={gruppoAprireId} onGruppoAperto={()=>setGruppoAprireId(null)}/>}
+      </main></div>
+  </div>;
 }
 
 function StileGlobaleResponsive() {
   return (
-    <style>{"* { box-sizing: border-box; } body { transition: background 0.2s ease; } button { transition: all 0.18s ease; } button:hover:not(:disabled) { filter: brightness(0.96); transform: translateY(-1px); } button:active:not(:disabled) { transform: translateY(0) scale(0.98); } input, select, textarea { transition: border-color 0.18s ease, box-shadow 0.18s ease; } input:focus, select:focus, textarea:focus { outline: none; border-color: #0b7bc4 !important; box-shadow: 0 0 0 3px rgba(11,123,196,0.12); } .dashboard-card { transition: transform 0.2s ease, box-shadow 0.2s ease; } .dashboard-card:hover { transform: translateY(-4px); box-shadow: 0 10px 28px rgba(11,123,196,0.14) !important; } .nav-item { transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease; } .nav-item:hover { background: #f2f8fc !important; } table tbody tr { transition: background 0.15s ease; } table tbody tr:hover { background: #f7fbfe; } @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } } .page-content { animation: fadeSlideIn 0.25s ease; } .app-sidebar-backdrop { display: none; } @media (max-width: 768px) { main * { min-width: 0; } body { overflow-x: hidden; } .app-sidebar { position: fixed !important; top: 61px; left: 0; height: calc(100vh - 61px) !important; z-index: 40; box-shadow: 4px 0 16px rgba(0,0,0,0.15); } .app-sidebar-backdrop { display: block !important; position: fixed; top: 61px; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.35); z-index: 35; } table { display: block; overflow-x: auto; white-space: nowrap; } .tabella-righe-preventivo, .tabella-responsive { white-space: normal; } .tabella-righe-preventivo thead, .tabella-responsive thead { display: none; } .tabella-righe-preventivo, .tabella-righe-preventivo tbody, .tabella-righe-preventivo tr, .tabella-righe-preventivo td, .tabella-responsive, .tabella-responsive tbody, .tabella-responsive tr, .tabella-responsive td { display: block; width: 100%; } .tabella-righe-preventivo tr, .tabella-responsive tr { border: 1px solid #e2edf5; border-radius: 6px; margin-bottom: 6px; padding: 4px; } .tabella-righe-preventivo td, .tabella-responsive td { display: flex; align-items: flex-start; justify-content: flex-start; flex-direction: column; gap: 1px; padding: 3px 4px; border: none; font-size: 11.5px; width: 100%; max-width: 100%; } .tabella-righe-preventivo td::before, .tabella-responsive td::before { content: attr(data-label); font-size: 9px; color: #7c8b98; } .tabella-righe-preventivo td input, .tabella-righe-preventivo td select { width: 100% !important; max-width: 100% !important; flex: none; } .form-header-preventivo select, .form-header-preventivo input { max-width: none !important; width: 100% !important; } input, select, textarea { font-size: 16px !important; } main { padding: 10px !important; } .email-utente { display: none; } header { padding: 10px 12px !important; } h2 { font-size: 17px !important; margin-bottom: 8px !important; } h3 { font-size: 13px !important; } }"}</style>
+    <style>{'\n.matrice-shell{display:flex;min-height:100vh;background:#f6f8fc;color:#17233b;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}.matrice-shell button{font-family:inherit}.matrice-sidebar{width:244px;flex:0 0 244px;background:#fff;border-right:1px solid #e6eaf1;min-height:100vh;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;z-index:50}.matrice-brand{height:72px;display:flex;align-items:center;gap:9px;padding:0 18px;border-bottom:1px solid #eef0f5}.matrice-brand-icon{font-size:25px;color:#4a78d7}.matrice-brand strong{font-size:16px;letter-spacing:.035em;font-weight:800}.matrice-brand span{font-size:11px;color:#8a95a8;margin-left:5px;font-weight:700}.matrice-close-menu{display:none}.matrice-nav-scroll{padding:14px 10px;overflow-y:auto;flex:1}.matrice-nav-main,.matrice-nav-group-title,.matrice-subnav button{width:100%;display:flex;align-items:center;text-align:left;border:0;background:transparent;color:#34415a;cursor:pointer;border-radius:8px}.matrice-nav-main{padding:12px 12px;gap:11px;font-size:13px;font-weight:650}.matrice-nav-main.active,.matrice-subnav button.active{background:#e8f1ff;color:#2769df}.matrice-nav-group{margin-top:13px}.matrice-nav-group-title{padding:9px 11px;gap:10px;font-size:12.5px;font-weight:700}.matrice-nav-group-title span{flex:1}.matrice-subnav{margin:3px 0 0 24px;padding-left:8px;border-left:1px solid #e6ebf4}.matrice-subnav button{padding:8px 9px;gap:9px;font-size:12px;line-height:1.3;margin-bottom:2px}.matrice-nav-main:hover,.matrice-nav-group-title:hover,.matrice-subnav button:hover{background:#f2f6fd}.matrice-sidebar-foot{padding:14px 17px;border-top:1px solid #eef0f5;color:#586780;font-size:11px}.matrice-sidebar-foot small{display:block;margin:4px 0 0 16px;color:#9aa4b5}.matrice-status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#29b98d;margin-right:7px}.matrice-workspace{min-width:0;flex:1}.matrice-topbar{height:72px;background:#fff;border-bottom:1px solid #e6eaf1;display:flex;align-items:center;padding:0 28px;gap:12px;position:sticky;top:0;z-index:30}.matrice-topbar-label{font-size:13px;font-weight:650;color:#637089}.matrice-menu-button,.matrice-topbar-actions button{border:0;background:transparent;color:#41516e;cursor:pointer;padding:7px;display:flex;align-items:center}.matrice-menu-button{display:none}.matrice-topbar-actions{display:flex;align-items:center;gap:13px;margin-left:auto}.matrice-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#1b3868;color:#fff;font-size:11px;font-weight:750}.matrice-main{padding:26px 30px;max-width:1600px;margin:auto}.matrice-welcome{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:23px}.matrice-welcome h1{font-size:24px;letter-spacing:-.6px;margin:0 0 5px;font-weight:760;color:#15243c}.matrice-welcome p{font-size:12px;color:#8390a3;margin:0}.matrice-add{display:flex;align-items:center;gap:6px;padding:9px 12px;border:1px solid #dce6f7;border-radius:9px;background:#fff;color:#2b70e6;font-size:12px;font-weight:650;cursor:pointer}.matrice-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:16px}.matrice-metric{min-width:0;text-align:left;border:1px solid #e6eaf1;border-radius:13px;background:#fff;padding:17px;display:flex;gap:12px;align-items:flex-start;cursor:pointer;box-shadow:0 2px 8px rgba(20,38,70,.025)}.matrice-metric-icon{display:flex;align-items:center;justify-content:center;flex:0 0 37px;height:37px;background:#eaf2ff;color:#3e7bef;border-radius:9px}.matrice-metric span:last-child{min-width:0}.matrice-metric small,.matrice-metric em{display:block;font-size:11px;color:#8490a2;font-style:normal}.matrice-metric strong{display:block;color:#15243c;font-size:21px;line-height:1.6;white-space:nowrap;letter-spacing:-.5px}.matrice-metric em{font-size:10px}.matrice-two{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}.matrice-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:13px}.matrice-section-head h3{font-size:14px;font-weight:750;margin:0;color:#17233b}.matrice-section-head button{border:0;background:transparent;display:flex;align-items:center;gap:3px;font-size:11px;color:#3677e9;cursor:pointer}.matrice-total{font-size:11px;color:#8490a2;margin-bottom:16px}.matrice-total strong{color:#25334d;margin-left:5px}.matrice-pipeline-row{display:flex;align-items:center;gap:8px;margin-bottom:14px;font-size:11px}.matrice-dot{width:9px;height:9px;flex:0 0 9px;border-radius:50%}.matrice-pipeline-name{width:105px;flex:0 0 105px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#44536c}.matrice-track{height:7px;border-radius:9px;background:#edf2fa;flex:1;min-width:15px;overflow:hidden}.matrice-track div{height:100%;border-radius:9px}.matrice-pipeline-row strong{width:75px;text-align:right;font-size:11px;white-space:nowrap}.matrice-percent{width:30px;text-align:right;color:#7e8ba0;font-size:10px}.matrice-chart-sub{font-size:11px;color:#8c98a9;margin:-6px 0 8px}.matrice-empty{color:#8b97a8;font-size:12px;padding:17px 0}.matrice-event{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f0f2f7;font-size:12px}.matrice-event-time{color:#65748c;min-width:42px}.matrice-event-mark{width:6px;height:20px;border-radius:4px;background:#4d8cf5}.matrice-event-name{font-weight:600;color:#34415a}.matrice-opportunity{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #f0f2f7}.matrice-opportunity-mark{height:8px;width:8px;border-radius:50%;flex-shrink:0}.matrice-opportunity div{min-width:0;flex:1}.matrice-opportunity strong,.matrice-opportunity small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.matrice-opportunity strong{font-size:12px;color:#33415a}.matrice-opportunity small{font-size:10px;color:#8995a8;margin-top:3px}.matrice-opportunity b{font-size:12px;white-space:nowrap}.matrice-backdrop{display:none}@media(max-width:1150px){.matrice-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.matrice-two{grid-template-columns:1fr}}@media(max-width:768px){.matrice-sidebar{position:fixed;left:0;top:0;transform:translateX(-100%);transition:transform .2s;box-shadow:4px 0 25px rgba(25,43,77,.12)}.matrice-sidebar.is-open{transform:translateX(0)}.matrice-close-menu{display:block;margin-left:auto;border:0;background:transparent;font-size:25px;color:#8793a7}.matrice-backdrop{display:block;position:fixed;inset:0;background:rgba(20,32,56,.32);z-index:45}.matrice-menu-button{display:flex}.matrice-topbar{height:60px;padding:0 14px}.matrice-main{padding:17px 13px!important}.matrice-welcome h1{font-size:20px}.matrice-welcome p{font-size:11px}.matrice-add{font-size:0}.matrice-add svg{width:17px}.matrice-metrics{gap:9px}.matrice-metric{padding:11px;gap:8px}.matrice-metric-icon{width:30px;height:30px;flex-basis:30px}.matrice-metric strong{font-size:16px}.matrice-metric small{font-size:10px}.matrice-metric em{font-size:9px}.matrice-pipeline-name{width:75px;flex-basis:75px}.matrice-pipeline-row strong{width:63px;font-size:10px}}\n' + "* { box-sizing: border-box; } body { transition: background 0.2s ease; } button { transition: all 0.18s ease; } button:hover:not(:disabled) { filter: brightness(0.96); transform: translateY(-1px); } button:active:not(:disabled) { transform: translateY(0) scale(0.98); } input, select, textarea { transition: border-color 0.18s ease, box-shadow 0.18s ease; } input:focus, select:focus, textarea:focus { outline: none; border-color: #0b7bc4 !important; box-shadow: 0 0 0 3px rgba(11,123,196,0.12); } .dashboard-card { transition: transform 0.2s ease, box-shadow 0.2s ease; } .dashboard-card:hover { transform: translateY(-4px); box-shadow: 0 10px 28px rgba(11,123,196,0.14) !important; } .nav-item { transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease; } .nav-item:hover { background: #f2f8fc !important; } table tbody tr { transition: background 0.15s ease; } table tbody tr:hover { background: #f7fbfe; } @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } } .page-content { animation: fadeSlideIn 0.25s ease; } .app-sidebar-backdrop { display: none; } @media (max-width: 768px) { main * { min-width: 0; } body { overflow-x: hidden; } .app-sidebar { position: fixed !important; top: 61px; left: 0; height: calc(100vh - 61px) !important; z-index: 40; box-shadow: 4px 0 16px rgba(0,0,0,0.15); } .app-sidebar-backdrop { display: block !important; position: fixed; top: 61px; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.35); z-index: 35; } table { display: block; overflow-x: auto; white-space: nowrap; } .tabella-righe-preventivo, .tabella-responsive { white-space: normal; } .tabella-righe-preventivo thead, .tabella-responsive thead { display: none; } .tabella-righe-preventivo, .tabella-righe-preventivo tbody, .tabella-righe-preventivo tr, .tabella-righe-preventivo td, .tabella-responsive, .tabella-responsive tbody, .tabella-responsive tr, .tabella-responsive td { display: block; width: 100%; } .tabella-righe-preventivo tr, .tabella-responsive tr { border: 1px solid #e2edf5; border-radius: 6px; margin-bottom: 6px; padding: 4px; } .tabella-righe-preventivo td, .tabella-responsive td { display: flex; align-items: flex-start; justify-content: flex-start; flex-direction: column; gap: 1px; padding: 3px 4px; border: none; font-size: 11.5px; width: 100%; max-width: 100%; } .tabella-righe-preventivo td::before, .tabella-responsive td::before { content: attr(data-label); font-size: 9px; color: #7c8b98; } .tabella-righe-preventivo td input, .tabella-righe-preventivo td select { width: 100% !important; max-width: 100% !important; flex: none; } .form-header-preventivo select, .form-header-preventivo input { max-width: none !important; width: 100% !important; } input, select, textarea { font-size: 16px !important; } main:not(.matrice-main) { padding: 10px !important; } .email-utente { display: none; } header { padding: 10px 12px !important; } h2 { font-size: 17px !important; margin-bottom: 8px !important; } h3 { font-size: 13px !important; } }"}</style>
   );
 }
 
