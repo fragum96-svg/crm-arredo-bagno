@@ -2503,8 +2503,55 @@ function AppShell({ session, onLogout }) {
         {page==="portafoglio"&&<PortafoglioOrdini session={session}/>}
         {page==="gruppi"&&<GruppiAcquisto session={session} gruppoIniziale={gruppoAprireId} onGruppoAperto={()=>setGruppoAprireId(null)}/>}
       </main></div>
+    <nav className="crm-mobile-bottom-nav" aria-label="Navigazione rapida">
+      {[{key:"dashboard",label:"Home",Icon:LayoutDashboard},{key:"clienti",label:"Clienti",Icon:Users},{key:"visite",label:"Agenda",Icon:CalendarDays},{key:"pipeline",label:"Pipeline",Icon:Target}].map(item=><button key={item.key} type="button" className={page===item.key?"active":""} onClick={()=>scegli(item.key)}><item.Icon size={20}/><span>{item.label}</span></button>)}
+      <button type="button" className={menuOpen?"active":""} onClick={()=>setMenuOpen(true)}><MenuIcon size={20}/><span>Menu</span></button>
+    </nav>
   </div>;
 }
+
+function StileMobileCRM() { return <style>{`
+/* Ottimizzazione iPhone e piccoli schermi, senza modificare il desktop */
+.crm-mobile-bottom-nav{display:none}
+@media(max-width:768px){
+  html,body,#root{max-width:100%;overflow-x:hidden}
+  .matrice-shell{min-height:100dvh!important;overflow-x:hidden}
+  .matrice-workspace{min-width:0!important;width:100%!important;max-width:100%!important;margin-left:0!important;padding-bottom:calc(76px + env(safe-area-inset-bottom))!important}
+  .matrice-topbar{min-height:56px!important;padding:8px 14px!important;gap:8px!important}
+  .matrice-topbar-label{font-size:14px!important;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .matrice-main,.page-content{padding:14px 12px 22px!important;max-width:100%!important;min-width:0!important;overflow-x:hidden}
+  .matrice-sidebar{position:fixed!important;top:0!important;bottom:0!important;left:0!important;z-index:1200!important;width:min(86vw,310px)!important;max-width:310px!important;overflow-y:auto!important;transform:translateX(-105%);transition:transform .2s ease!important;box-shadow:8px 0 30px #0b1a3550}
+  .matrice-sidebar.is-open{transform:translateX(0)!important}
+  .matrice-backdrop{position:fixed!important;inset:0!important;z-index:1190!important;background:#07142680!important}
+  .matrice-nav-main,.matrice-nav-group-title,.matrice-subnav button{min-height:45px!important;font-size:14px!important}
+  .crm-mobile-bottom-nav{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:1100;height:calc(65px + env(safe-area-inset-bottom));padding:5px 5px calc(5px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid #dce5f1;box-shadow:0 -5px 20px #132d5410;justify-content:space-around;align-items:stretch}
+  .crm-mobile-bottom-nav button{flex:1;min-width:0;border:0;background:transparent;color:#71819b;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:10px;font-weight:600;border-radius:10px;cursor:pointer;touch-action:manipulation}
+  .crm-mobile-bottom-nav button.active{color:#205bc0;background:#eff5ff}
+  .crm-mobile-bottom-nav button span{white-space:nowrap}
+  .matrice-welcome{display:flex!important;flex-direction:column!important;align-items:stretch!important;gap:12px!important;margin-bottom:15px!important}
+  .matrice-welcome h1{font-size:22px!important;line-height:1.2!important}
+  .matrice-metrics{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important}
+  .matrice-metric{min-width:0!important;padding:12px!important}
+  .matrice-metric strong{font-size:19px!important}
+  .matrice-two{grid-template-columns:1fr!important;gap:12px!important}
+  .matrice-dashboard{min-width:0!important}
+  .matrice-dashboard>*,.matrice-main>*,.matrice-main>div{max-width:100%;min-width:0}
+  .crm-pipeline-board{overflow-x:auto!important;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;padding-bottom:18px!important}
+  .crm-pipeline-column{scroll-snap-align:start}
+  .crm-pipeline-card button,.crm-pipeline-add{min-height:36px!important}
+  button,select,input,textarea{touch-action:manipulation}
+  button{min-height:38px}
+  input:not([type=checkbox]):not([type=radio]),textarea,select{font-size:16px!important;max-width:100%;min-height:42px}
+  textarea{min-height:90px}
+  .matrice-main table{font-size:12px}
+  .matrice-main :is(table,.table-container,.table-responsive){max-width:100%}
+  .matrice-main :is(.table-container,.table-responsive){overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .matrice-main :is(.modal,.modal-content,[role=dialog]){max-width:calc(100vw - 20px)!important;max-height:calc(100dvh - 100px)!important;overflow-y:auto}
+  .matrice-main :is(.grid,.form-grid){min-width:0}
+  .matrice-main :is(.grid,.form-grid)>*{min-width:0}
+}
+@media(max-width:380px){.matrice-metrics{grid-template-columns:1fr!important}.crm-mobile-bottom-nav button{font-size:9px}}
+`}</style>; }
 
 function StileGlobaleResponsive() {
   return (
@@ -2561,6 +2608,7 @@ export default function App() {
           textarea { font-size: 16px !important; }
         }
       `}</style>
+      <StileMobileCRM />
       <StileGlobaleResponsive />
       {!session ? (
         <LoginScreen onLogin={(data) => setSession(data)} />
