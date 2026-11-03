@@ -1053,165 +1053,91 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo }) {
 }
 
 function CalendarioVisite({ session }) {
+  const oggi = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
+  const nuovo = (data = oggi()) => ({ titolo: "", tipo: "visita", data, oraInizio: "09:00", oraFine: "10:00", stato: "programmato", cliente_id: "", sede_id: "", azienda_id: "", luogo: "", descrizione: "", note: "" });
   const [clienti, setClienti] = useState([]);
-  const [visite, setVisite] = useState([]);
+  const [aziende, setAziende] = useState([]);
+  const [sedi, setSedi] = useState([]);
+  const [appuntamenti, setAppuntamenti] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [viewMode, setViewMode] = useState("mese");
+  const [viewMode, setViewMode] = useState("settimana");
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [giornoSelezionato, setGiornoSelezionato] = useState(toISODate(new Date()));
   const [mostraForm, setMostraForm] = useState(false);
-  const [clienteSelezionato, setClienteSelezionato] = useState("");
-  const emptyForm = { data_visita: toISODate(new Date()), argomenti_trattati: "", cataloghi_lasciati: "", note: "" };
-  const [form, setForm] = useState(emptyForm);
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState(nuovo());
   const [saving, setSaving] = useState(false);
   const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token });
-
+  const isoLocale = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
   const load = async () => {
     setLoading(true); setError("");
     try {
-      const results = await Promise.all([
-        fetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale&order=ragione_sociale.asc", { headers: headers() }),
-        fetch(SUPABASE_URL + "/rest/v1/visite?select=*&order=data_visita.asc", { headers: headers() }),
-      ]);
-      const dataClienti = await results[0].json();
-      const dataVisite = await results[1].json();
-      if (!results[0].ok) throw new Error(dataClienti.message || "Errore nel caricamento clienti");
-      if (!results[1].ok) throw new Error(dataVisite.message || "Errore nel caricamento visite");
-      setClienti(dataClienti); setVisite(dataVisite);
-    } catch (err) { setError(err.message); } finally { setLoading(false); }
+      const urls = ["clienti?select=id,ragione_sociale&order=ragione_sociale.asc", "aziende_mandanti?select=id,nome,colore&order=nome.asc", "sedi_cliente?select=id,cliente_id,nome_sede,indirizzo", "appuntamenti?select=*&order=inizio.asc"];
+      const results = await Promise.all(urls.map(u => fetch(SUPABASE_URL + "/rest/v1/" + u, { headers: headers() })));
+      const values = await Promise.all(results.map(r => r.json()));
+      results.forEach((r,i) => { if (!r.ok) throw new Error(values[i].message || "Errore nel caricamento dell'agenda"); });
+      setClienti(values[0]); setAziende(values[1]); setSedi(values[2]); setAppuntamenti(values[3]);
+    } catch (e) { setError(e.message); } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
-
+  const apriNuovo = (data = isoLocale(currentDate)) => { setEditingId(null); setForm(nuovo(data)); setMostraForm(true); setError(""); };
+  const apriModifica = (e) => {
+    const inizio = new Date(e.inizio), fine = new Date(e.fine);
+    setEditingId(e.id);
+    setForm({ titolo: e.titolo || "", tipo: e.tipo || "visita", data: isoLocale(inizio), oraInizio: `${String(inizio.getHours()).padStart(2,"0")}:${String(inizio.getMinutes()).padStart(2,"0")}`, oraFine: `${String(fine.getHours()).padStart(2,"0")}:${String(fine.getMinutes()).padStart(2,"0")}`, stato: e.stato || "programmato", cliente_id: e.cliente_id || "", sede_id: e.sede_id || "", azienda_id: e.azienda_id || "", luogo: e.luogo || "", descrizione: e.descrizione || "", note: e.note || "" });
+    setMostraForm(true); setError("");
+  };
   const save = async () => {
-    if (!clienteSelezionato) { setError("Seleziona un cliente."); return; }
-    if (!form.data_visita) { setError("La data della visita è obbligatoria."); return; }
+    if (!form.titolo.trim()) { setError("Inserisci il titolo dell'appuntamento."); return; }
+    const inizio = new Date(`${form.data}T${form.oraInizio}:00`), fine = new Date(`${form.data}T${form.oraFine}:00`);
+    if (!Number.isFinite(inizio.getTime()) || !Number.isFinite(fine.getTime()) || fine <= inizio) { setError("Controlla data e orari: la fine deve essere successiva all'inizio."); return; }
     setSaving(true); setError("");
     try {
-      const body = { cliente_id: clienteSelezionato, data_visita: form.data_visita, argomenti_trattati: form.argomenti_trattati || null, cataloghi_lasciati: form.cataloghi_lasciati || null, note: form.note || null };
-      const res = await fetch(SUPABASE_URL + "/rest/v1/visite", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Errore nel salvataggio");
-      setForm(emptyForm); setMostraForm(false); load();
-    } catch (err) { setError(err.message); } finally { setSaving(false); }
+      const body = { titolo: form.titolo.trim(), tipo: form.tipo, inizio: inizio.toISOString(), fine: fine.toISOString(), stato: form.stato, cliente_id: form.cliente_id || null, sede_id: form.sede_id || null, azienda_id: form.azienda_id || null, luogo: form.luogo || null, descrizione: form.descrizione || null, note: form.note || null };
+      const endpoint = SUPABASE_URL + "/rest/v1/appuntamenti" + (editingId ? "?id=eq." + editingId : "");
+      const res = await fetch(endpoint, { method: editingId ? "PATCH" : "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
+      if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.message || "Errore nel salvataggio"); }
+      setMostraForm(false); setEditingId(null); await load();
+    } catch (e) { setError(e.message); } finally { setSaving(false); }
   };
   const remove = async (id) => {
-    if (!window.confirm("Eliminare questa visita?")) return;
-    try { const res = await fetch(SUPABASE_URL + "/rest/v1/visite?id=eq." + id, { method: "DELETE", headers: headers() }); if (!res.ok) throw new Error("Errore nell'eliminazione"); load(); } catch (err) { setError(err.message); }
+    if (!window.confirm("Eliminare questo appuntamento?")) return;
+    try { const res = await fetch(SUPABASE_URL + "/rest/v1/appuntamenti?id=eq." + id, { method: "DELETE", headers: headers() }); if (!res.ok) throw new Error("Eliminazione non riuscita"); setMostraForm(false); await load(); } catch (e) { setError(e.message); }
   };
-
-  const inputStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
-  const nomeCliente = (id) => { const c = clienti.find((x) => x.id === id); return c ? c.ragione_sociale : "—"; };
-  const visitePerGiorno = (isoDate) => visite.filter((v) => v.data_visita === isoDate);
-
-  const cambiaPeriodo = (direzione) => {
-    const d = new Date(currentDate);
-    if (viewMode === "mese") d.setMonth(d.getMonth() + direzione);
-    else if (viewMode === "settimana") d.setDate(d.getDate() + direzione * 7);
-    else d.setDate(d.getDate() + direzione);
-    setCurrentDate(d);
-    if (viewMode === "giorno") setGiornoSelezionato(toISODate(d));
-  };
-  const vaiAOggi = () => { const oggi = new Date(); setCurrentDate(oggi); setGiornoSelezionato(toISODate(oggi)); };
-  const etichettaPeriodo = () => {
-    if (viewMode === "mese") return MESI[currentDate.getMonth()] + " " + currentDate.getFullYear();
-    if (viewMode === "settimana") { const days = getWeekDays(currentDate); return days[0].getDate() + " " + MESI[days[0].getMonth()].slice(0, 3) + " - " + days[6].getDate() + " " + MESI[days[6].getMonth()].slice(0, 3) + " " + days[6].getFullYear(); }
-    return currentDate.getDate() + " " + MESI[currentDate.getMonth()] + " " + currentDate.getFullYear();
-  };
-  const oggiISO = toISODate(new Date());
-
-  return (
-    <div style={{ fontFamily: "Arial, sans-serif" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
-        <h2 style={{ color: COLORS.text, fontSize: 20 }}>Calendario visite</h2>
-        <button onClick={() => setMostraForm((v) => !v)} style={{ padding: "9px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>{mostraForm ? "Chiudi" : "+ Nuova visita"}</button>
-      </div>
-      {mostraForm && (
-        <div style={{ background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, marginBottom: 20, maxWidth: 420 }}>
-          <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>Registra / pianifica visita</h3>
-          <select value={clienteSelezionato} onChange={(e) => setClienteSelezionato(e.target.value)} style={inputStyle}>
-            <option value="">-- seleziona cliente --</option>
-            {clienti.map((c) => <option key={c.id} value={c.id}>{c.ragione_sociale}</option>)}
-          </select>
-          <input type="date" value={form.data_visita} onChange={(e) => setForm({ ...form, data_visita: e.target.value })} style={inputStyle} />
-          <textarea placeholder="Argomenti trattati" value={form.argomenti_trattati} onChange={(e) => setForm({ ...form, argomenti_trattati: e.target.value })} style={{ ...inputStyle, minHeight: 50 }} />
-          <textarea placeholder="Cataloghi / listini lasciati" value={form.cataloghi_lasciati} onChange={(e) => setForm({ ...form, cataloghi_lasciati: e.target.value })} style={{ ...inputStyle, minHeight: 40 }} />
-          <textarea placeholder="Note" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} style={{ ...inputStyle, minHeight: 40 }} />
-          {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 10 }}>{error}</div>}
-          <button onClick={save} disabled={saving} style={{ padding: "9px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>{saving ? "Salvataggio..." : "Salva"}</button>
-        </div>
-      )}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button onClick={() => cambiaPeriodo(-1)} style={{ ...inputStyle, width: 36, cursor: "pointer", textAlign: "center" }}>‹</button>
-          <span style={{ fontWeight: 700, color: COLORS.text, fontSize: 15, minWidth: 160, textAlign: "center" }}>{etichettaPeriodo()}</span>
-          <button onClick={() => cambiaPeriodo(1)} style={{ ...inputStyle, width: 36, cursor: "pointer", textAlign: "center" }}>›</button>
-          <button onClick={vaiAOggi} style={{ ...inputStyle, width: "auto", padding: "6px 12px", cursor: "pointer", color: COLORS.primary }}>Oggi</button>
-        </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          {["mese", "settimana", "giorno"].map((m) => (
-            <button key={m} onClick={() => setViewMode(m)} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid " + COLORS.border, background: viewMode === m ? COLORS.primary : "#fff", color: viewMode === m ? "#fff" : COLORS.text, fontSize: 12, cursor: "pointer", textTransform: "capitalize" }}>{m}</button>
-          ))}
-        </div>
-      </div>
-      {loading ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p> : (
-        <>
-          {viewMode === "mese" && (
-            <div style={{ background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, overflow: "hidden" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
-                {GIORNI_SETTIMANA.map((g) => <div key={g} style={{ padding: "8px 4px", fontSize: 11, color: COLORS.muted, textAlign: "center", borderBottom: "1px solid " + COLORS.border }}>{g}</div>)}
-                {getMonthGrid(currentDate).map((d, i) => {
-                  const iso = toISODate(d);
-                  const eventi = visitePerGiorno(iso);
-                  const fuoriMese = d.getMonth() !== currentDate.getMonth();
-                  const isOggi = iso === oggiISO;
-                  return (
-                    <div key={i} onClick={() => { setGiornoSelezionato(iso); setViewMode("giorno"); setCurrentDate(d); }} style={{ minHeight: 78, padding: 6, borderRight: "1px solid " + COLORS.border, borderBottom: "1px solid " + COLORS.border, opacity: fuoriMese ? 0.4 : 1, cursor: "pointer", background: isOggi ? "#eaf5fc" : "transparent" }}>
-                      <div style={{ fontSize: 11, color: COLORS.text, fontWeight: isOggi ? 700 : 400, marginBottom: 4 }}>{d.getDate()}</div>
-                      {eventi.slice(0, 2).map((v) => (<div key={v.id} style={{ fontSize: 10, background: "#0b7bc418", color: COLORS.primary, borderRadius: 4, padding: "2px 4px", marginBottom: 2, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{nomeCliente(v.cliente_id)}</div>))}
-                      {eventi.length > 2 && <div style={{ fontSize: 10, color: COLORS.muted }}>+{eventi.length - 2} altre</div>}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-          {viewMode === "settimana" && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 8 }}>
-              {getWeekDays(currentDate).map((d) => {
-                const iso = toISODate(d);
-                const eventi = visitePerGiorno(iso);
-                const isOggi = iso === oggiISO;
-                return (
-                  <div key={iso} style={{ background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 10, padding: 8, minHeight: 140, boxShadow: isOggi ? "0 0 0 2px #0b7bc4 inset" : "none" }}>
-                    <div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 6 }}>{GIORNI_SETTIMANA[(d.getDay() + 6) % 7]} {d.getDate()}</div>
-                    {eventi.map((v) => <div key={v.id} style={{ fontSize: 11, background: "#0b7bc418", color: COLORS.primary, borderRadius: 6, padding: "4px 6px", marginBottom: 4 }}>{nomeCliente(v.cliente_id)}</div>)}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {viewMode === "giorno" && (
-            <div>
-              {visitePerGiorno(giornoSelezionato).length === 0 ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessuna visita in questa data.</p> : (
-                visitePerGiorno(giornoSelezionato).map((v) => (
-                  <div key={v.id} style={{ background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 12, padding: 14, marginBottom: 10, boxShadow: "0 2px 8px rgba(20,40,60,0.04)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <div style={{ fontWeight: 700, color: COLORS.primary, fontSize: 13 }}>{nomeCliente(v.cliente_id)}</div>
-                      <button onClick={() => remove(v.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 12 }}>Elimina</button>
-                    </div>
-                    {v.argomenti_trattati && <div style={{ fontSize: 12, marginTop: 8 }}><strong>Argomenti:</strong> {v.argomenti_trattati}</div>}
-                    {v.cataloghi_lasciati && <div style={{ fontSize: 12, marginTop: 4 }}><strong>Cataloghi lasciati:</strong> {v.cataloghi_lasciati}</div>}
-                    {v.note && <div style={{ fontSize: 12, marginTop: 4 }}><strong>Note:</strong> {v.note}</div>}
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
+  const cambiaPeriodo = (n) => { const d = new Date(currentDate); if (viewMode === "mese") d.setMonth(d.getMonth()+n); else d.setDate(d.getDate() + n*(viewMode === "settimana" ? 7 : 1)); setCurrentDate(d); };
+  const eventiGiorno = (d) => appuntamenti.filter(e => isoLocale(new Date(e.inizio)) === isoLocale(d)).sort((a,b) => new Date(a.inizio)-new Date(b.inizio));
+  const nomeCliente = id => clienti.find(c => c.id === id)?.ragione_sociale || "";
+  const coloreEvento = e => aziende.find(a => a.id === e.azienda_id)?.colore || "#0b7bc4";
+  const ora = value => new Date(value).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+  const inputStyle = { width: "100%", padding: "10px 12px", border: "1px solid " + COLORS.border, borderRadius: 9, fontSize: 13, background: "#fff", boxSizing: "border-box" };
+  const campo = (label, element) => <label style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 12, fontWeight: 600, color: COLORS.text }}>{label}{element}</label>;
+  const eventCard = e => <button key={e.id} onClick={() => apriModifica(e)} title="Apri e modifica appuntamento" style={{ display: "block", width: "100%", textAlign: "left", background: coloreEvento(e)+"16", border: "1px solid "+coloreEvento(e)+"45", borderLeft: "4px solid "+coloreEvento(e), borderRadius: 7, padding: "7px 8px", marginBottom: 5, cursor: "pointer", color: COLORS.text }}><span style={{ fontSize: 11, fontWeight: 700 }}>{ora(e.inizio)}–{ora(e.fine)}</span><div style={{ fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis" }}>{e.titolo}</div>{e.cliente_id && <div style={{ fontSize: 10, color: COLORS.muted }}>{nomeCliente(e.cliente_id)}</div>}{e.stato !== "programmato" && <div style={{ fontSize: 10, color: COLORS.muted, textTransform: "capitalize" }}>{e.stato}</div>}</button>;
+  const giorni = viewMode === "mese" ? getMonthGrid(currentDate) : viewMode === "settimana" ? getWeekDays(currentDate) : [currentDate];
+  const titoloPeriodo = viewMode === "mese" ? `${MESI[currentDate.getMonth()]} ${currentDate.getFullYear()}` : viewMode === "giorno" ? currentDate.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : `${giorni[0].toLocaleDateString("it-IT", {day:"numeric",month:"short"})} – ${giorni[6].toLocaleDateString("it-IT", {day:"numeric",month:"short",year:"numeric"})}`;
+  return <div style={{ fontFamily: "Arial, sans-serif", color: COLORS.text }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 20 }}><div><h2 style={{ fontSize: 23, margin: 0 }}>Agenda commerciale</h2><p style={{ color: COLORS.muted, fontSize: 12, marginTop: 6 }}>Visite, riunioni, telefonate e attività in un unico calendario</p></div><button onClick={() => apriNuovo()} style={{ background: COLORS.primary, color: "white", border: 0, borderRadius: 10, padding: "11px 17px", fontWeight: 700, cursor: "pointer" }}>+ Nuovo appuntamento</button></div>
+    {error && <div style={{ color: COLORS.danger, marginBottom: 12, fontSize: 13 }}>{error}</div>}
+    {mostraForm && <div style={{ background: "white", border: "1px solid " + COLORS.border, borderRadius: 14, padding: 20, marginBottom: 20, maxWidth: 760, boxShadow: "0 8px 24px rgba(0,0,0,.05)" }}><h3 style={{ marginTop: 0 }}>{editingId ? "Modifica appuntamento" : "Nuovo appuntamento"}</h3><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 12 }}>
+      {campo("Titolo *", <input style={inputStyle} value={form.titolo} onChange={e=>setForm({...form,titolo:e.target.value})} placeholder="Es. Visita showroom" />)}
+      {campo("Tipologia", <select style={inputStyle} value={form.tipo} onChange={e=>setForm({...form,tipo:e.target.value})}>{[["visita","Visita cliente"],["architetto","Appuntamento architetto"],["telefonata","Telefonata"],["riunione","Riunione"],["promemoria","Promemoria"],["attivita","Attività"],["altro","Altro"]].map(([v,t])=><option key={v} value={v}>{t}</option>)}</select>)}
+      {campo("Data", <input type="date" style={inputStyle} value={form.data} onChange={e=>setForm({...form,data:e.target.value})}/>)}
+      {campo("Ora inizio", <input type="time" style={inputStyle} value={form.oraInizio} onChange={e=>setForm({...form,oraInizio:e.target.value})}/>)}
+      {campo("Ora fine", <input type="time" style={inputStyle} value={form.oraFine} onChange={e=>setForm({...form,oraFine:e.target.value})}/>)}
+      {campo("Stato", <select style={inputStyle} value={form.stato} onChange={e=>setForm({...form,stato:e.target.value})}>{["programmato","completato","annullato","rinviato"].map(v=><option key={v} value={v}>{v}</option>)}</select>)}
+      {campo("Cliente (facoltativo)", <select style={inputStyle} value={form.cliente_id} onChange={e=>setForm({...form,cliente_id:e.target.value,sede_id:""})}><option value="">Nessun cliente</option>{clienti.map(c=><option key={c.id} value={c.id}>{c.ragione_sociale}</option>)}</select>)}
+      {campo("Sede / filiale", <select style={inputStyle} value={form.sede_id} disabled={!form.cliente_id} onChange={e=>setForm({...form,sede_id:e.target.value})}><option value="">Nessuna sede</option>{sedi.filter(s=>s.cliente_id===form.cliente_id).map(s=><option key={s.id} value={s.id}>{s.nome_sede || s.indirizzo}</option>)}</select>)}
+      {campo("Azienda mandante", <select style={inputStyle} value={form.azienda_id} onChange={e=>setForm({...form,azienda_id:e.target.value})}><option value="">Nessuna azienda</option>{aziende.map(a=><option key={a.id} value={a.id}>{a.nome}</option>)}</select>)}
+      {campo("Luogo", <input style={inputStyle} value={form.luogo} onChange={e=>setForm({...form,luogo:e.target.value})} placeholder="Indirizzo o videocall"/>)}
+      {campo("Descrizione", <textarea style={inputStyle} rows={2} value={form.descrizione} onChange={e=>setForm({...form,descrizione:e.target.value})}/>)}
+      {campo("Note", <textarea style={inputStyle} rows={2} value={form.note} onChange={e=>setForm({...form,note:e.target.value})}/>)}
+    </div><div style={{ display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap" }}><button disabled={saving} onClick={save} style={{ background: COLORS.primary, color: "white", border: 0, borderRadius: 8, padding: "10px 18px", cursor: "pointer" }}>{saving ? "Salvataggio..." : "Salva appuntamento"}</button><button onClick={()=>{setMostraForm(false);setError("");}} style={{ border: "1px solid "+COLORS.border, background: "white", borderRadius: 8, padding: "10px 16px", cursor: "pointer" }}>Annulla</button>{editingId && <button onClick={()=>remove(editingId)} style={{ marginLeft: "auto", color: COLORS.danger, border: "1px solid "+COLORS.border, background: "white", borderRadius: 8, padding: "10px 16px", cursor: "pointer" }}>Elimina</button>}</div></div>}
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 14 }}><div style={{ display: "flex", gap: 8, alignItems: "center" }}><button onClick={()=>cambiaPeriodo(-1)} style={{...inputStyle,width:36,cursor:"pointer"}}>‹</button><button onClick={()=>cambiaPeriodo(1)} style={{...inputStyle,width:36,cursor:"pointer"}}>›</button><button onClick={()=>setCurrentDate(new Date())} style={{...inputStyle,width:"auto",cursor:"pointer"}}>Oggi</button><strong style={{ marginLeft: 8, fontSize: 15, textTransform: "capitalize" }}>{titoloPeriodo}</strong></div><div style={{ display: "flex", gap: 5 }}>{["mese","settimana","giorno"].map(v=><button key={v} onClick={()=>setViewMode(v)} style={{ border:"1px solid "+COLORS.border, borderRadius:8, padding:"8px 12px", cursor:"pointer", background:viewMode===v?COLORS.primary:"white", color:viewMode===v?"white":COLORS.text, textTransform:"capitalize" }}>{v}</button>)}</div></div>
+    {loading ? <p>Caricamento appuntamenti...</p> : <div style={{ display: "grid", gridTemplateColumns: viewMode==="giorno"?"1fr":"repeat(7,minmax(0,1fr))", border:"1px solid "+COLORS.border, borderRadius:12, overflowX:"auto", background:"white" }}>
+      {viewMode!=="giorno" && GIORNI_SETTIMANA.map(g=><div key={g} style={{ textAlign:"center", padding:10, fontSize:11, color:COLORS.muted, borderBottom:"1px solid "+COLORS.border }}>{g}</div>)}
+      {giorni.map(d=>{ const eventi=eventiGiorno(d), iso=isoLocale(d), isToday=iso===oggi(); return <div key={iso} style={{ minWidth:viewMode==="giorno"?"auto":95, minHeight:viewMode==="mese"?110:260, borderRight:"1px solid "+COLORS.border, borderBottom:"1px solid "+COLORS.border, padding:7, background:isToday?"#f0f8ff":"white", opacity:viewMode==="mese"&&d.getMonth()!==currentDate.getMonth()?.6:1 }}><button onClick={()=>{setCurrentDate(new Date(d));setViewMode("giorno")}} style={{ background:"none",border:0,cursor:"pointer",fontSize:12,fontWeight:isToday?800:600,color:COLORS.text,marginBottom:8 }}>{viewMode==="giorno"?d.toLocaleDateString("it-IT",{weekday:"long",day:"numeric",month:"long"}):d.getDate()}</button>{eventi.map(eventCard)}<button onClick={()=>apriNuovo(iso)} style={{ display:"block",background:"transparent",border:"1px dashed "+COLORS.border,color:COLORS.muted,borderRadius:6,fontSize:11,padding:"5px",cursor:"pointer",width:"100%",marginTop:5 }}>+ Aggiungi</button></div>})}
+    </div>}
+    <p style={{ fontSize: 11, color: COLORS.muted, marginTop: 12 }}>Gli appuntamenti sono salvati nella nuova tabella “appuntamenti”. Lo storico della tabella “visite” resta invariato. Le notifiche automatiche non sono ancora attive.</p>
+  </div>;
 }
 
 function SelettoreVoce({ label, modalita, percentuale, valoreEuro, onChange, inputStyle, permettiTesto, isMobile }) {
