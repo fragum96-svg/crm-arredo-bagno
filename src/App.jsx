@@ -230,7 +230,7 @@ function LoginScreen({ onLogin }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const configured = !SUPABASE_URL.includes("TUO-PROGETTO");
+  const configured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && !SUPABASE_URL.includes("TUO-PROGETTO"));
 
   const submit = async () => {
     setError("");
