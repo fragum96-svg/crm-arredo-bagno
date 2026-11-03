@@ -2282,6 +2282,132 @@ function ControlloCommerciale({ session }) {
   </div>;
 }
 
+
+const FASI_PIPELINE = [
+  {id:"primo_contatto",nome:"Primo contatto",colore:"#94a3b8",prob:20},
+  {id:"trattativa",nome:"Trattativa",colore:"#3b82f6",prob:45},
+  {id:"offerta_inviata",nome:"Offerta inviata",colore:"#8b5cf6",prob:70},
+  {id:"confermata",nome:"Confermata",colore:"#16a34a",prob:100},
+  {id:"persa",nome:"Persa",colore:"#ef4444",prob:0},
+  {id:"sospesa",nome:"Sospesa",colore:"#d97706",prob:10}
+];
+function PipelineCommerciale({session}) {
+  const vuoto={titolo:"",cliente_id:"",azienda_id:"",fase:"primo_contatto",valore_stimato:"",probabilita:"20",data_chiusura_prevista:"",prossima_azione:"",data_prossima_azione:"",descrizione:"",note:""};
+  const [aziende,setAziende]=useState([]);
+  const [clienti,setClienti]=useState([]);
+  const [opportunita,setOpportunita]=useState([]);
+  const [aziendaFiltro,setAziendaFiltro]=useState("");
+  const [form,setForm]=useState(vuoto);
+  const [editing,setEditing]=useState(null);
+  const [showForm,setShowForm]=useState(false);
+  const [loading,setLoading]=useState(true);
+  const [saving,setSaving]=useState(false);
+  const [error,setError]=useState("");
+  const [search,setSearch]=useState("");
+  const headers=()=>({"Content-Type":"application/json",apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+session.access_token});
+  async function request(path,opts={}) {
+    const r=await fetch(SUPABASE_URL+"/rest/v1/"+path,{...opts,headers:{...headers(),...(opts.headers||{})}});
+    const raw=await r.text();
+    let data=null;try{data=raw?JSON.parse(raw):null;}catch{data=raw;}
+    if(!r.ok)throw new Error(data?.message||String(data)||"Errore Supabase");
+    return data;
+  }
+  async function load() {
+    setLoading(true);
+    try {
+      const [a,c,o]=await Promise.all([
+        request("aziende_mandanti?select=id,nome,colore&order=nome.asc"),
+        request("clienti?select=id,ragione_sociale,aziende_collaborate&order=ragione_sociale.asc"),
+        request("opportunita_commerciali?select=*&order=created_at.desc")
+      ]);
+      setAziende(a||[]);setClienti(c||[]);setOpportunita(o||[]);setError("");
+    }catch(e){setError(e.message);}finally{setLoading(false);}
+  }
+  useEffect(()=>{load();},[]);
+  const euro=n=>(Number(n)||0).toLocaleString("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:0});
+  const idAzienda=a=>a.id;
+  const clienteAbilitato=(c,id)=>{
+    if(!id)return true;
+    const assoc=c.aziende_collaborate;
+    if(Array.isArray(assoc))return assoc.some(v=>String(typeof v==="object"?(v.id||v.azienda_id||v.nome):v)===id || aziende.some(a=>a.id===id&&String(typeof v==="object"?(v.nome||v.nome_azienda):v)===a.nome));
+    if(typeof assoc==="string")return assoc.split(/[,;|]/).map(v=>v.trim()).some(v=>v===id||aziende.some(a=>a.id===id&&a.nome===v));
+    return false;
+  };
+  const clientiDisponibili=clienti.filter(c=>clienteAbilitato(c,form.azienda_id));
+  const visibili=opportunita.filter(o=>(!aziendaFiltro||o.azienda_id===aziendaFiltro)&&((o.titolo||"")+" "+(clienti.find(c=>c.id===o.cliente_id)?.ragione_sociale||"")).toLowerCase().includes(search.toLowerCase()));
+  const aperte=visibili.filter(o=>!["confermata","persa"].includes(o.fase));
+  const totale=aperte.reduce((n,o)=>n+Number(o.valore_stimato||0),0);
+  const ponderato=aperte.reduce((n,o)=>n+Number(o.valore_stimato||0)*Number(o.probabilita||0)/100,0);
+  const input={width:"100%",padding:"10px 12px",border:"1px solid #dce5f1",borderRadius:9,background:"#fff",color:"#17233b"};
+  const label={fontSize:12,fontWeight:650,color:"#465570",display:"grid",gap:6};
+  function apriNuova(fase="primo_contatto"){
+    setEditing(null);setForm({...vuoto,fase,probabilita:String(FASI_PIPELINE.find(f=>f.id===fase)?.prob??20),azienda_id:aziendaFiltro||""});setShowForm(true);setError("");
+  }
+  function modifica(o){
+    setEditing(o.id);setForm(Object.fromEntries(Object.keys(vuoto).map(k=>[k,o[k]??""])));setShowForm(true);window.scrollTo({top:0,behavior:"smooth"});
+  }
+  async function salva(e){
+    e.preventDefault();
+    if(!form.titolo.trim()||!form.azienda_id){setError("Inserisci titolo e mandante.");return;}
+    if(form.cliente_id&&!clientiDisponibili.some(c=>c.id===form.cliente_id)){setError("Il cliente non risulta associato alla mandante.");return;}
+    setSaving(true);setError("");
+    try {
+      const payload={...form,titolo:form.titolo.trim(),cliente_id:form.cliente_id||null,
+        valore_stimato:Number(form.valore_stimato||0),probabilita:Number(form.probabilita||0),
+        data_chiusura_prevista:form.data_chiusura_prevista||null,data_prossima_azione:form.data_prossima_azione||null,
+        updated_at:new Date().toISOString()};
+      await request("opportunita_commerciali"+(editing?"?id=eq."+editing:""),{method:editing?"PATCH":"POST",body:JSON.stringify(payload)});
+      setShowForm(false);setEditing(null);await load();
+    }catch(err){setError(err.message);}finally{setSaving(false);}
+  }
+  async function cambiaFase(o,fase){
+    if(o.fase===fase)return;
+    try{await request("opportunita_commerciali?id=eq."+o.id,{method:"PATCH",body:JSON.stringify({fase,probabilita:FASI_PIPELINE.find(f=>f.id===fase)?.prob??o.probabilita,updated_at:new Date().toISOString()})});await load();}
+    catch(e){setError(e.message);}
+  }
+  async function elimina(o){
+    if(!window.confirm("Eliminare definitivamente la trattativa «"+o.titolo+"»?"))return;
+    try{await request("opportunita_commerciali?id=eq."+o.id,{method:"DELETE"});await load();}
+    catch(e){setError(e.message);}
+  }
+  return <div className="crm-pipeline">
+    <div className="matrice-welcome"><div><h1>Pipeline commerciale</h1><p>Trattative per mandante, dal primo contatto alla conferma.</p></div><button className="crm-primary-btn" onClick={()=>apriNuova()}><Plus size={15}/> Nuova opportunità</button></div>
+    {error&&<div style={{background:"#fff0f0",color:"#a52121",padding:12,borderRadius:9,marginBottom:14}}>{error}</div>}
+    <div className="crm-pipeline-filters"><label style={label}>Azienda mandante<select style={input} value={aziendaFiltro} onChange={e=>setAziendaFiltro(e.target.value)}><option value="">Tutte le mandanti</option>{aziende.map(a=><option key={a.id} value={a.id}>{a.nome}</option>)}</select></label><label style={label}>Cerca opportunità<input style={input} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Titolo o cliente"/></label></div>
+    <div className="crm-pipeline-stats"><div><small>Opportunità aperte</small><strong>{aperte.length}</strong></div><div><small>Valore trattative aperte</small><strong>{euro(totale)}</strong></div><div><small>Valore ponderato</small><strong>{euro(ponderato)}</strong></div></div>
+    {showForm&&<form className="crm-pipeline-form" onSubmit={salva}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><h3>{editing?"Modifica opportunità":"Nuova opportunità"}</h3><button type="button" className="crm-secondary-btn" onClick={()=>setShowForm(false)}>Chiudi</button></div>
+      <div className="crm-pipeline-fields">
+        <label style={label}>Titolo *<input required style={input} value={form.titolo} onChange={e=>setForm({...form,titolo:e.target.value})} placeholder="Es. Fornitura rubinetteria villa"/></label>
+        <label style={label}>Mandante *<select required style={input} value={form.azienda_id} onChange={e=>setForm({...form,azienda_id:e.target.value,cliente_id:""})}><option value="">Seleziona mandante</option>{aziende.map(a=><option key={a.id} value={a.id}>{a.nome}</option>)}</select></label>
+        <label style={label}>Cliente associato<select style={input} value={form.cliente_id} onChange={e=>setForm({...form,cliente_id:e.target.value})}><option value="">Nessun cliente</option>{clientiDisponibili.map(c=><option key={c.id} value={c.id}>{c.ragione_sociale}</option>)}</select></label>
+        <label style={label}>Fase<select style={input} value={form.fase} onChange={e=>{const fase=e.target.value;setForm({...form,fase,probabilita:String(FASI_PIPELINE.find(f=>f.id===fase)?.prob??20)});}}>{FASI_PIPELINE.map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}</select></label>
+        <label style={label}>Valore stimato netto (€)<input type="number" min="0" step="0.01" style={input} value={form.valore_stimato} onChange={e=>setForm({...form,valore_stimato:e.target.value})}/></label>
+        <label style={label}>Probabilità (%)<input type="number" min="0" max="100" style={input} value={form.probabilita} onChange={e=>setForm({...form,probabilita:e.target.value})}/></label>
+        <label style={label}>Chiusura prevista<input type="date" style={input} value={form.data_chiusura_prevista} onChange={e=>setForm({...form,data_chiusura_prevista:e.target.value})}/></label>
+        <label style={label}>Data prossima azione<input type="date" style={input} value={form.data_prossima_azione} onChange={e=>setForm({...form,data_prossima_azione:e.target.value})}/></label>
+        <label style={label}>Prossima azione<input style={input} value={form.prossima_azione} onChange={e=>setForm({...form,prossima_azione:e.target.value})} placeholder="Es. Richiamare showroom"/></label>
+        <label style={label}>Descrizione<input style={input} value={form.descrizione} onChange={e=>setForm({...form,descrizione:e.target.value})}/></label>
+        <label style={{...label,gridColumn:"1 / -1"}}>Note<textarea rows={3} style={input} value={form.note} onChange={e=>setForm({...form,note:e.target.value})}/></label>
+      </div><button className="crm-primary-btn" disabled={saving} type="submit">{saving?"Salvataggio...":"Salva opportunità"}</button></form>}
+    {loading?<p className="matrice-empty">Caricamento pipeline...</p>:aziende.length===0?<p className="matrice-empty">Crea prima un'azienda mandante nella sezione Mandanti.</p>:
+      <div className="crm-pipeline-board">{FASI_PIPELINE.map(f=><section className="crm-pipeline-column" key={f.id}>
+        <div className="crm-pipeline-column-head" style={{borderTop:"4px solid "+f.colore}}><strong>{f.nome}</strong><span>{visibili.filter(o=>o.fase===f.id).length}</span><small>{euro(visibili.filter(o=>o.fase===f.id).reduce((n,o)=>n+Number(o.valore_stimato||0),0))}</small></div>
+        {visibili.filter(o=>o.fase===f.id).map(o=><article className="crm-pipeline-card" key={o.id}>
+          <strong>{o.titolo}</strong><small>{aziende.find(a=>idAzienda(a)===o.azienda_id)?.nome||"Mandante"}</small>
+          <small>{clienti.find(c=>c.id===o.cliente_id)?.ragione_sociale||"Nessun cliente collegato"}</small>
+          <b>{euro(o.valore_stimato)}</b>
+          {o.data_prossima_azione&&<small>Prossima azione: {o.data_prossima_azione}</small>}
+          {o.prossima_azione&&<small>{o.prossima_azione}</small>}
+          <label style={{...label,fontSize:10}}>Sposta in<select style={{...input,padding:"6px 8px",fontSize:11}} value={o.fase} onChange={e=>cambiaFase(o,e.target.value)}>{FASI_PIPELINE.map(x=><option key={x.id} value={x.id}>{x.nome}</option>)}</select></label>
+          <div className="crm-pipeline-card-actions"><button onClick={()=>modifica(o)}>Modifica</button><button onClick={()=>elimina(o)}>Elimina</button></div>
+        </article>)}
+        <button className="crm-pipeline-add" onClick={()=>apriNuova(f.id)}><Plus size={13}/> Aggiungi</button>
+      </section>)}</div>}
+    <p style={{fontSize:11,color:"#8290a5",marginTop:15}}>La pipeline rappresenta opportunità commerciali: non aggiorna automaticamente fatturato o portafoglio ordini.</p>
+    <style>{`.crm-pipeline-filters{display:flex;gap:15px;flex-wrap:wrap;margin-bottom:15px}.crm-pipeline-filters label{min-width:220px;flex:1}.crm-pipeline-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}.crm-pipeline-stats>div{background:#fff;border:1px solid #dce5f1;border-radius:12px;padding:16px}.crm-pipeline-stats small{display:block;color:#71819b;font-size:11px}.crm-pipeline-stats strong{font-size:21px;color:#17233b}.crm-pipeline-form{background:#fff;border:1px solid #dce5f1;border-radius:13px;padding:20px;margin-bottom:20px}.crm-pipeline-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;margin:15px 0}.crm-pipeline-board{display:grid;grid-template-columns:repeat(6,minmax(205px,1fr));gap:12px;overflow-x:auto;padding-bottom:16px}.crm-pipeline-column{min-width:205px;background:#e9eef7;border-radius:12px;padding:8px;align-self:start}.crm-pipeline-column-head{background:#fff;border-radius:9px;padding:12px;display:grid;gap:4px;margin-bottom:10px}.crm-pipeline-column-head strong{font-size:12px}.crm-pipeline-column-head span{font-size:11px;color:#71819b}.crm-pipeline-column-head small{font-size:12px;font-weight:700}.crm-pipeline-card{background:#fff;border:1px solid #dce5f1;border-radius:10px;padding:12px;margin-bottom:9px;display:grid;gap:7px;box-shadow:0 3px 10px #17233b0b}.crm-pipeline-card>strong{font-size:12px}.crm-pipeline-card>small{font-size:10px;color:#71819b}.crm-pipeline-card>b{font-size:15px}.crm-pipeline-card-actions{display:flex;gap:10px}.crm-pipeline-card-actions button,.crm-pipeline-add{border:0;background:transparent;color:#2369d5;cursor:pointer;font-size:11px}.crm-pipeline-add{display:flex;gap:5px;align-items:center;padding:9px}.crm-pipeline-card-actions button:last-child{color:#ba3a3a}@media(max-width:700px){.crm-pipeline-stats{grid-template-columns:1fr}.crm-pipeline-fields{grid-template-columns:1fr}.crm-pipeline-board{grid-template-columns:repeat(6,215px)}}`}</style>
+  </div>;
+}
+
 function AppShell({ session, onLogout }) {
   const [menuOpen, setMenuOpen] = useState(typeof window === "undefined" ? true : window.innerWidth > 768);
   const [page, setPage] = useState("dashboard");
@@ -2295,7 +2421,7 @@ function AppShell({ session, onLogout }) {
   const sezioni = [
     {id:"clienti",nome:"Clienti",icon:Users,items:[{key:"clienti",label:"Anagrafica",icon:Users},{key:"gruppi",label:"Gruppi d'acquisto",icon:Users2},{key:"mappa",label:"Mappa clienti",icon:MapIcon}]},
     {id:"mandanti",nome:"Mandanti",icon:Building2,items:[{key:"aziende",label:"Aziende mandanti",icon:Building2}]},
-    {id:"opportunita",nome:"Opportunità",icon:Target,items:[{key:"preventivi",label:"Preventivi e offerte",icon:FileText},{key:"portafoglio",label:"Portafoglio ordini",icon:Briefcase},{key:"ordini",label:"Registro ordini",icon:ClipboardList}]},
+    {id:"opportunita",nome:"Opportunità",icon:Target,items:[{key:"pipeline",label:"Pipeline commerciale",icon:Target},{key:"preventivi",label:"Preventivi e offerte",icon:FileText},{key:"portafoglio",label:"Portafoglio ordini",icon:Briefcase},{key:"ordini",label:"Registro ordini",icon:ClipboardList}]},
     {id:"agenda",nome:"Agenda",icon:CalendarDays,items:[{key:"visite",label:"Calendario e appuntamenti",icon:CalendarDays},{key:"storico_visite",label:"Storico visite",icon:ClipboardList}]},
     {id:"report",nome:"Report",icon:BarChart3,items:[{key:"controllo",label:"Controllo Commerciale",icon:Wallet},{key:"fatturato",label:"Fatturato (ordini CRM)",icon:Wallet},{key:"statistiche",label:"Statistiche",icon:TrendingUp}]},
   ];
@@ -2320,6 +2446,7 @@ function AppShell({ session, onLogout }) {
         {page==="visite"&&<CalendarioVisite session={session}/>}
         {page==="storico_visite"&&<StoricoVisiteCRM session={session}/>}
         {page==="note"&&<NoteCRM session={session}/>}
+        {page==="pipeline"&&<PipelineCommerciale session={session}/>}
         {page==="preventivi"&&<PreventiviOfferte session={session} preventivoIniziale={preventivoAprireId} onPreventivoAperto={()=>setPreventivoAprireId(null)}/>}
         {page==="mappa"&&<MappaClienti session={session}/>}
         {page==="statistiche"&&<Statistiche session={session}/>}
