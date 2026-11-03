@@ -1207,6 +1207,23 @@ function CalendarioVisite({ session }) {
           {getMonthGrid(currentDate).map(d=><button key={isoLocale(d)} className={isoLocale(d)===isoLocale(currentDate)?"selected":""} style={{opacity:d.getMonth()===currentDate.getMonth()?1:.4}} onClick={()=>{setCurrentDate(new Date(d));setViewMode("giorno")}}>{d.getDate()}{eventiGiorno(d).length>0&&<i/>}</button>)}
         </div>
       </div> : null}
+      {viewMode === "settimana" ? <div className="agenda-week-scroll" aria-label="Calendario settimanale scorrevole">
+        <div className="agenda-week-grid">
+          <div className="agenda-week-corner">Ora</div>
+          {getWeekDays(currentDate).map(d=><button type="button" key={isoLocale(d)} className={"agenda-week-day"+(isoLocale(d)===isoLocale(currentDate)?" selected":"")} onClick={()=>{setCurrentDate(new Date(d));setViewMode("giorno");}}><span>{d.toLocaleDateString("it-IT",{weekday:"short"}).replace(".","")}</span><strong>{d.getDate()}</strong></button>)}
+          {Array.from({length:13},(_,i)=>i+7).map(h=><div key={h} style={{display:"contents"}}>
+            <div className="agenda-week-hour">{String(h).padStart(2,"0")}:00</div>
+            {getWeekDays(currentDate).map(d=>{
+              const iso=isoLocale(d);
+              const items=eventiGiorno(d).filter(e=>new Date(e.inizio).getHours()===h);
+              return <div key={iso+":"+h} className="agenda-week-cell" onClick={()=>{apriNuovo(iso);setForm({...nuovo(iso),oraInizio:String(h).padStart(2,"0")+":00",oraFine:String(h+1).padStart(2,"0")+":00"});}}>
+                {items.map(e=><button key={e.id} type="button" className="agenda-week-event" onClick={ev=>{ev.stopPropagation();apriModifica(e);}} style={{borderLeftColor:coloreEvento(e),background:coloreEvento(e)+"20"}}><small>{ora(e.inizio)}</small><strong>{e.titolo}</strong></button>)}
+              </div>;
+            })}
+          </div>)}
+        </div>
+        <div className="agenda-week-hint">Scorri lateralmente per vedere tutta la settimana · Tocca un giorno per aprirlo</div>
+      </div> : <>
       <div className="agenda-hybrid-heading"><div><strong>{currentDate.toLocaleDateString("it-IT",{weekday:"long",day:"numeric",month:"long"})}</strong><small>{eventiGiorno(currentDate).length} appuntamenti</small></div><button onClick={()=>apriNuovo(isoLocale(currentDate))}>+ Aggiungi</button></div>
       <div className="agenda-hybrid-timeline">
         {Array.from({length:13},(_,i)=>i+7).map(h=>{
@@ -1224,11 +1241,22 @@ function CalendarioVisite({ session }) {
         {eventiGiorno(currentDate).filter(e=>new Date(e.inizio).getHours()<7||new Date(e.inizio).getHours()>19).length>0&&
           <div className="agenda-hybrid-extra"><strong>Altri orari</strong>{eventiGiorno(currentDate).filter(e=>new Date(e.inizio).getHours()<7||new Date(e.inizio).getHours()>19).map(e=><button key={e.id} onClick={()=>apriModifica(e)}>{ora(e.inizio)} · {e.titolo}</button>)}</div>}
       </div>
+      </>}
     </div> : loading ? <p>Caricamento appuntamenti...</p> : <div style={{ display: "grid", gridTemplateColumns: viewMode==="giorno"?"1fr":"repeat(7,minmax(0,1fr))", border:"1px solid "+COLORS.border, borderRadius:12, overflowX:"auto", background:"white" }}>
       {viewMode!=="giorno" && GIORNI_SETTIMANA.map(g=><div key={g} style={{ textAlign:"center", padding:10, fontSize:11, color:COLORS.muted, borderBottom:"1px solid "+COLORS.border }}>{g}</div>)}
       {giorni.map(d=>{ const eventi=eventiGiorno(d), iso=isoLocale(d), isToday=iso===oggi(); return <div key={iso} style={{ minWidth:viewMode==="giorno"?"auto":95, minHeight:viewMode==="mese"?110:260, borderRight:"1px solid "+COLORS.border, borderBottom:"1px solid "+COLORS.border, padding:7, background:isToday?"#f0f8ff":"white", opacity:viewMode==="mese"&&d.getMonth()!==currentDate.getMonth()?.6:1 }}><button onClick={()=>{setCurrentDate(new Date(d));setViewMode("giorno")}} style={{ background:"none",border:0,cursor:"pointer",fontSize:12,fontWeight:isToday?800:600,color:COLORS.text,marginBottom:8 }}>{viewMode==="giorno"?d.toLocaleDateString("it-IT",{weekday:"long",day:"numeric",month:"long"}):d.getDate()}</button>{eventi.map(eventCard)}<button onClick={()=>apriNuovo(iso)} style={{ display:"block",background:"transparent",border:"1px dashed "+COLORS.border,color:COLORS.muted,borderRadius:6,fontSize:11,padding:"5px",cursor:"pointer",width:"100%",marginTop:5 }}>+ Aggiungi</button></div>})}
     </div>}
     <style>{`@media(max-width:700px){
+      .agenda-week-scroll{width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;background:#fff;border:1px solid #dce5f1;border-radius:14px}
+      .agenda-week-grid{display:grid;grid-template-columns:46px repeat(7,145px);min-width:max-content;align-items:stretch}
+      .agenda-week-corner{position:sticky;left:0;z-index:3;background:#fff;color:#7b8ba3;font-size:10px;display:flex;align-items:center;justify-content:center;border-bottom:1px solid #dce5f1}
+      .agenda-week-day{border:0;border-bottom:1px solid #dce5f1;border-left:1px solid #e9edf4;background:#fff;padding:10px 0;display:flex;align-items:center;justify-content:center;gap:6px;color:#53647e}
+      .agenda-week-day strong{font-size:16px}.agenda-week-day span{font-size:11px;text-transform:capitalize}.agenda-week-day.selected{background:#eaf2ff;color:#174b94}
+      .agenda-week-hour{position:sticky;left:0;z-index:2;background:#fff;min-height:74px;border-bottom:1px solid #edf0f5;color:#7b8ba3;font-size:10px;padding:8px 3px;text-align:center}
+      .agenda-week-cell{min-height:74px;border-bottom:1px solid #edf0f5;border-left:1px solid #edf0f5;padding:4px;display:flex;flex-direction:column;gap:3px}
+      .agenda-week-event{width:100%;min-width:0;text-align:left;border:0;border-left:4px solid #277bd6;border-radius:6px;padding:5px;display:grid;gap:3px;color:#172b49;overflow:hidden}
+      .agenda-week-event small{font-size:10px}.agenda-week-event strong{font-size:11px;line-height:1.2;overflow-wrap:anywhere}
+      .agenda-week-hint{position:sticky;left:0;width:calc(100vw - 70px);padding:10px 8px;color:#6e7d93;font-size:10px;background:#fff}
       .agenda-hybrid{width:100%;min-width:0}
       .agenda-hybrid-week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;background:#fff;padding:8px 5px;border:1px solid #dce5f1;border-radius:14px;margin-bottom:16px}
       .agenda-hybrid-date{min-width:0;border:0;background:transparent;border-radius:11px;padding:9px 0;display:flex;flex-direction:column;align-items:center;gap:5px;color:#53647e;cursor:pointer}
