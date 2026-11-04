@@ -452,7 +452,7 @@ function Dashboard({ session, goTo }) {
 
 function AziendeMandanti({ session }) {
   const [list, setList] = useState([]);
-  const [vistaMandanti, setVistaMandanti] = useState("elenco");
+  const [vistaMandanti, setVistaMandanti] = useState(() => typeof window !== "undefined" && window.innerWidth <= 700 ? "schede" : "elenco");
   const [ricercaMandanti, setRicercaMandanti] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -557,7 +557,7 @@ function AziendeMandanti({ session }) {
   const inputStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
 
   return (
-    <div style={{ fontFamily: "Arial, sans-serif" }}>
+    <div className="crm-mandanti-premium" style={{ fontFamily: "Arial, sans-serif" }}>
       <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}><Building2 size={20} color={COLORS.primary} /> Aziende mandanti</h2>
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 280px", background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, maxWidth: 340 }}>
@@ -954,7 +954,7 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
   const [saving, setSaving] = useState(false);
   const [filtroClassificazione, setFiltroClassificazione] = useState("");
   const [ricercaAnagrafica, setRicercaAnagrafica] = useState("");
-  const [vistaAnagrafica, setVistaAnagrafica] = useState("elenco");
+  const [vistaAnagrafica, setVistaAnagrafica] = useState(() => typeof window !== "undefined" && window.innerWidth <= 700 ? "schede" : "elenco");
   const [clienteApertoId, setClienteApertoId] = useState(null);
   const [sediForm, setSediForm] = useState([]);
   const [sediEsistenti, setSediEsistenti] = useState([]);
@@ -1080,7 +1080,7 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
   }
 
   return (
-    <div style={{ fontFamily: "Arial, sans-serif" }}>
+    <div className="crm-anagrafiche-premium" style={{ fontFamily: "Arial, sans-serif" }}>
       <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}><Users size={20} color={COLORS.primary} /> {soloArchitetti ? "Anagrafica architetti" : "Anagrafica clienti"}</h2>
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 300px", background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, maxWidth: 380 }}>
@@ -3007,6 +3007,22 @@ function StileGlobaleResponsive() {
 }
 
 
+function StileAnagraficheApple() { return <style>{`
+/* Schede anagrafiche e mandanti: stile iOS, senza alterare il calendario */
+.crm-anagrafiche-premium button:focus-visible, .crm-mandanti-premium button:focus-visible { outline: 3px solid #84bfff; outline-offset: 2px; }
+.crm-anagrafiche-premium input:focus, .crm-anagrafiche-premium select:focus,
+.crm-mandanti-premium input:focus, .crm-mandanti-premium select:focus { outline: none; border-color: #4b9ff0 !important; box-shadow: 0 0 0 3px #2384e819; }
+.crm-anagrafiche-premium input, .crm-anagrafiche-premium select,
+.crm-mandanti-premium input, .crm-mandanti-premium select { transition: border-color .16s ease, box-shadow .16s ease; }
+.crm-anagrafiche-premium button, .crm-mandanti-premium button { transition: background-color .15s ease, box-shadow .15s ease; }
+@media(max-width:700px) {
+  .crm-anagrafiche-premium, .crm-mandanti-premium { min-width:0; }
+  .crm-anagrafiche-premium input, .crm-anagrafiche-premium select,
+  .crm-mandanti-premium input, .crm-mandanti-premium select { font-size:16px !important; }
+  .crm-anagrafiche-premium button, .crm-mandanti-premium button { min-height:36px; }
+}
+`}</style>; }
+
 function StilePremium2026() { return <style>{`
 .crm-task-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:15px 0}
 .crm-task-count{border:0;border-radius:12px;padding:13px 15px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:5px}
@@ -3193,6 +3209,7 @@ export default function App() {
       `}</style>
       <StileMobileCRM />
       <StilePremium2026 />
+      <StileAnagraficheApple />
       <StileNavigazionePremiumCRM />
       <StileGlobaleResponsive />
       {verificaAccesso ? (
