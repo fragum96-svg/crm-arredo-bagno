@@ -1421,7 +1421,7 @@ function SelettoreVoce({ label, modalita, percentuale, valoreEuro, onChange, inp
   );
 }
 
-function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, vaiAllaPipeline }) {
+function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, vaiAllaPipeline, creaOpportunitaDaPreventivo }) {
   const [clienti, setClienti] = useState([]);
   const [aziende, setAziende] = useState([]);
   const [lista, setLista] = useState([]);
@@ -1772,6 +1772,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
                         preventivoSalvato.fatturato ? <span style={{ color: COLORS.success, fontSize: 12 }}>✓ Fatturato</span> : <button onClick={() => segnaComeFatturato(preventivoSalvato)} style={{ background: "none", border: "none", color: COLORS.success, cursor: "pointer", fontSize: 12 }}>Segna come fatturato</button>
                       )}
                       <button onClick={() => stampaPreventivo(preventivoSalvato, clienti, aziende)} style={{ background: "none", border: "none", color: COLORS.success, cursor: "pointer", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}><Printer size={13} /> PDF</button>
+                      {preventivoSalvato.cliente_id && <button type="button" onClick={() => creaOpportunitaDaPreventivo(preventivoSalvato)} title="Prepara una trattativa con i dati del preventivo, senza modificare il preventivo" style={{ background: "#eaf3ff", border: "1px solid #c8def7", borderRadius: 8, padding: "5px 8px", color: "#175fa6", cursor: "pointer", fontSize: 12, fontWeight: 650 }}>+ Opportunità</button>}
                       <button onClick={() => modifica(preventivoSalvato)} style={{ background: "none", border: "none", color: COLORS.primary, cursor: "pointer", fontSize: 12 }}>Modifica</button>
                       <button onClick={() => elimina(preventivoSalvato.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 12 }}>Elimina</button>
                     </div>
@@ -2551,7 +2552,7 @@ const FASI_PIPELINE = [
   {id:"persa",nome:"Persa",colore:"#ef4444",prob:0},
   {id:"sospesa",nome:"Sospesa",colore:"#d97706",prob:10}
 ];
-function PipelineCommerciale({session}) {
+function PipelineCommerciale({session, preventivoDaConvertire, onPreventivoRicevuto}) {
   const vuoto={titolo:"",cliente_id:"",azienda_id:"",fase:"primo_contatto",valore_stimato:"",probabilita:"20",data_chiusura_prevista:"",prossima_azione:"",data_prossima_azione:"",descrizione:"",note:""};
   const [aziende,setAziende]=useState([]);
   const [clienti,setClienti]=useState([]);
@@ -2584,6 +2585,26 @@ function PipelineCommerciale({session}) {
     }catch(e){setError(e.message);}finally{setLoading(false);}
   }
   useEffect(()=>{load();},[]);
+  useEffect(() => {
+    if (!preventivoDaConvertire) return;
+    const p = preventivoDaConvertire;
+    const valore = calcolaTotaliPreventivo(p, p.righe || []).totaleNetto;
+    setEditing(null);
+    setForm({
+      ...vuoto,
+      titolo: "Preventivo " + (p.rif || (p.data || "senza riferimento")),
+      azienda_id: p.azienda_id || "",
+      cliente_id: p.cliente_id || "",
+      fase: p.stato === "accettato" ? "confermata" : "offerta_inviata",
+      probabilita: p.stato === "accettato" ? "100" : "70",
+      valore_stimato: String(Number(valore) || 0),
+      descrizione: "Trattativa avviata dal preventivo " + (p.rif || "senza riferimento") + ". Verificare eventuali altre offerte relative allo stesso progetto.",
+      note: "Riferimento preventivo: " + (p.rif || p.id) + ". Il collegamento è descrittivo, non una relazione permanente nel database."
+    });
+    setShowForm(true);
+    setError("");
+    onPreventivoRicevuto?.();
+  }, [preventivoDaConvertire]);
   const euro=n=>(Number(n)||0).toLocaleString("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:0});
   const idAzienda=a=>a.id;
   const clienteAbilitato=(c,id)=>{
@@ -2944,6 +2965,7 @@ function AppShell({ session, onLogout }) {
   const [page, setPage] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("appuntamento") ? "visite" : "dashboard");
   const [role, setRole] = useState("user");
   const [preventivoAprireId, setPreventivoAprireId] = useState(null);
+  const [preventivoDaConvertire, setPreventivoDaConvertire] = useState(null);
   const [gruppoAprireId, setGruppoAprireId] = useState(null);
   const [aperti, setAperti] = useState({ clienti:true, architetti:true, mandanti:true, opportunita:true, agenda:true, report:true });
   const apriPreventivoCliente = id => { setPreventivoAprireId(id); setPage("preventivi"); };
@@ -2982,8 +3004,8 @@ function AppShell({ session, onLogout }) {
         {page==="visite"&&<CalendarioVisite session={session}/>}
         {page==="storico_visite"&&<StoricoVisiteCRM session={session}/>}
         {page==="note"&&<NoteCRM session={session}/>}
-        {page==="pipeline"&&<PipelineCommerciale session={session}/>}
-        {page==="preventivi"&&<PreventiviOfferte session={session} preventivoIniziale={preventivoAprireId} onPreventivoAperto={()=>setPreventivoAprireId(null)} vaiAllaPipeline={()=>scegli("pipeline")}/>}
+        {page==="pipeline"&&<PipelineCommerciale session={session} preventivoDaConvertire={preventivoDaConvertire} onPreventivoRicevuto={()=>setPreventivoDaConvertire(null)}/>}
+        {page==="preventivi"&&<PreventiviOfferte session={session} preventivoIniziale={preventivoAprireId} onPreventivoAperto={()=>setPreventivoAprireId(null)} vaiAllaPipeline={()=>scegli("pipeline")} creaOpportunitaDaPreventivo={p=>{setPreventivoDaConvertire(p);scegli("pipeline");}}/>}
         {page==="mappa"&&<MappaClienti session={session}/>}
         {page==="statistiche"&&<Statistiche session={session}/>}
         {page==="fatturato"&&<Fatturato session={session}/>}
