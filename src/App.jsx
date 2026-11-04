@@ -2665,20 +2665,107 @@ async function rinnovaSessione(refreshToken) {
   }
 }
 
-export default function App() {
-  const [session, setSession] = useState(null);
+// Sessione salvata soltanto sul dispositivo e sul dominio corrente (sviluppo).
+const CRM_SESSION_KEY = "crm_arredo_bagno_session_v1";
 
-  useEffect(() => {
-    if (!session || !session.refresh_token) return;
-    const secondiValidita = session.expires_in || 3600;
-    const msPrimaDiScadenza = Math.max((secondiValidita - 300) * 1000, 30000);
-    const timer = setTimeout(async () => {
-      const nuovaSessione = await rinnovaSessione(session.refresh_token);
-      if (nuovaSessione && nuovaSessione.access_token) {
-        setSession((prev) => ({ ...prev, ...nuovaSessione }));
+function leggiSessioneSalvata() {
+  try {
+    const value = window.localStorage.getItem(CRM_SESSION_KEY);
+    const sessione = value ? JSON.parse(value) : null;
+    return sessione?.access_token && sessione?.refresh_token ? sessione : null;
+  } catch {
+    return null;
+  }
+}
+
+function salvaSessione(sessione) {
+  try {
+    if (sessione?.access_token && sessione?.refresh_token) {
+      window.localStorage.setItem(CRM_SESSION_KEY, JSON.stringify(sessione));
+    } else {
+      window.localStorage.removeItem(CRM_SESSION_KEY);
+    }
+  } catch (error) {
+    console.warn("Impossibile memorizzare la sessione:", error);
+  }
+}
+
+function scadenzaSessione(sessione) {
+  if (sessione?.expires_at) return Number(sessione.expires_at) * 1000;
+  return 0;
+}
+
+export default function App() {
+  const [session, setSession] = useState(() => leggiSessioneSalvata());
+  const [verificaAccesso, setVerificaAccesso] = useState(true);
+  const refreshInCorso = useRef(null);
+
+  const aggiornaSessione = (nuova) => {
+    setSession(nuova);
+    salvaSessione(nuova);
+  };
+
+  const verificaERinnova = async (sessione) => {
+    if (!sessione?.refresh_token) return null;
+    // Evita richieste contemporanee: i refresh token Supabase ruotano.
+    if (refreshInCorso.current) return refreshInCorso.current;
+    const promessa = (async () => {
+      const risposta = await rinnovaSessione(sessione.refresh_token);
+      if (risposta?.access_token && risposta?.refresh_token) {
+        const aggiornata = {
+          ...sessione,
+          ...risposta,
+          expires_at: risposta.expires_at || Math.floor(Date.now() / 1000) + (risposta.expires_in || 3600),
+        };
+        aggiornaSessione(aggiornata);
+        return aggiornata;
       }
-    }, msPrimaDiScadenza);
+      return null;
+    })();
+    refreshInCorso.current = promessa;
+    try { return await promessa; }
+    finally { refreshInCorso.current = null; }
+  };
+
+  // All'apertura prova a recuperare una sessione valida, anche dopo la chiusura della PWA.
+  useEffect(() => {
+    let attivo = true;
+    (async () => {
+      const salvata = leggiSessioneSalvata();
+      if (salvata) {
+        const scadenza = scadenzaSessione(salvata);
+        if (!scadenza || scadenza <= Date.now() + 60000) {
+          await verificaERinnova(salvata);
+        }
+      }
+      if (attivo) setVerificaAccesso(false);
+    })();
+    return () => { attivo = false; };
+  }, []);
+
+  // Rinnova la sessione prima della scadenza, mentre il CRM rimane aperto.
+  useEffect(() => {
+    if (!session?.refresh_token) return;
+    const scadenza = scadenzaSessione(session);
+    const attesa = scadenza ? Math.max(1000, scadenza - Date.now() - 5 * 60 * 1000) : 30000;
+    const timer = setTimeout(() => { verificaERinnova(session); }, attesa);
     return () => clearTimeout(timer);
+  }, [session]);
+
+  // Quando l'iPhone riporta l'app in primo piano, controlla se serve rinnovare.
+  useEffect(() => {
+    const tornaAttivo = () => {
+      if (document.visibilityState !== "visible") return;
+      const salvata = leggiSessioneSalvata();
+      if (salvata && (!scadenzaSessione(salvata) || scadenzaSessione(salvata) < Date.now() + 60000)) {
+        verificaERinnova(salvata);
+      }
+    };
+    document.addEventListener("visibilitychange", tornaAttivo);
+    return () => document.removeEventListener("visibilitychange", tornaAttivo);
+  }, []);
+
+  return () => clearTimeout(timer);
   }, [session]);
 
   return (
@@ -2701,10 +2788,12 @@ export default function App() {
       `}</style>
       <StileMobileCRM />
       <StileGlobaleResponsive />
-      {!session ? (
-        <LoginScreen onLogin={(data) => setSession(data)} />
+      {verificaAccesso ? (
+        <div style={{ padding: 36, textAlign: "center", color: "#17233b" }}>Ripristino accesso al CRM...</div>
+      ) : !session ? (
+        <LoginScreen onLogin={(data) => aggiornaSessione({ ...data, expires_at: data.expires_at || Math.floor(Date.now() / 1000) + (data.expires_in || 3600) })} />
       ) : (
-        <AppShell session={session} onLogout={() => setSession(null)} />
+        <AppShell session={session} onLogout={() => aggiornaSessione(null)} />
       )}
     </>
   );
