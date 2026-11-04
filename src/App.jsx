@@ -3367,53 +3367,160 @@ function ClientiDaRiattivareCRM({session,naviga}) {
   const [clienti,setClienti]=useState([]);
   const [visite,setVisite]=useState([]);
   const [contatti,setContatti]=useState([]);
+  const [promemoria,setPromemoria]=useState([]);
   const [errore,setErrore]=useState("");
   const [loading,setLoading]=useState(true);
   useEffect(()=>{
     let alive=true;
     const headers={apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+session.access_token};
-    Promise.all(["clienti?select=id,ragione_sociale,classificazione", "visite?select=cliente_id,data_visita", "attivita_cliente?select=cliente_id,data,tipo,descrizione"].map(async path=>{
+    Promise.all(["clienti?select=id,ragione_sociale,classificazione", "visite?select=cliente_id,data_visita", "attivita_cliente?select=cliente_id,data,tipo,descrizione", "crm_attivita?select=cliente_id,scadenza,stato"].map(async path=>{
       const r=await fetch(SUPABASE_URL+"/rest/v1/"+path,{headers});const d=await r.json();if(!r.ok)throw Error(d.message||"Impossibile caricare i contatti");return d;
-    })).then(([c,v,a])=>{if(alive){setClienti(c);setVisite(v);setContatti(a);setLoading(false);}}).catch(e=>{if(alive){setErrore(e.message);setLoading(false);}});
+    })).then(([c,v,a,p])=>{if(alive){setClienti(c);setVisite(v);setContatti(a);setPromemoria(p);setLoading(false);}}).catch(e=>{if(alive){setErrore(e.message);setLoading(false);}});
     return ()=>{alive=false};
   },[session.access_token]);
   const now=Date.now();
-  const contattiReali=contatti.filter(a=>/visita|telefon|chiamat|incontr|contatt|email|mail|whatsapp/i.test((a.tipo||"")+" "+(a.descrizione||""))&&!/programm|previst|da fare/i.test(a.descrizione||""));
+  const contattiReali=contatti.filter(a=>/^(visita|telefonata|chiamata|incontro|contatto|email|mail|whatsapp)$/i.test(String(a.tipo||"").trim()));
   const elenco=clienti.filter(c=>c.classificazione!=="Architetto").map(c=>{
     const date=[...visite.filter(v=>v.cliente_id===c.id).map(v=>v.data_visita),...contattiReali.filter(a=>a.cliente_id===c.id).map(a=>a.data)].filter(Boolean).map(x=>new Date(x).getTime()).filter(t=>Number.isFinite(t)&&t<=now);
     const ultima=date.length?Math.max(...date):null;
-    return {...c,ultima,trascorsi:ultima?Math.floor((now-ultima)/86400000):null};
+    const pianificato=promemoria.some(p=>p.cliente_id===c.id&&p.stato!=="completata"&&p.scadenza&&new Date(p.scadenza).getTime()>=now);
+    return {...c,ultima,trascorsi:ultima?Math.floor((now-ultima)/86400000):null,pianificato};
   }).filter(c=>c.trascorsi===null||c.trascorsi>=giorni).sort((a,b)=>(b.trascorsi??999999)-(a.trascorsi??999999));
-  return <section className="crm-reactivation"><div className="matrice-section-head"><h3><Clock3 size={17}/> Clienti da riattivare</h3><button onClick={()=>naviga("clienti")}>Apri clienti</button></div><div className="crm-reactivation-filters">{[30,60,90].map(n=><button key={n} className={giorni===n?"active":""} onClick={()=>setGiorni(n)}>{n} giorni</button>)}</div>{loading?<p>Caricamento...</p>:errore?<p style={{color:"#b42318"}}>{errore}</p>:<><p className="crm-reactivation-sub">{elenco.length} clienti senza contatti registrati negli ultimi {giorni} giorni. Le anagrafiche senza storico sono indicate separatamente.</p>{elenco.slice(0,8).map(c=><div className="crm-reactivation-row" key={c.id}><span><strong>{c.ragione_sociale}</strong><small>{c.trascorsi===null?"Nessun contatto registrato":"Ultimo contatto "+new Date(c.ultima).toLocaleDateString("it-IT")+" · "+c.trascorsi+" giorni fa"}</small></span><button onClick={()=>naviga("clienti")}>Apri</button></div>)}{elenco.length>8&&<small>Mostrati i primi 8 clienti. Puoi cambiare soglia con i filtri.</small>}{elenco.length===0&&<p>Nessun cliente da riattivare per questa soglia.</p>}</>}</section>;
+  return <section className="crm-reactivation"><div className="matrice-section-head"><h3><Clock3 size={17}/> Clienti da riattivare</h3><button onClick={()=>naviga("clienti")}>Apri clienti</button></div><div className="crm-reactivation-filters">{[30,60,90].map(n=><button key={n} className={giorni===n?"active":""} onClick={()=>setGiorni(n)}>{n} giorni</button>)}</div>{loading?<p>Caricamento...</p>:errore?<p style={{color:"#b42318"}}>{errore}</p>:<><p className="crm-reactivation-sub">{elenco.length} clienti senza contatti registrati negli ultimi {giorni} giorni. Le anagrafiche senza storico sono indicate separatamente.</p>{elenco.slice(0,8).map(c=><div className="crm-reactivation-row" key={c.id}><span><strong>{c.ragione_sociale}</strong><small>{c.trascorsi===null?"Nessun contatto registrato":"Ultimo contatto "+new Date(c.ultima).toLocaleDateString("it-IT")+" · "+c.trascorsi+" giorni fa"}{c.pianificato?" · Contatto già pianificato":""}</small></span><button onClick={()=>naviga("clienti")}>Apri</button></div>)}{elenco.length>8&&<small>Mostrati i primi 8 clienti. Puoi cambiare soglia con i filtri.</small>}{elenco.length===0&&<p>Nessun cliente da riattivare per questa soglia.</p>}</>}</section>;
 }
 function AzioniRapideCRM({session,chiudi,naviga}) {
   const [azione,setAzione]=useState("");
   const [titolo,setTitolo]=useState("");
   const [note,setNote]=useState("");
   const [data,setData]=useState("");
+  const [clienteId,setClienteId]=useState("");
+  const [tipoContatto,setTipoContatto]=useState("visita");
+  const [mandantiIds,setMandantiIds]=useState([]);
+  const [prossimoContatto,setProssimoContatto]=useState(false);
+  const [prossimaData,setProssimaData]=useState("");
+  const [prossimaNota,setProssimaNota]=useState("");
+  const [clienti,setClienti]=useState([]);
+  const [mandanti,setMandanti]=useState([]);
   const [busy,setBusy]=useState(false);
   const [errore,setErrore]=useState("");
-  const links=[{key:"visite",label:"Appuntamento",icon:CalendarDays},{key:"attivita",label:"Attività / follow-up",icon:CheckSquare},{key:"note",label:"Nota",icon:StickyNote},{key:"clienti",label:"Cliente",icon:Users},{key:"pipeline",label:"Opportunità",icon:Target}];
-  const salva=async e=>{e.preventDefault();if(!titolo.trim())return;setBusy(true);setErrore("");try{
-    const isTask=azione==="attivita";
-    const payload=isTask?{titolo:titolo.trim(),tipo:"richiamare",scadenza:data?new Date(data+"T00:00").toISOString():null,priorita:"media",stato:"da_fare",note,user_id:session.user.id}:{titolo:titolo.trim(),contenuto:note,updated_at:new Date().toISOString()};
-    const endpoint=isTask?"crm_attivita":"note_crm";
-    const r=await fetch(SUPABASE_URL+"/rest/v1/"+endpoint,{method:"POST",headers:{apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(payload)});
-    if(!r.ok){const x=await r.json().catch(()=>({}));throw Error(x.message||"Errore di salvataggio");}
-    chiudi();naviga(isTask?"attivita":"note");
-  }catch(e){setErrore(e.message)}finally{setBusy(false)}};
-  return <div className="crm-modal-backdrop" onClick={chiudi}><section className="crm-quick-panel" role="dialog" aria-modal="true" aria-label="Aggiungi rapidamente" onClick={e=>e.stopPropagation()}><div className="crm-quick-heading"><strong>Nuova operazione</strong><button onClick={chiudi}>×</button></div>{!azione?<div className="crm-quick-grid">{links.map(l=><button key={l.key} onClick={()=>{if(l.key==="note"||l.key==="attivita")setAzione(l.key);else{chiudi();naviga(l.key)}}}><l.icon size={20}/>{l.label}</button>)}</div>:<form onSubmit={salva}><h3>{azione==="note"?"Nuova nota":"Nuova attività"}</h3><input required placeholder="Titolo" value={titolo} onChange={e=>setTitolo(e.target.value)}/>{azione==="attivita"&&<label>Scadenza (facoltativa)<input type="date" value={data} onChange={e=>setData(e.target.value)}/></label>}<textarea placeholder="Dettagli (facoltativi)" value={note} onChange={e=>setNote(e.target.value)}/>{errore&&<p style={{color:"#b42318"}}>{errore}</p>}<div className="crm-quick-actions"><button type="button" onClick={()=>setAzione("")}>Indietro</button><button disabled={busy} type="submit">{busy?"Salvataggio...":"Salva"}</button></div></form>}</section></div>;
+  const headers={apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"};
+  useEffect(()=>{
+    let mounted=true;
+    Promise.all([
+      fetch(SUPABASE_URL+"/rest/v1/clienti?select=id,ragione_sociale,classificazione&order=ragione_sociale.asc",{headers}).then(async r=>{if(!r.ok)throw Error("Clienti non disponibili");return r.json()}),
+      fetch(SUPABASE_URL+"/rest/v1/aziende_mandanti?select=id,nome&order=nome.asc",{headers}).then(async r=>{if(!r.ok)throw Error("Mandanti non disponibili");return r.json()})
+    ]).then(([c,m])=>{if(mounted){setClienti(Array.isArray(c)?c:[]);setMandanti(Array.isArray(m)?m:[])}}).catch(e=>{if(mounted)setErrore(e.message)});
+    return ()=>{mounted=false};
+  },[session.access_token]);
+  const links=[{key:"contatto",label:"Registra contatto",icon:Users},{key:"visite",label:"Appuntamento",icon:CalendarDays},{key:"attivita",label:"Attività / follow-up",icon:CheckSquare},{key:"note",label:"Nota",icon:StickyNote},{key:"clienti",label:"Cliente",icon:Users},{key:"pipeline",label:"Opportunità",icon:Target}];
+  const salva=async e=>{
+    e.preventDefault();if(busy)return;
+    if(azione==="contatto"&&!clienteId){setErrore("Seleziona un cliente o architetto.");return;}
+    if(azione!=="contatto"&&!titolo.trim())return;
+    if(azione==="contatto"&&prossimoContatto&&!prossimaData){setErrore("Indica la data del prossimo contatto oppure disattiva il promemoria.");return;}
+    setBusy(true);setErrore("");
+    try{
+      const inserisci=async (tabella,payload)=>{
+        const r=await fetch(SUPABASE_URL+"/rest/v1/"+tabella,{method:"POST",headers:{...headers,Prefer:"return=minimal"},body:JSON.stringify(payload)});
+        if(!r.ok){const x=await r.json().catch(()=>({}));throw Error(x.message||"Errore nel salvataggio su "+tabella)};
+      };
+      if(azione==="contatto"){
+        const nomi=mandanti.filter(m=>mandantiIds.includes(String(m.id))).map(m=>m.nome);
+        const dettagli=[note.trim(),nomi.length?"Mandanti trattati: "+nomi.join(", "):""].filter(Boolean).join("\n");
+        // Compatibilità con il database esistente: la selezione multipla è descrittiva,
+        // non una relazione strutturata. La tabella di associazione verrà creata nella fase SQL.
+        await inserisci("attivita_cliente",{cliente_id:clienteId,tipo:tipoContatto,descrizione:dettagli||"Contatto effettuato"});
+        if(prossimoContatto){
+          try{
+            await inserisci("crm_attivita",{titolo:"Ricontattare "+(clienti.find(c=>String(c.id)===String(clienteId))?.ragione_sociale||"cliente"),tipo:"richiamare",scadenza:new Date(prossimaData+"T09:00").toISOString(),priorita:"media",stato:"da_fare",cliente_id:clienteId,azienda_id:mandantiIds.length===1?mandantiIds[0]:null,note:[prossimaNota.trim(),nomi.length?"Mandanti: "+nomi.join(", "):""].filter(Boolean).join("\n"),user_id:session.user.id});
+          }catch(err){setErrore("Contatto registrato, ma promemoria non creato: "+err.message);return;}
+        }
+        chiudi();naviga("clienti");return;
+      }
+      const isTask=azione==="attivita";
+      const payload=isTask?{titolo:titolo.trim(),tipo:"richiamare",scadenza:data?new Date(data+"T00:00").toISOString():null,priorita:"media",stato:"da_fare",note,user_id:session.user.id}:{titolo:titolo.trim(),contenuto:note,updated_at:new Date().toISOString()};
+      await inserisci(isTask?"crm_attivita":"note_crm",payload);
+      chiudi();naviga(isTask?"attivita":"note");
+    }catch(e){setErrore(e.message||"Errore di salvataggio")}finally{setBusy(false)}
+  };
+  return <div className="crm-modal-backdrop" onClick={chiudi}><section className="crm-quick-panel" role="dialog" aria-modal="true" aria-label="Aggiungi rapidamente" onClick={e=>e.stopPropagation()}>
+    <div className="crm-quick-heading"><strong>Nuova operazione</strong><button onClick={chiudi} aria-label="Chiudi">×</button></div>
+    {!azione?<div className="crm-quick-grid">{links.map(l=><button key={l.key} onClick={()=>{if(["note","attivita","contatto"].includes(l.key))setAzione(l.key);else{chiudi();naviga(l.key)}}}><l.icon size={20}/>{l.label}</button>)}</div>:
+    <form onSubmit={salva}>
+      <h3>{azione==="contatto"?"Registra contatto effettuato":azione==="note"?"Nuova nota":"Nuova attività"}</h3>
+      {azione==="contatto"?<>
+        <label>Cliente o architetto *<select required value={clienteId} onChange={e=>setClienteId(e.target.value)}><option value="">Seleziona...</option>{clienti.map(c=><option key={c.id} value={c.id}>{c.ragione_sociale}{c.classificazione==="Architetto"?" · Architetto":""}</option>)}</select></label>
+        <label>Tipo di contatto<select value={tipoContatto} onChange={e=>setTipoContatto(e.target.value)}>{[["visita","Visita"],["telefonata","Telefonata"],["whatsapp","WhatsApp"],["email","Email"],["incontro","Incontro"],["altro","Altro"]].map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
+        <fieldset style={{border:"1px solid #d9e4f2",borderRadius:10,padding:10}}><legend style={{fontSize:13}}>Mandanti trattati (facoltativi, selezione multipla)</legend><div style={{display:"flex",flexWrap:"wrap",gap:9}}>{mandanti.map(m=><label key={m.id} style={{display:"flex",alignItems:"center",gap:5,fontSize:12}}><input type="checkbox" style={{width:"auto"}} checked={mandantiIds.includes(String(m.id))} onChange={e=>setMandantiIds(old=>e.target.checked?[...old,String(m.id)]:old.filter(x=>x!==String(m.id)))}/>{m.nome}</label>)}</div></fieldset>
+        <textarea placeholder="Note sul contatto (facoltative)" value={note} onChange={e=>setNote(e.target.value)}/>
+        <label style={{display:"flex",alignItems:"center",gap:8}}><input type="checkbox" style={{width:"auto"}} checked={prossimoContatto} onChange={e=>setProssimoContatto(e.target.checked)}/> Programmare il prossimo contatto?</label>
+        {prossimoContatto&&<><label>Data prossimo contatto *<input type="date" required min={new Date().toLocaleDateString("en-CA")} value={prossimaData} onChange={e=>setProssimaData(e.target.value)}/></label><input placeholder="Cosa fare al prossimo contatto?" value={prossimaNota} onChange={e=>setProssimaNota(e.target.value)}/></>}
+        <small style={{color:"#71849a"}}>Il contatto viene salvato nello storico esistente. I mandanti multipli sono indicati nelle note fino all'aggiornamento del database.</small>
+      </>:<><input required placeholder="Titolo" value={titolo} onChange={e=>setTitolo(e.target.value)}/>{azione==="attivita"&&<label>Scadenza (facoltativa)<input type="date" value={data} onChange={e=>setData(e.target.value)}/></label>}<textarea placeholder="Dettagli (facoltativi)" value={note} onChange={e=>setNote(e.target.value)}/></>}
+      {errore&&<p role="alert" style={{color:"#b42318"}}>{errore}</p>}
+      <div className="crm-quick-actions"><button type="button" onClick={()=>{setAzione("");setErrore("")}}>Indietro</button><button disabled={busy} type="submit">{busy?"Salvataggio...":"Salva"}</button></div>
+    </form>}
+  </section></div>;
 }
 function StileCRMv12(){return <style>{`
 .crm-modal-backdrop{position:fixed;inset:0;z-index:2500;background:#1425408a;display:flex;justify-content:center;align-items:flex-start;padding:10vh 15px 20px}
 .crm-global-panel,.crm-quick-panel{width:min(580px,100%);max-height:80vh;overflow:auto;background:white;border:1px solid #c8d7ec;border-radius:18px;box-shadow:0 18px 55px #10284640;padding:16px;color:#1d3351}
 .crm-global-head{display:flex;align-items:center;gap:10px}.crm-global-head input{flex:1;min-width:0;padding:12px;border:1px solid #d9e4f2;border-radius:10px}.crm-global-head button,.crm-quick-heading button{background:transparent;border:0;font-size:26px;color:#62738a;cursor:pointer}
 .crm-global-results{max-height:50vh;overflow:auto;margin-top:13px}.crm-global-results>button{display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;background:white;border:0;border-bottom:1px solid #e9eef6;padding:12px;cursor:pointer}.crm-global-results>button:hover{background:#f2f7ff}.crm-global-results strong,.crm-global-results small,.crm-reactivation-row strong,.crm-reactivation-row small{display:block}.crm-global-results small,.crm-reactivation-row small,.crm-global-hint{font-size:11px;color:#71849a}.crm-global-results em{font-style:normal;font-size:11px;color:#286bd4}
-.crm-quick-heading{display:flex;justify-content:space-between;align-items:center;font-size:18px}.crm-quick-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:18px}.crm-quick-grid button{background:#f5f9ff;border:1px solid #d9e6f6;border-radius:12px;padding:16px 8px;display:flex;flex-direction:column;align-items:center;gap:8px;color:#255fbb;font-weight:650;cursor:pointer}.crm-quick-panel form{display:flex;flex-direction:column;gap:12px}.crm-quick-panel input,.crm-quick-panel textarea{width:100%;box-sizing:border-box;border:1px solid #d9e4f2;border-radius:10px;padding:12px;font-size:16px}.crm-quick-panel textarea{min-height:100px}.crm-quick-actions{display:flex;justify-content:flex-end;gap:10px}.crm-quick-actions button{border:1px solid #cbd9ec;border-radius:9px;padding:10px 15px;background:#fff}.crm-quick-actions button[type=submit]{background:#2e74e8;color:white;border-color:#2e74e8}
+.crm-quick-heading{display:flex;justify-content:space-between;align-items:center;font-size:18px}.crm-quick-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:18px}.crm-quick-grid button{background:#f5f9ff;border:1px solid #d9e6f6;border-radius:12px;padding:16px 8px;display:flex;flex-direction:column;align-items:center;gap:8px;color:#255fbb;font-weight:650;cursor:pointer}.crm-quick-panel form{display:flex;flex-direction:column;gap:12px}.crm-quick-panel input,.crm-quick-panel select,.crm-quick-panel textarea{width:100%;box-sizing:border-box;border:1px solid #d9e4f2;border-radius:10px;padding:12px;font-size:16px}.crm-quick-panel textarea{min-height:100px}.crm-quick-actions{display:flex;justify-content:flex-end;gap:10px}.crm-quick-actions button{border:1px solid #cbd9ec;border-radius:9px;padding:10px 15px;background:#fff}.crm-quick-actions button[type=submit]{background:#2e74e8;color:white;border-color:#2e74e8}
 .crm-reactivation{background:white;border:1px solid #cbd7e8;box-shadow:0 6px 18px #1c355b17;border-radius:16px;padding:17px;margin:16px 0}.crm-reactivation .matrice-section-head h3{display:flex;align-items:center;gap:8px}.crm-reactivation-filters{display:flex;gap:8px;margin:10px 0}.crm-reactivation-filters button{padding:8px 13px;border:1px solid #d4e0f0;background:#f7faff;border-radius:9px;color:#45607f}.crm-reactivation-filters button.active{background:#2d70dc;color:white}.crm-reactivation-sub{font-size:12px;color:#71849a}.crm-reactivation-row{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid #edf1f7;padding:11px 0}.crm-reactivation-row button{background:#eaf2ff;border:0;border-radius:8px;padding:8px 11px;color:#2769d2}
 .crm-mobile-fab{display:none}
 @media(max-width:768px){.crm-mobile-fab{display:flex;position:fixed;right:16px;bottom:calc(90px + env(safe-area-inset-bottom));z-index:1100;width:54px;height:54px;align-items:center;justify-content:center;border:0;border-radius:17px;background:#2c73e9;color:white;box-shadow:0 7px 22px #174da96b}.crm-modal-backdrop{padding-top:7vh}.crm-quick-panel,.crm-global-panel{max-height:83vh}.crm-reactivation{padding:13px}}
 `}</style>}
+
+// Laboratorio Fase 2: prototipo isolato, nessuna scrittura su Supabase.
+function LaboratorioCommercialeCRM() {
+  const [tab, setTab] = useState("mandanti");
+  const [cliente, setCliente] = useState("Showroom dimostrativo");
+  const [marchi, setMarchi] = useState({"QuadroDesign":"Gia cliente","CP Parquet":"In trattativa","Galassia":"Da proporre"});
+  const [followup, setFollowup] = useState([{id:1,cliente:"Studio architettura (esempio)",oggetto:"Offerta rubinetteria",stato:"Inviato",data:"",nota:""}]);
+  const [campioni, setCampioni] = useState([{id:1,cliente:"Showroom dimostrativo",mandante:"CP Parquet",descrizione:"Pannello rovere - esempio",quantita:1,stato:"Consegnato"}]);
+  const [nuovo, setNuovo] = useState({cliente:"",mandante:"",descrizione:"",quantita:1,stato:"Da consegnare"});
+  const [nomeMarchio, setNomeMarchio] = useState("");
+  const input={padding:"10px 11px",border:"1px solid #dce3e8",borderRadius:9,width:"100%",background:"#fff",fontSize:14};
+  const panel={background:"white",border:"1px solid #e0e5e7",borderRadius:15,padding:18,marginTop:15};
+  const btn={border:"1px solid #cddbd4",background:"#f4f8f5",color:"#344a43",padding:"9px 13px",borderRadius:9,cursor:"pointer",fontWeight:650};
+  const label={display:"block",fontSize:12,color:"#64716b",marginBottom:5,fontWeight:650};
+  const marchiDisponibili=["QuadroDesign","CP Parquet","Galassia","Rexa","AISI Design"];
+  return <div style={{maxWidth:1000,margin:"0 auto",color:"#26352f"}}>
+    <h2 style={{marginBottom:5}}>Laboratorio commerciale</h2>
+    <p style={{color:"#64716b",marginTop:0,fontSize:13}}>Anteprima interattiva delle prossime funzioni. I dati sono dimostrativi e restano solo in questa schermata: non vengono salvati nel CRM o su Supabase.</p>
+    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{[["mandanti","Mandanti per cliente"],["followup","Follow-up preventivi"],["campioni","Campionature"]].map(([id,t])=><button key={id} style={{...btn,background:tab===id?"#344a43":"#fff",color:tab===id?"#fff":"#344a43"}} onClick={()=>setTab(id)}>{t}</button>)}</div>
+    {tab==="mandanti"&&<section style={panel}>
+      <h3 style={{marginTop:0}}>Marchi trattati dal cliente</h3>
+      <label style={label}>Cliente / architetto (esempio)</label><input style={input} value={cliente} onChange={e=>setCliente(e.target.value)}/>
+      <p style={{fontSize:12,color:"#66756d"}}>Ogni mandante può avere uno stato indipendente. Le modifiche qui sotto non alterano le anagrafiche reali.</p>
+      {Object.entries(marchi).map(([nome,stato])=><div key={nome} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:"1px solid #eef0ef",flexWrap:"wrap"}}><strong style={{flex:"1 1 150px"}}>{nome}</strong><select style={{...input,flex:"1 1 170px",width:"auto"}} value={stato} onChange={e=>setMarchi(m=>({...m,[nome]:e.target.value}))}>{["Gia cliente","In trattativa","Da proporre","Non interessato"].map(x=><option key={x}>{x}</option>)}</select><button style={btn} onClick={()=>setMarchi(m=>{const n={...m};delete n[nome];return n;})}>Rimuovi</button></div>)}
+      <div style={{display:"flex",gap:8,marginTop:15,flexWrap:"wrap"}}><select style={{...input,flex:"1 1 190px"}} value={nomeMarchio} onChange={e=>setNomeMarchio(e.target.value)}><option value="">Seleziona un mandante</option>{marchiDisponibili.filter(x=>!Object.hasOwn(marchi,x)).map(x=><option key={x}>{x}</option>)}</select><button style={btn} disabled={!nomeMarchio} onClick={()=>{setMarchi(m=>({...m,[nomeMarchio]:"Da proporre"}));setNomeMarchio("");}}>+ Associa mandante</button></div>
+    </section>}
+    {tab==="followup"&&<section style={panel}>
+      <h3 style={{marginTop:0}}>Follow-up dei preventivi</h3><p style={{fontSize:12,color:"#66756d"}}>Prototipo del registro: nella versione definitiva ogni riga sarà collegata al preventivo salvato.</p>
+      {followup.map(f=><div key={f.id} style={{padding:"12px 0",borderBottom:"1px solid #eef0ef",display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:10}}>
+        <div><label style={label}>Cliente</label><input style={input} value={f.cliente} onChange={e=>setFollowup(a=>a.map(x=>x.id===f.id?{...x,cliente:e.target.value}:x))}/></div>
+        <div><label style={label}>Oggetto</label><input style={input} value={f.oggetto} onChange={e=>setFollowup(a=>a.map(x=>x.id===f.id?{...x,oggetto:e.target.value}:x))}/></div>
+        <div><label style={label}>Stato</label><select style={input} value={f.stato} onChange={e=>setFollowup(a=>a.map(x=>x.id===f.id?{...x,stato:e.target.value}:x))}>{["Bozza","Inviato","Da ricontattare","In trattativa","Accettato","Perso"].map(x=><option key={x}>{x}</option>)}</select></div>
+        <div><label style={label}>Prossimo contatto</label><input style={input} type="date" value={f.data} onChange={e=>setFollowup(a=>a.map(x=>x.id===f.id?{...x,data:e.target.value}:x))}/></div>
+        <div style={{gridColumn:"1/-1"}}><label style={label}>Nota</label><input style={input} value={f.nota} onChange={e=>setFollowup(a=>a.map(x=>x.id===f.id?{...x,nota:e.target.value}:x))}/></div>
+      </div>)}
+      <button style={{...btn,marginTop:15}} onClick={()=>setFollowup(a=>[...a,{id:Date.now(),cliente:"",oggetto:"",stato:"Bozza",data:"",nota:""}])}>+ Aggiungi follow-up dimostrativo</button>
+    </section>}
+    {tab==="campioni"&&<section style={panel}>
+      <h3 style={{marginTop:0}}>Registro campionature ed esposizioni</h3>
+      {campioni.map(c=><div key={c.id} style={{padding:"12px 0",borderBottom:"1px solid #eef0ef",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}><div style={{flex:"1 1 220px"}}><strong>{c.descrizione}</strong><div style={{fontSize:12,color:"#66756d"}}>{c.cliente} · {c.mandante} · Q.tà {c.quantita}</div></div><select style={{...input,width:"auto"}} value={c.stato} onChange={e=>setCampioni(a=>a.map(x=>x.id===c.id?{...x,stato:e.target.value}:x))}>{["Da consegnare","Consegnato","In esposizione","Da recuperare","Recuperato"].map(x=><option key={x}>{x}</option>)}</select><button style={btn} onClick={()=>setCampioni(a=>a.filter(x=>x.id!==c.id))}>Rimuovi</button></div>)}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:10,marginTop:16}}>
+        {[['cliente','Cliente'],['mandante','Mandante'],['descrizione','Descrizione']].map(([k,t])=><div key={k}><label style={label}>{t}</label><input style={input} value={nuovo[k]} onChange={e=>setNuovo(n=>({...n,[k]:e.target.value}))}/></div>)}
+        <div><label style={label}>Quantità</label><input style={input} type="number" min="1" value={nuovo.quantita} onChange={e=>setNuovo(n=>({...n,quantita:e.target.value}))}/></div>
+      </div><button style={{...btn,marginTop:14}} disabled={!nuovo.cliente.trim()||!nuovo.descrizione.trim()} onClick={()=>{setCampioni(a=>[...a,{...nuovo,id:Date.now()}]);setNuovo({cliente:"",mandante:"",descrizione:"",quantita:1,stato:"Da consegnare"});}}>+ Registra campione dimostrativo</button>
+    </section>}
+    <p style={{fontSize:12,color:"#64716b",marginTop:15}}>Modalità laboratorio: ricaricando la pagina, i dati di prova vengono azzerati. Nessuna modifica al database.</p>
+  </div>;
+}
+
 function AppShell({ session, onLogout }) {
   const [ricercaGlobaleAperta,setRicercaGlobaleAperta]=useState(false);
   const [azioniRapideAperte,setAzioniRapideAperte]=useState(false);
@@ -3434,6 +3541,7 @@ function AppShell({ session, onLogout }) {
     {id:"agenda",nome:"Agenda",icon:CalendarDays,items:[{key:"agenda",label:"Pannello agenda",icon:CalendarDays},{key:"visite",label:"Calendario e appuntamenti",icon:CalendarDays},{key:"attivita",label:"Attività e follow-up",icon:ClipboardList},{key:"storico_visite",label:"Storico visite",icon:ClipboardList}]},
     {id:"report",nome:"Report",icon:BarChart3,items:[{key:"centro",label:"Centro operativo",icon:Target},{key:"controllo",label:"Controllo Commerciale",icon:Wallet},{key:"fatturato",label:"Fatturato (ordini CRM)",icon:Wallet},{key:"statistiche",label:"Statistiche",icon:TrendingUp}]},
     {id:"mandanti",nome:"Mandanti",icon:Building2,items:[{key:"aziende",label:"Aziende mandanti",icon:Building2}]},
+    {id:"laboratorio",nome:"Laboratorio",icon:Settings,items:[{key:"laboratorio",label:"Nuove funzioni (demo)",icon:Settings}]},
   ];  const scegli = key => { setPage(key); if(window.innerWidth<768)setMenuOpen(false); };
   const avatar=(session.user.email||"FG").split("@")[0].slice(0,2).toUpperCase();
   return <div className="matrice-shell"><StileRiferimentoFotoCRM/><style>{`
@@ -3479,7 +3587,8 @@ function AppShell({ session, onLogout }) {
         {page==="attivita"&&<AttivitaCRM session={session}/>}
         {page==="clienti"&&<ClientiAnagrafica session={session} apriPreventivo={apriPreventivoCliente} apriGruppo={apriGruppoCliente}/>}
         {page==="architetti"&&<ClientiAnagrafica soloArchitetti session={session} apriPreventivo={apriPreventivoCliente} apriGruppo={apriGruppoCliente}/>}
-        {page==="visite"&&<CalendarioVisite session={session}/>}
+        {page==="laboratorio"&&<LaboratorioCommercialeCRM/>}
+        {page==="visite"&&<CalendarioVisite session={session}/>} 
         {page==="storico_visite"&&<StoricoVisiteCRM session={session}/>}
         {page==="note"&&<NoteCRM session={session}/>}
         {page==="pipeline"&&<PipelineCommerciale session={session} preventivoDaConvertire={preventivoDaConvertire} onPreventivoRicevuto={()=>setPreventivoDaConvertire(null)}/>}
