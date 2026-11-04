@@ -216,64 +216,186 @@ function generaStampaHTML(preventivo, clienti, aziende) {
     "</body></html>";
 }
 
+// PDF A4 vettoriale: testo e tabelle multipagina, senza screenshot HTML.
 let crmPdfLoader = null;
-function caricaHtml2Pdf() {
-  if (window.html2pdf) return Promise.resolve(window.html2pdf);
-  if (!crmPdfLoader) crmPdfLoader = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
-    script.onload = () => window.html2pdf ? resolve(window.html2pdf) : reject(new Error("Libreria PDF non disponibile"));
-    script.onerror = () => reject(new Error("Impossibile caricare il generatore PDF. Controlla la connessione."));
-    document.head.appendChild(script);
-  }).catch(err => { crmPdfLoader = null; throw err; });
+function caricaLibreriePdf() {
+  if (window.jspdf?.jsPDF && window.jspdf.jsPDF.API.autoTable) return Promise.resolve(window.jspdf.jsPDF);
+  if (!crmPdfLoader) {
+    const carica = (src) => new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = src;
+      script.onload = resolve;
+      script.onerror = () => reject(new Error("Impossibile caricare la libreria PDF. Controlla la connessione."));
+      document.head.appendChild(script);
+    });
+    crmPdfLoader = (async () => {
+      if (!window.jspdf?.jsPDF) await carica("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js");
+      if (!window.jspdf?.jsPDF?.API?.autoTable) await carica("https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js");
+      if (!window.jspdf?.jsPDF?.API?.autoTable) throw new Error("Generatore tabella PDF non disponibile");
+      return window.jspdf.jsPDF;
+    })().catch(err => { crmPdfLoader = null; throw err; });
+  }
   return crmPdfLoader;
 }
-async function stampaPreventivo(preventivo, clienti, aziende) {
-  // Generazione PDF diretta: niente window.open, che blocca le PWA iOS.
-  const html = generaStampaHTML(preventivo, clienti, aziende);
-  const nomeFile = "Preventivo_" + String(preventivo.rif || preventivo.id || "CRM").replace(/[^a-z0-9_-]/gi, "_") + ".pdf";
-  // html2canvas su iOS può produrre pagine bianche se il contenuto è fuori schermo.
-  // Il documento è quindi renderizzato in un contenitore temporaneo VISIBILE.
-  const overlay = document.createElement("div");
-  Object.assign(overlay.style, {
-    position: "fixed", inset: "0", zIndex: "2147483647", background: "#fff",
-    overflow: "auto", WebkitOverflowScrolling: "touch"
-  });
-  const host = document.createElement("div");
-  Object.assign(host.style, {
-    position: "relative", left: "0", top: "0", width: "794px",
-    minHeight: "1123px", background: "#ffffff", color: "#1a1a1a",
-    boxSizing: "border-box", overflow: "visible"
-  });
-  const doc = new DOMParser().parseFromString(html, "text/html");
-  host.innerHTML = doc.body.innerHTML;
-  const css = doc.querySelector("style");
-  if (css) host.prepend(css.cloneNode(true));
-  overlay.appendChild(host);
-  document.body.appendChild(overlay);
-  // Lascia completare il layout prima della cattura.
-  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-  if (document.fonts?.ready) await document.fonts.ready;
-  await Promise.all(Array.from(host.querySelectorAll("img")).map(img => {
-    if (img.complete) return Promise.resolve();
-    return new Promise(resolve => { img.onload = resolve; img.onerror = resolve; setTimeout(resolve, 4000); });
-  }));
+function testoPdf(value) {
+  return String(value ?? "").replace(/[\u0000-\u001f]/g, " ").trim();
+}
+function dataPdf(value) {
+  if (!value) return "";
+  const iso = String(value).slice(0, 10);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : testoPdf(value);
+}
+async function immaginePdf(url) {
+  if (!url || typeof url !== "string") return null;
   try {
-    const pdf = await caricaHtml2Pdf();
-    const blob = await pdf().set({ margin:8, filename:nomeFile, image:{type:"jpeg",quality:0.98}, html2canvas:{scale:2,backgroundColor:"#ffffff",useCORS:true,scrollX:0,scrollY:0,windowWidth:794}, jsPDF:{unit:"mm",format:"a4",orientation:"portrait"}, pagebreak:{mode:["css","legacy"]} }).from(host).outputPdf("blob");
-    if (!blob || blob.size < 1500) throw new Error("PDF generato non valido o vuoto");
-    overlay.remove();
-    const file = new File([blob], nomeFile, { type:"application/pdf" });
-    if (navigator.share && navigator.canShare && navigator.canShare({files:[file]})) {
-      try { await navigator.share({files:[file],title:nomeFile}); return; }
-      catch(e) { if (e.name === "AbortError") return; }
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = url;
+    await new Promise((resolve, reject) => {
+      if (img.complete) return img.naturalWidth ? resolve() : reject(new Error("Immagine non valida"));
+      img.onload = resolve;
+      img.onerror = reject;
+      setTimeout(() => reject(new Error("Timeout immagine")), 6000);
+    });
+    const canvas = document.createElement("canvas");
+    const max = 420;
+    const ratio = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    canvas.width = Math.max(1, Math.round(img.naturalWidth * ratio));
+    canvas.height = Math.max(1, Math.round(img.naturalHeight * ratio));
+    canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+    return { data: canvas.toDataURL("image/jpeg", 0.82), width: canvas.width, height: canvas.height };
+  } catch { return null; } // URL esterni senza CORS: il PDF rimane utilizzabile.
+}
+async function stampaPreventivo(preventivo, clienti, aziende) {
+  const nomeFile = "Preventivo_" + String(preventivo.rif || preventivo.id || "CRM").replace(/[^a-z0-9_-]/gi, "_") + ".pdf";
+  try {
+    const JsPDF = await caricaLibreriePdf();
+    const doc = new JsPDF({ orientation: "landscape", unit: "mm", format: "a4", compress: true });
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const margin = 13;
+    const cliente = clienti.find(c => c.id === preventivo.cliente_id);
+    const azienda = aziende.find(a => a.id === preventivo.azienda_id);
+    const righe = Array.isArray(preventivo.righe) ? preventivo.righe : [];
+    const tot = calcolaTotaliPreventivo(preventivo, righe);
+    const soloNetto = preventivo.modalita_prezzi_pdf === "solo_netto";
+    const immagini = await Promise.all(righe.map(r => immaginePdf(r.immagine_url)));
+    const haImmagini = righe.some((r, i) => Boolean(r.immagine_url && immagini[i]));
+    const navy = [25, 43, 67];
+    const muted = [95, 105, 119];
+    const drawHeader = () => {
+      doc.setTextColor(...navy);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(16);
+      doc.text("CRM ARREDO BAGNO", margin, 16);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(...muted);
+      doc.text("Francesco Gomiero  |  Preventivo commerciale", margin, 22);
+      doc.setDrawColor(204, 211, 221); doc.line(margin, 26, pageW - margin, 26);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(...navy);
+      doc.text("PREVENTIVO", margin, 36);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+      doc.text("Rif.: " + testoPdf(preventivo.rif || "—"), pageW - margin, 33, { align: "right" });
+      doc.text("Data: " + dataPdf(preventivo.data), pageW - margin, 39, { align: "right" });
+      doc.setFontSize(8.5); doc.setTextColor(...muted);
+      doc.text("CLIENTE", margin, 44);
+      doc.text("MANDANTE", pageW / 2, 44);
+      doc.setTextColor(...navy); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+      const clienteNome = testoPdf(cliente?.ragione_sociale || preventivo.cliente_manuale || "—");
+      doc.text(doc.splitTextToSize(clienteNome, 120).slice(0, 2), margin, 50);
+      doc.text(doc.splitTextToSize(testoPdf(azienda?.nome || "—"), 120).slice(0, 2), pageW / 2, 50);
+      doc.setDrawColor(218, 224, 232); doc.line(margin, 60, pageW - margin, 60);
+    };
+    const head = [[...(haImmagini ? ["Img"] : []), "RIF / Articolo", "Descrizione", "Finitura", "UM", "Qtà", ...(soloNetto ? [] : ["Listino €", "Sconto"]), "Netto un. €", "Totale €"]];
+    const body = righe.map((r, i) => {
+      const qta = Number(r.quantita) || 0;
+      const { netto } = calcolaRigaNetto(r);
+      const sconti = [r.sconto1, r.sconto2, r.sconto3].map(v => Number(v) || 0).filter(Boolean).map(v => formattaNumero(v).replace(/,00$/, "") + "%").join(" + ") || "—";
+      return [ ...(haImmagini ? [""] : []), testoPdf(r.articolo), testoPdf(r.descrizione), testoPdf(r.finitura), testoPdf(r.unita_misura), testoPdf(r.quantita), ...(soloNetto ? [] : [formattaNumero(r.prezzo_unitario), sconti]), formattaNumero(qta ? netto / qta : netto), formattaNumero(netto) ];
+    });
+    const widths = haImmagini
+      ? (soloNetto ? [20, 31, 91, 42, 12, 13, 28, 31] : [20, 29, 67, 35, 11, 12, 26, 27, 25, 19])
+      : (soloNetto ? [34, 104, 47, 14, 14, 30, 28] : [31, 83, 38, 12, 13, 27, 27, 25, 15]);
+    const columnStyles = Object.fromEntries(widths.map((cellWidth, i) => [i, { cellWidth }]));
+    // Lascia spazio per il riepilogo nella pagina finale; autoTable ripete le intestazioni.
+    doc.autoTable({
+      head, body, startY: 65, margin: { left: margin, right: margin, top: 65, bottom: 20 },
+      theme: "grid", showHead: "everyPage", rowPageBreak: "avoid",
+      styles: { font: "helvetica", fontSize: 8, textColor: navy, lineColor: [224, 229, 235], lineWidth: 0.16, cellPadding: 2.4, overflow: "linebreak", valign: "middle" },
+      headStyles: { fillColor: navy, textColor: 255, fontStyle: "bold", fontSize: 8 },
+      alternateRowStyles: { fillColor: [248, 250, 253] }, columnStyles,
+      didParseCell: data => {
+        if (haImmagini && data.section === "body" && data.column.index === 0 && immagini[data.row.index]) {
+          data.cell.styles.minCellHeight = 22;
+        }
+      },
+      didDrawCell: data => {
+        if (!haImmagini || data.section !== "body" || data.column.index !== 0) return;
+        const pic = immagini[data.row.index]; if (!pic) return;
+        const maxW = data.cell.width - 4, maxH = data.cell.height - 4;
+        const scale = Math.min(maxW / pic.width, maxH / pic.height);
+        const w = pic.width * scale, h = pic.height * scale;
+        doc.addImage(pic.data, "JPEG", data.cell.x + (data.cell.width - w) / 2, data.cell.y + (data.cell.height - h) / 2, w, h);
+      },
+      didDrawPage: () => drawHeader(),
+    });
+    let y = (doc.lastAutoTable?.finalY || 65) + 10;
+    const summary = [
+      ["Totale netto merce", formattaNumero(tot.totaleNetto) + " €"],
+    ];
+    function voce(label, modalita, valore, grezzo) {
+      if (modalita === "nascosto") return;
+      if (modalita === "escluso") summary.push([label, "Escluso"]);
+      else if (modalita === "euro" && grezzo !== undefined && grezzo !== "" && isNaN(parseFloat(String(grezzo).replace(",", ".")))) summary.push([label, testoPdf(grezzo)]);
+      else summary.push([label, formattaNumero(valore) + " €"]);
+    }
+    voce("Imballo", preventivo.imballo_modalita, tot.valoreImballo, preventivo.imballo_valore);
+    voce("Trasporto", preventivo.trasporto_modalita, tot.valoreTrasporto, preventivo.trasporto_valore);
+    voce("IVA", preventivo.iva_modalita, tot.valoreIva, preventivo.iva_valore);
+    summary.push(["TOTALE PREVENTIVO", formattaNumero(tot.totaleFinale) + " €"]);
+    const noteLines = [
+      ...(preventivo.modalita_pagamento ? ["Pagamento: " + testoPdf(preventivo.modalita_pagamento)] : []),
+      ...(preventivo.note ? ["Note: " + testoPdf(preventivo.note)] : []),
+    ];
+    const noteHeight = noteLines.reduce((h, t) => h + doc.splitTextToSize(t, pageW - 2 * margin).length * 4.2 + 3, 0);
+    const summaryHeight = summary.length * 7 + 9;
+    if (y + summaryHeight + noteHeight > pageH - 16) { doc.addPage(); drawHeader(); y = 66; }
+    const x = pageW - margin - 106;
+    summary.forEach(([label, value], i) => {
+      const last = i === summary.length - 1;
+      if (last) { doc.setFillColor(...navy); doc.rect(x - 3, y - 4, 109, 9, "F"); doc.setTextColor(255); }
+      else { doc.setTextColor(...navy); }
+      doc.setFont("helvetica", last ? "bold" : "normal"); doc.setFontSize(last ? 10 : 8.5);
+      doc.text(label, x, y + 1);
+      doc.text(value, pageW - margin - 2, y + 1, { align: "right" });
+      y += 8;
+    });
+    y += 7;
+    doc.setFont("helvetica", "normal"); doc.setTextColor(...navy); doc.setFontSize(8.5);
+    noteLines.forEach(t => {
+      const lines = doc.splitTextToSize(t, pageW - 2 * margin);
+      if (y + lines.length * 4.2 > pageH - 14) { doc.addPage(); drawHeader(); y = 66; }
+      doc.text(lines, margin, y); y += lines.length * 4.2 + 3;
+    });
+    const pages = doc.internal.getNumberOfPages();
+    for (let p = 1; p <= pages; p++) {
+      doc.setPage(p); doc.setTextColor(...muted); doc.setFontSize(8);
+      doc.text(`Pagina ${p} di ${pages}`, pageW - margin, pageH - 7, { align: "right" });
+    }
+    const blob = doc.output("blob");
+    if (!blob || blob.size < 1200) throw new Error("PDF generato non valido");
+    const file = new File([blob], nomeFile, { type: "application/pdf" });
+    if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: nomeFile }); return; }
+      catch (e) { if (e.name === "AbortError") return; }
     }
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href=url; a.download=nomeFile;
+    const a = document.createElement("a"); a.href = url; a.download = nomeFile;
     document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url),60000);
-  } catch(err) { alert("Esportazione PDF non riuscita: " + (err.message || err) + ". Apri temporaneamente il CRM da Safari per esportare."); }
-  finally { overlay.remove(); }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (err) {
+    console.error("Errore generazione preventivo PDF", err);
+    alert("Esportazione PDF non riuscita: " + (err.message || err));
+  }
 }
 
 function LoginScreen({ onLogin }) {
