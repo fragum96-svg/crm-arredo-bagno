@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import Papa from "papaparse";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area,
@@ -98,7 +100,7 @@ async function caricaFileStorage(session, bucket, path, file) {
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.message || "Errore nel caricamento del file");
+    throw new Error("Storage HTTP " + res.status + ": " + (data.message || data.error || "Errore nel caricamento del file"));
   }
   return path;
 }
@@ -217,26 +219,8 @@ function generaStampaHTML(preventivo, clienti, aziende) {
 }
 
 // PDF A4 vettoriale: testo e tabelle multipagina, senza screenshot HTML.
-let crmPdfLoader = null;
-function caricaLibreriePdf() {
-  if (window.jspdf?.jsPDF && window.jspdf.jsPDF.API.autoTable) return Promise.resolve(window.jspdf.jsPDF);
-  if (!crmPdfLoader) {
-    const carica = (src) => new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = src;
-      script.onload = resolve;
-      script.onerror = () => reject(new Error("Impossibile caricare la libreria PDF. Controlla la connessione."));
-      document.head.appendChild(script);
-    });
-    crmPdfLoader = (async () => {
-      if (!window.jspdf?.jsPDF) await carica("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js");
-      if (!window.jspdf?.jsPDF?.API?.autoTable) await carica("https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js");
-      if (!window.jspdf?.jsPDF?.API?.autoTable) throw new Error("Generatore tabella PDF non disponibile");
-      return window.jspdf.jsPDF;
-    })().catch(err => { crmPdfLoader = null; throw err; });
-  }
-  return crmPdfLoader;
-}
+// Librerie PDF incluse nel bundle Vite: nessuna dipendenza da CDN durante l'esportazione.
+function caricaLibreriePdf() { return Promise.resolve(jsPDF); }
 function testoPdf(value) {
   return String(value ?? "").replace(/[\u0000-\u001f]/g, " ").trim();
 }
@@ -317,7 +301,7 @@ async function stampaPreventivo(preventivo, clienti, aziende) {
       : (soloNetto ? [34, 104, 47, 14, 14, 30, 28] : [31, 83, 38, 12, 13, 27, 27, 25, 15]);
     const columnStyles = Object.fromEntries(widths.map((cellWidth, i) => [i, { cellWidth }]));
     // Lascia spazio per il riepilogo nella pagina finale; autoTable ripete le intestazioni.
-    doc.autoTable({
+    autoTable(doc, {
       head, body, startY: 65, margin: { left: margin, right: margin, top: 65, bottom: 20 },
       theme: "grid", showHead: "everyPage", rowPageBreak: "avoid",
       styles: { font: "helvetica", fontSize: 8, textColor: navy, lineColor: [224, 229, 235], lineWidth: 0.16, cellPadding: 2.4, overflow: "linebreak", valign: "middle" },
@@ -1684,7 +1668,10 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
   const caricaImmagineRiga = async (rigaId, file) => {
     setCaricandoImmagine(rigaId);
     try {
-      const path = "preventivi/" + Date.now() + "_" + file.name;
+      if (!file.type.startsWith("image/")) throw new Error("Seleziona un file immagine.");
+      if (file.size > 8 * 1024 * 1024) throw new Error("Immagine troppo grande: massimo 8 MB.");
+      const estensione = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+      const path = "preventivi/" + Date.now() + "_" + Math.random().toString(36).slice(2, 10) + "." + estensione;
       await caricaFileStorage(session, "documenti-clienti", path, file);
       aggiornaRiga(rigaId, "immagine_url", urlPubblicoStorage("documenti-clienti", path));
     } catch (err) { setError("Errore nel caricamento immagine: " + err.message); } finally { setCaricandoImmagine(null); }
