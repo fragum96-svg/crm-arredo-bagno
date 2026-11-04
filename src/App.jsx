@@ -100,9 +100,41 @@ async function caricaFileStorage(session, bucket, path, file) {
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error("Storage HTTP " + res.status + ": " + (data.message || data.error || "Errore nel caricamento del file"));
+    throw new Error("Storage HTTP " + res.status + ": " + (data.message || data.error || "Errore nel caricamento del file") + (res.status === 400 && String(data.message || "").toLowerCase().includes("bucket not found") ? ". Il bucket documenti-clienti non esiste in questo progetto Supabase: va creato in Storage." : ""));
   }
   return path;
+}
+// Le immagini dei preventivi sono nel bucket privato: usare URL firmati, mai URL pubblici.
+function percorsoImmaginePrivata(value) {
+  if (!value || typeof value !== "string") return null;
+  if (value.startsWith("storage:")) return value.slice(8);
+  const prefix = SUPABASE_URL + "/storage/v1/object/public/documenti-clienti/";
+  if (value.startsWith(prefix)) return decodeURIComponent(value.slice(prefix.length).split("?")[0]);
+  return null;
+}
+async function urlImmagineAutorizzata(session, value) {
+  const path = percorsoImmaginePrivata(value);
+  if (!path) return value;
+  if (!session?.access_token) throw new Error("Sessione scaduta: accedi nuovamente al CRM");
+  const res = await fetch(SUPABASE_URL + "/storage/v1/object/sign/documenti-clienti/" + path.split("/").map(encodeURIComponent).join("/"), {
+    method: "POST",
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token, "Content-Type": "application/json" },
+    body: JSON.stringify({ expiresIn: 3600 }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !json.signedURL) throw new Error("Impossibile leggere l'immagine privata: " + (json.message || res.status));
+  const signed = json.signedURL;
+  return signed.startsWith("http") ? signed : SUPABASE_URL + (signed.startsWith("/storage/v1/") ? signed : "/storage/v1" + (signed.startsWith("/") ? signed : "/" + signed));
+}
+function ImmaginePreventivo({ session, value, style }) {
+  const [url, setUrl] = useState("");
+  useEffect(() => {
+    let attivo = true;
+    setUrl("");
+    if (value) urlImmagineAutorizzata(session, value).then(u => { if (attivo) setUrl(u); }).catch(err => console.warn("Immagine preventivo", err));
+    return () => { attivo = false; };
+  }, [value, session?.access_token]);
+  return url ? <img src={url} alt="Articolo" style={style} /> : <span title="Immagine in caricamento" style={{ display: "inline-block", width: style?.width || 32, height: style?.height || 32, background: "#f1f5f9", borderRadius: 4 }} />;
 }
 function urlPubblicoStorage(bucket, path) {
   return SUPABASE_URL + "/storage/v1/object/public/" + bucket + "/" + path;
@@ -132,9 +164,22 @@ function getWeekDays(date) {
 function nuovaRiga() {
   return {
     id: Math.random().toString(36).slice(2), articolo: "", descrizione: "", finitura: "",
-    quantita: 1, unita_misura: "", prezzo_unitario: 0, sconto1: 0, sconto2: 0, sconto3: 0,
+    quantita: 1, unita_misura: "PZ", prezzo_unitario: 0, sconto1: "", sconto2: "", sconto3: "",
     prezzo_netto_manuale: "", immagine_url: "",
   };
+}
+const UNITA_MISURA_PREVENTIVO = ["PZ", "MQ", "ML", "NR", "KG", "ALTRO"];
+function SelettoreUnitaPreventivo({ value, onChange, style }) {
+  const corrente = String(value || "").toUpperCase();
+  const standard = UNITA_MISURA_PREVENTIVO.includes(corrente) && corrente !== "ALTRO";
+  const [personalizzato, setPersonalizzato] = useState(false);
+  const altro = personalizzato || (!!corrente && !standard);
+  return <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+    <select aria-label="Unità di misura" value={altro ? "ALTRO" : (corrente || "PZ")} onChange={e => { if (e.target.value === "ALTRO") { setPersonalizzato(true); onChange(""); } else { setPersonalizzato(false); onChange(e.target.value); } }} style={style}>
+      {UNITA_MISURA_PREVENTIVO.map(u => <option key={u} value={u}>{u}</option>)}
+    </select>
+    {altro && <input aria-label="Unità personalizzata" placeholder="Unità personalizzata" value={value || ""} onChange={e => onChange(e.target.value)} style={style} />}
+  </div>;
 }
 function calcolaRigaNetto(riga) {
   const qta = Number(riga.quantita) || 0;
@@ -218,6 +263,7 @@ function generaStampaHTML(preventivo, clienti, aziende) {
     "</body></html>";
 }
 
+const CONTATTI_AGENTE = { email: "francesco.gomiero96@gmail.com", telefono: "+39 3342428133" };
 // PDF A4 vettoriale: testo e tabelle multipagina, senza screenshot HTML.
 // Librerie PDF incluse nel bundle Vite: nessuna dipendenza da CDN durante l'esportazione.
 function caricaLibreriePdf() { return Promise.resolve(jsPDF); }
@@ -251,7 +297,7 @@ async function immaginePdf(url) {
     return { data: canvas.toDataURL("image/jpeg", 0.82), width: canvas.width, height: canvas.height };
   } catch { return null; } // URL esterni senza CORS: il PDF rimane utilizzabile.
 }
-async function stampaPreventivo(preventivo, clienti, aziende) {
+async function stampaPreventivo(preventivo, clienti, aziende, session, onAnteprima = null) {
   const nomeFile = "Preventivo_" + String(preventivo.rif || preventivo.id || "CRM").replace(/[^a-z0-9_-]/gi, "_") + ".pdf";
   try {
     const JsPDF = await caricaLibreriePdf();
@@ -264,16 +310,20 @@ async function stampaPreventivo(preventivo, clienti, aziende) {
     const righe = Array.isArray(preventivo.righe) ? preventivo.righe : [];
     const tot = calcolaTotaliPreventivo(preventivo, righe);
     const soloNetto = preventivo.modalita_prezzi_pdf === "solo_netto";
-    const immagini = await Promise.all(righe.map(r => immaginePdf(r.immagine_url)));
+    const immagini = await Promise.all(righe.map(async r => {
+      if (!r.immagine_url) return null;
+      try { return await immaginePdf(await urlImmagineAutorizzata(session, r.immagine_url)); }
+      catch (err) { console.warn("Immagine non disponibile nel PDF", err); return null; }
+    }));
     const haImmagini = righe.some((r, i) => Boolean(r.immagine_url && immagini[i]));
     const navy = [25, 43, 67];
     const muted = [95, 105, 119];
     const drawHeader = () => {
       doc.setTextColor(...navy);
       doc.setFont("helvetica", "bold"); doc.setFontSize(16);
-      doc.text("CRM ARREDO BAGNO", margin, 16);
+      doc.text(testoPdf(azienda?.nome || "PREVENTIVO"), margin, 16);
       doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(...muted);
-      doc.text("Francesco Gomiero  |  Preventivo commerciale", margin, 22);
+      doc.text("Agente Francesco Gomiero" + (CONTATTI_AGENTE.email ? "  |  " + CONTATTI_AGENTE.email : "") + (CONTATTI_AGENTE.telefono ? "  |  " + CONTATTI_AGENTE.telefono : ""), margin, 22);
       doc.setDrawColor(204, 211, 221); doc.line(margin, 26, pageW - margin, 26);
       doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(...navy);
       doc.text("PREVENTIVO", margin, 36);
@@ -282,14 +332,14 @@ async function stampaPreventivo(preventivo, clienti, aziende) {
       doc.text("Data: " + dataPdf(preventivo.data), pageW - margin, 39, { align: "right" });
       doc.setFontSize(8.5); doc.setTextColor(...muted);
       doc.text("CLIENTE", margin, 44);
-      doc.text("MANDANTE", pageW / 2, 44);
+      doc.text("CONDIZIONI DI PAGAMENTO", pageW / 2, 44);
       doc.setTextColor(...navy); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
       const clienteNome = testoPdf(cliente?.ragione_sociale || preventivo.cliente_manuale || "—");
       doc.text(doc.splitTextToSize(clienteNome, 120).slice(0, 2), margin, 50);
-      doc.text(doc.splitTextToSize(testoPdf(azienda?.nome || "—"), 120).slice(0, 2), pageW / 2, 50);
+      doc.text(doc.splitTextToSize(testoPdf(preventivo.modalita_pagamento || "Da concordare"), 120).slice(0, 2), pageW / 2, 50);
       doc.setDrawColor(218, 224, 232); doc.line(margin, 60, pageW - margin, 60);
     };
-    const head = [[...(haImmagini ? ["Img"] : []), "RIF / Articolo", "Descrizione", "Finitura", "UM", "Qtà", ...(soloNetto ? [] : ["Listino €", "Sconto"]), "Netto un. €", "Totale €"]];
+    const head = [[...(haImmagini ? ["Img"] : []), "Articolo", "Descrizione", "Finitura", "UM", "Qtà", ...(soloNetto ? [] : ["Listino €", "Sconto"]), "Netto un. €", "Totale €"]];
     const body = righe.map((r, i) => {
       const qta = Number(r.quantita) || 0;
       const { netto } = calcolaRigaNetto(r);
@@ -367,6 +417,7 @@ async function stampaPreventivo(preventivo, clienti, aziende) {
     }
     const blob = doc.output("blob");
     if (!blob || blob.size < 1200) throw new Error("PDF generato non valido");
+    if (onAnteprima) { onAnteprima({ url: URL.createObjectURL(blob), nomeFile }); return; }
     const file = new File([blob], nomeFile, { type: "application/pdf" });
     if (navigator.share && navigator.canShare?.({ files: [file] })) {
       try { await navigator.share({ files: [file], title: nomeFile }); return; }
@@ -1611,6 +1662,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
   const [editingId, setEditingId] = useState(null);
   const [suggerimenti, setSuggerimenti] = useState({});
   const [caricandoImmagine, setCaricandoImmagine] = useState(null);
+  const [anteprimaPdf, setAnteprimaPdf] = useState(null);
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" && window.innerWidth < 768);
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 768);
@@ -1635,7 +1687,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
       const results = await Promise.all([
         fetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale&order=ragione_sociale.asc", { headers: headers() }),
         fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome&order=nome.asc", { headers: headers() }),
-        fetch(SUPABASE_URL + "/rest/v1/preventivi?select=*&order=data.desc", { headers: headers() }),
+        fetch(SUPABASE_URL + "/rest/v1/preventivi?select=*&order=created_at.desc", { headers: headers() }),
       ]);
       const dataClienti = await results[0].json();
       const dataAziende = await results[1].json();
@@ -1643,7 +1695,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
       if (results[0].ok) setClienti(dataClienti);
       if (results[1].ok) setAziende(dataAziende);
       if (!results[2].ok) throw new Error(dataPreventivi.message || "Errore nel caricamento");
-      setLista(dataPreventivi);
+      setLista([...dataPreventivi].sort((a,b) => new Date(b.created_at || b.data || 0) - new Date(a.created_at || a.data || 0)));
     } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
@@ -1673,7 +1725,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
       const estensione = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
       const path = "preventivi/" + Date.now() + "_" + Math.random().toString(36).slice(2, 10) + "." + estensione;
       await caricaFileStorage(session, "documenti-clienti", path, file);
-      aggiornaRiga(rigaId, "immagine_url", urlPubblicoStorage("documenti-clienti", path));
+      aggiornaRiga(rigaId, "immagine_url", "storage:" + path);
     } catch (err) { setError("Errore nel caricamento immagine: " + err.message); } finally { setCaricandoImmagine(null); }
   };
 
@@ -1809,20 +1861,20 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
                   <input value={riga.finitura} onChange={(e) => aggiornaRiga(riga.id, "finitura", e.target.value)} style={campoMobile} />
                   <div style={{ display: "flex", gap: 8 }}>
                     <div style={{ flex: 1 }}><label style={rigaLabel}>Qtà</label><input type="number" value={riga.quantita} onChange={(e) => aggiornaRiga(riga.id, "quantita", e.target.value)} style={campoMobile} /></div>
-                    <div style={{ flex: 1 }}><label style={rigaLabel}>U.M. (MQ/ML)</label><input placeholder="es. MQ" value={riga.unita_misura} onChange={(e) => aggiornaRiga(riga.id, "unita_misura", e.target.value)} style={campoMobile} /></div>
+                    <div style={{ flex: 1 }}><label style={rigaLabel}>U.M. (MQ/ML)</label><SelettoreUnitaPreventivo value={riga.unita_misura} onChange={v => aggiornaRiga(riga.id, "unita_misura", v)} style={campoMobile} /></div>
                     <div style={{ flex: 1 }}><label style={rigaLabel}>Prezzo un.</label><input type="number" value={riga.prezzo_unitario} onChange={(e) => aggiornaRiga(riga.id, "prezzo_unitario", e.target.value)} style={campoMobile} /></div>
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
-                    <div style={{ flex: 1 }}><label style={rigaLabel}>Sc.1 %</label><input type="number" value={riga.sconto1} onChange={(e) => aggiornaRiga(riga.id, "sconto1", e.target.value)} style={campoMobile} /></div>
-                    <div style={{ flex: 1 }}><label style={rigaLabel}>Sc.2 %</label><input type="number" value={riga.sconto2} onChange={(e) => aggiornaRiga(riga.id, "sconto2", e.target.value)} style={campoMobile} /></div>
-                    <div style={{ flex: 1 }}><label style={rigaLabel}>Sc.3 %</label><input type="number" value={riga.sconto3} onChange={(e) => aggiornaRiga(riga.id, "sconto3", e.target.value)} style={campoMobile} /></div>
+                    <div style={{ flex: 1 }}><label style={rigaLabel}>Sc.1 %</label><input type="number" value={riga.sconto1 === 0 || riga.sconto1 == null ? "" : riga.sconto1} onChange={(e) => aggiornaRiga(riga.id, "sconto1", e.target.value)} style={campoMobile} /></div>
+                    <div style={{ flex: 1 }}><label style={rigaLabel}>Sc.2 %</label><input type="number" value={riga.sconto2 === 0 || riga.sconto2 == null ? "" : riga.sconto2} onChange={(e) => aggiornaRiga(riga.id, "sconto2", e.target.value)} style={campoMobile} /></div>
+                    <div style={{ flex: 1 }}><label style={rigaLabel}>Sc.3 %</label><input type="number" value={riga.sconto3 === 0 || riga.sconto3 == null ? "" : riga.sconto3} onChange={(e) => aggiornaRiga(riga.id, "sconto3", e.target.value)} style={campoMobile} /></div>
                   </div>
                   <label style={rigaLabel}>Netto unitario manuale (opzionale)</label>
                   <input type="number" placeholder="prezzo netto per singolo pezzo" value={riga.prezzo_netto_manuale} onChange={(e) => aggiornaRiga(riga.id, "prezzo_netto_manuale", e.target.value)} style={campoMobile} />
                   <label style={rigaLabel}>Immagine articolo (opzionale)</label>
                   {riga.immagine_url ? (
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                      <img src={riga.immagine_url} alt="" style={{ width: 60, height: 60, objectFit: "cover", borderRadius: 8, border: "1px solid " + COLORS.border }} />
+                      <ImmaginePreventivo session={session} value={riga.immagine_url} style={{ width: 60, height: 60, objectFit: "cover", borderRadius: 8, border: "1px solid " + COLORS.border }} />
                       <button onClick={() => aggiornaRiga(riga.id, "immagine_url", "")} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 12 }}>Rimuovi</button>
                     </div>
                   ) : (
@@ -1859,16 +1911,16 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
                     <td style={{ padding: 4 }} data-label="Descrizione"><input value={riga.descrizione} onChange={(e) => aggiornaRiga(riga.id, "descrizione", e.target.value)} style={{ ...inputStyle, width: 150 }} /></td>
                     <td style={{ padding: 4 }} data-label="Finitura"><input value={riga.finitura} onChange={(e) => aggiornaRiga(riga.id, "finitura", e.target.value)} style={{ ...inputStyle, width: 70 }} /></td>
                     <td style={{ padding: 4 }} data-label="Qtà"><input type="number" value={riga.quantita} onChange={(e) => aggiornaRiga(riga.id, "quantita", e.target.value)} style={{ ...inputStyle, width: 45 }} /></td>
-                    <td style={{ padding: 4 }} data-label="U.M."><input placeholder="MQ/ML" value={riga.unita_misura} onChange={(e) => aggiornaRiga(riga.id, "unita_misura", e.target.value)} style={{ ...inputStyle, width: 50 }} /></td>
+                    <td style={{ padding: 4 }} data-label="U.M."><SelettoreUnitaPreventivo value={riga.unita_misura} onChange={v => aggiornaRiga(riga.id, "unita_misura", v)} style={{ ...inputStyle, width: 65 }} /></td>
                     <td style={{ padding: 4 }} data-label="Prezzo un."><input type="number" value={riga.prezzo_unitario} onChange={(e) => aggiornaRiga(riga.id, "prezzo_unitario", e.target.value)} style={{ ...inputStyle, width: 65 }} /></td>
-                    <td style={{ padding: 4 }} data-label="Sc.1 %"><input type="number" value={riga.sconto1} onChange={(e) => aggiornaRiga(riga.id, "sconto1", e.target.value)} style={{ ...inputStyle, width: 50 }} /></td>
-                    <td style={{ padding: 4 }} data-label="Sc.2 %"><input type="number" value={riga.sconto2} onChange={(e) => aggiornaRiga(riga.id, "sconto2", e.target.value)} style={{ ...inputStyle, width: 50 }} /></td>
-                    <td style={{ padding: 4 }} data-label="Sc.3 %"><input type="number" value={riga.sconto3} onChange={(e) => aggiornaRiga(riga.id, "sconto3", e.target.value)} style={{ ...inputStyle, width: 50 }} /></td>
+                    <td style={{ padding: 4 }} data-label="Sc.1 %"><input type="number" value={riga.sconto1 === 0 || riga.sconto1 == null ? "" : riga.sconto1} onChange={(e) => aggiornaRiga(riga.id, "sconto1", e.target.value)} style={{ ...inputStyle, width: 50 }} /></td>
+                    <td style={{ padding: 4 }} data-label="Sc.2 %"><input type="number" value={riga.sconto2 === 0 || riga.sconto2 == null ? "" : riga.sconto2} onChange={(e) => aggiornaRiga(riga.id, "sconto2", e.target.value)} style={{ ...inputStyle, width: 50 }} /></td>
+                    <td style={{ padding: 4 }} data-label="Sc.3 %"><input type="number" value={riga.sconto3 === 0 || riga.sconto3 == null ? "" : riga.sconto3} onChange={(e) => aggiornaRiga(riga.id, "sconto3", e.target.value)} style={{ ...inputStyle, width: 50 }} /></td>
                     <td style={{ padding: 4 }} data-label="Netto un. manuale"><input type="number" placeholder="opz." value={riga.prezzo_netto_manuale} onChange={(e) => aggiornaRiga(riga.id, "prezzo_netto_manuale", e.target.value)} style={{ ...inputStyle, width: 65 }} /></td>
                     <td style={{ padding: 4 }} data-label="Immagine">
                       {riga.immagine_url ? (
                         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                          <img src={riga.immagine_url} alt="" style={{ width: 32, height: 32, objectFit: "cover", borderRadius: 4 }} />
+                          <ImmaginePreventivo session={session} value={riga.immagine_url} style={{ width: 32, height: 32, objectFit: "cover", borderRadius: 4 }} />
                           <button onClick={() => aggiornaRiga(riga.id, "immagine_url", "")} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 10 }}>✕</button>
                         </div>
                       ) : (
@@ -1936,6 +1988,17 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
         </div>
       </div>
 
+      {anteprimaPdf && <div role="dialog" aria-label="Anteprima preventivo PDF" style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(14,27,45,.76)", display: "flex", flexDirection: "column", padding: 12 }}>
+        <div style={{ display: "flex", gap: 12, justifyContent: "space-between", alignItems: "center", background: "white", borderRadius: "10px 10px 0 0", padding: 12 }}>
+          <strong>Anteprima PDF</strong>
+          <div style={{ display: "flex", gap: 10 }}>
+            <a href={anteprimaPdf.url} download={anteprimaPdf.nomeFile} style={{ color: COLORS.primary }}>Scarica</a>
+            <button onClick={() => { URL.revokeObjectURL(anteprimaPdf.url); setAnteprimaPdf(null); }} style={{ padding: "6px 10px" }}>Chiudi ✕</button>
+          </div>
+        </div>
+        <iframe title="Anteprima PDF preventivo" src={anteprimaPdf.url} style={{ flex: 1, width: "100%", border: 0, background: "white" }} />
+        <div style={{ color: "white", fontSize: 11, padding: 6 }}>Se iOS non mostra il PDF nell'anteprima, premi Scarica.</div>
+      </div>}
       <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>Preventivi salvati</h3>
       {loading ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p> : lista.length === 0 ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun preventivo salvato.</p> : (
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }} className="tabella-responsive">
@@ -1957,7 +2020,8 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
                       {preventivoSalvato.stato === "accettato" && (
                         preventivoSalvato.fatturato ? <span style={{ color: COLORS.success, fontSize: 12 }}>✓ Fatturato</span> : <button onClick={() => segnaComeFatturato(preventivoSalvato)} style={{ background: "none", border: "none", color: COLORS.success, cursor: "pointer", fontSize: 12 }}>Segna come fatturato</button>
                       )}
-                      <button onClick={() => stampaPreventivo(preventivoSalvato, clienti, aziende)} style={{ background: "none", border: "none", color: COLORS.success, cursor: "pointer", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}><Printer size={13} /> PDF</button>
+                      <button onClick={() => stampaPreventivo(preventivoSalvato, clienti, aziende, session)} style={{ background: "none", border: "none", color: COLORS.success, cursor: "pointer", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}><Printer size={13} /> PDF</button>
+                      <button onClick={() => stampaPreventivo(preventivoSalvato, clienti, aziende, session, setAnteprimaPdf)} style={{ background: "none", border: "none", color: COLORS.primary, cursor: "pointer", fontSize: 12 }}>Anteprima PDF</button>
                       {preventivoSalvato.cliente_id && <button type="button" onClick={() => creaOpportunitaDaPreventivo(preventivoSalvato)} title="Prepara una trattativa con i dati del preventivo, senza modificare il preventivo" style={{ background: "#eaf3ff", border: "1px solid #c8def7", borderRadius: 8, padding: "5px 8px", color: "#175fa6", cursor: "pointer", fontSize: 12, fontWeight: 650 }}>+ Opportunità</button>}
                       <button onClick={() => modifica(preventivoSalvato)} style={{ background: "none", border: "none", color: COLORS.primary, cursor: "pointer", fontSize: 12 }}>Modifica</button>
                       <button onClick={() => elimina(preventivoSalvato.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 12 }}>Elimina</button>
