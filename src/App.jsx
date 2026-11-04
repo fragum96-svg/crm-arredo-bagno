@@ -2883,18 +2883,33 @@ function PannelloAgendaCRM({ session, goTo }) {
   </div>;
 }
 
+function StileNavigazionePremiumCRM() { return <style>{`
+  .matrice-nav-group{margin:3px 9px 5px!important}
+  .matrice-nav-group-title{border-radius:11px!important;min-height:42px!important;font-weight:700!important;letter-spacing:.05px!important}
+  .matrice-subnav{padding:3px 0 7px 9px!important}
+  .matrice-subnav button{border-radius:10px!important;min-height:39px!important;margin:2px 0!important;gap:10px!important}
+  .matrice-subnav button.active{font-weight:750!important}
+  .matrice-topbar-label{font-weight:750!important;letter-spacing:-.2px!important}
+  @media(max-width:768px){
+    .matrice-nav-group{margin:4px 8px 7px!important}
+    .matrice-subnav button{min-height:46px!important}
+    .matrice-nav-group-title{min-height:48px!important}
+  }
+`}</style>; }
+
 function AppShell({ session, onLogout }) {
   const [menuOpen, setMenuOpen] = useState(typeof window === "undefined" ? true : window.innerWidth > 768);
   const [page, setPage] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("appuntamento") ? "visite" : "dashboard");
   const [role, setRole] = useState("user");
   const [preventivoAprireId, setPreventivoAprireId] = useState(null);
   const [gruppoAprireId, setGruppoAprireId] = useState(null);
-  const [aperti, setAperti] = useState({ clienti:true, mandanti:true, opportunita:true, agenda:true, report:true });
+  const [aperti, setAperti] = useState({ clienti:true, architetti:true, mandanti:true, opportunita:true, agenda:true, report:true });
   const apriPreventivoCliente = id => { setPreventivoAprireId(id); setPage("preventivi"); };
   const apriGruppoCliente = id => { setGruppoAprireId(id); setPage("gruppi"); };
   useEffect(() => { (async () => { try { const r=await fetch(SUPABASE_URL+"/rest/v1/profiles?id=eq."+session.user.id+"&select=role",{headers:{apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+session.access_token}}); const d=await r.json(); if(d&&d[0])setRole(d[0].role); } catch(e){} })(); },[session]);
   const sezioni = [
-    {id:"clienti",nome:"Clienti",icon:Users,items:[{key:"clienti",label:"Anagrafica clienti",icon:Users},{key:"architetti",label:"Architetti",icon:Users2},{key:"gruppi",label:"Gruppi d'acquisto",icon:Users2},{key:"mappa",label:"Mappa clienti",icon:MapIcon}]},
+    {id:"clienti",nome:"Clienti",icon:Users,items:[{key:"clienti",label:"Anagrafica clienti",icon:Users},{key:"gruppi",label:"Gruppi d'acquisto",icon:Users2},{key:"mappa",label:"Mappa clienti",icon:MapIcon}]},
+    {id:"architetti",nome:"Architetti",icon:Users2,items:[{key:"architetti",label:"Studi e architetti",icon:Users2}]},
     {id:"mandanti",nome:"Mandanti",icon:Building2,items:[{key:"aziende",label:"Aziende mandanti",icon:Building2}]},
     {id:"opportunita",nome:"Opportunità",icon:Target,items:[{key:"pipeline",label:"Pipeline commerciale",icon:Target},{key:"preventivi",label:"Preventivi e offerte",icon:FileText},{key:"portafoglio",label:"Portafoglio ordini",icon:Briefcase},{key:"ordini",label:"Registro ordini",icon:ClipboardList}]},
     {id:"agenda",nome:"Agenda",icon:CalendarDays,items:[{key:"agenda",label:"Pannello agenda",icon:CalendarDays},{key:"visite",label:"Calendario e appuntamenti",icon:CalendarDays},{key:"attivita",label:"Attività e follow-up",icon:ClipboardList},{key:"storico_visite",label:"Storico visite",icon:ClipboardList}]},
@@ -2912,7 +2927,7 @@ function AppShell({ session, onLogout }) {
       </div><div className="matrice-sidebar-foot"><span className="matrice-status-dot"/> CRM sviluppo <small>Ambiente di test</small></div>
     </aside>
     {menuOpen&&<div className="matrice-backdrop" onClick={()=>setMenuOpen(false)}/>}
-    <div className="matrice-workspace"><header className="matrice-topbar"><button className="matrice-menu-button" onClick={()=>setMenuOpen(v=>!v)} aria-label="Apri o chiudi menu"><MenuIcon size={19}/></button><span className="matrice-topbar-label">{page==="dashboard"?"Panoramica":sezioni.flatMap(x=>x.items).find(x=>x.key===page)?.label||"CRM"}</span><div className="matrice-topbar-actions"><button title="Vai ai clienti" onClick={()=>scegli("clienti")}><Search size={18}/></button><button title="Apri agenda" onClick={()=>scegli("visite")}><Bell size={18}/></button><span className="matrice-avatar" title={session.user.email}>{avatar}</span><button className="matrice-logout" onClick={onLogout} title="Esci"><LogOut size={17}/></button></div></header>
+    <div className="matrice-workspace"><header className="matrice-topbar"><button className="matrice-menu-button" onClick={()=>setMenuOpen(v=>!v)} aria-label="Apri o chiudi menu"><MenuIcon size={19}/></button><span className="matrice-topbar-label">{page==="dashboard"?"Panoramica":sezioni.flatMap(x=>x.items).find(x=>x.key===page)?.label||"CRM"}</span><div className="matrice-topbar-actions"><button title="Vai ai clienti" onClick={()=>scegli("clienti")}><Search size={18}/></button><button title="Apri pannello agenda" onClick={()=>scegli("agenda")}><Bell size={18}/></button><span className="matrice-avatar" title={session.user.email}>{avatar}</span><button className="matrice-logout" onClick={onLogout} title="Esci"><LogOut size={17}/></button></div></header>
       <main key={page} className="page-content matrice-main">
         {page==="dashboard"&&<AttivaNotificheCRM session={session}/>}
         {page==="dashboard"&&<Dashboard session={session} goTo={scegli}/>}
@@ -3178,6 +3193,7 @@ export default function App() {
       `}</style>
       <StileMobileCRM />
       <StilePremium2026 />
+      <StileNavigazionePremiumCRM />
       <StileGlobaleResponsive />
       {verificaAccesso ? (
         <div style={{ padding: 36, textAlign: "center", color: "#17233b" }}>Ripristino accesso al CRM...</div>
