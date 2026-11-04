@@ -1192,6 +1192,9 @@ function CalendarioVisite({ session }) {
   const [aziende, setAziende] = useState([]);
   const [sedi, setSedi] = useState([]);
   const [appuntamenti, setAppuntamenti] = useState([]);
+  const [attivitaAgenda, setAttivitaAgenda] = useState([]);
+  const [mostraAttivitaAgenda, setMostraAttivitaAgenda] = useState(true);
+  const [mostraCompletateAgenda, setMostraCompletateAgenda] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [viewMode, setViewMode] = useState(() => typeof window !== "undefined" && window.innerWidth <= 700 ? "giorno" : "settimana");
@@ -1215,11 +1218,11 @@ function CalendarioVisite({ session }) {
   const load = async () => {
     setLoading(true); setError("");
     try {
-      const urls = ["clienti?select=id,ragione_sociale&order=ragione_sociale.asc", "aziende_mandanti?select=id,nome,colore&order=nome.asc", "sedi_cliente?select=id,cliente_id,nome_sede,indirizzo", "appuntamenti?select=*&order=inizio.asc"];
+      const urls = ["clienti?select=id,ragione_sociale&order=ragione_sociale.asc", "aziende_mandanti?select=id,nome,colore&order=nome.asc", "sedi_cliente?select=id,cliente_id,nome_sede,indirizzo", "appuntamenti?select=*&order=inizio.asc", "crm_attivita?select=*&order=scadenza.asc.nullslast"];
       const results = await Promise.all(urls.map(u => fetch(SUPABASE_URL + "/rest/v1/" + u, { headers: headers() })));
       const values = await Promise.all(results.map(r => r.json()));
       results.forEach((r,i) => { if (!r.ok) throw new Error(values[i].message || "Errore nel caricamento dell'agenda"); });
-      setClienti(values[0]); setAziende(values[1]); setSedi(values[2]); setAppuntamenti(values[3]);
+      setClienti(values[0]); setAziende(values[1]); setSedi(values[2]); setAppuntamenti(values[3]); setAttivitaAgenda(Array.isArray(values[4]) ? values[4] : []);
     } catch (e) { setError(e.message); } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
@@ -1256,6 +1259,9 @@ function CalendarioVisite({ session }) {
   };
   const cambiaPeriodo = (n) => { const d = new Date(currentDate); if (viewMode === "mese") d.setMonth(d.getMonth()+n); else d.setDate(d.getDate() + n*(viewMode === "settimana" ? 7 : 1)); setCurrentDate(d); };
   const eventiGiorno = (d) => appuntamenti.filter(e => isoLocale(new Date(e.inizio)) === isoLocale(d)).sort((a,b) => new Date(a.inizio)-new Date(b.inizio));
+  const attivitaDelGiorno = d => attivitaAgenda.filter(a => a.scadenza && isoLocale(new Date(a.scadenza)) === isoLocale(d) && (mostraCompletateAgenda || a.stato !== "completata"));
+  const attivitaSenzaData = attivitaAgenda.filter(a => !a.scadenza && (mostraCompletateAgenda || a.stato !== "completata"));
+  const schedaAttivita = a => <div key={"task-"+a.id} title={a.note || "Attività commerciale"} style={{background:a.stato==="completata"?"#f7f5e9":"#fff3bc",border:"1px solid #efd87c",borderLeft:"4px solid #e5ab24",borderRadius:8,padding:"7px 9px",marginBottom:5,color:"#75531b",fontSize:12,overflowWrap:"anywhere",opacity:a.stato==="completata"?.65:1}}><strong>{a.stato==="completata"?"✓ ":""}{a.titolo}</strong>{a.scadenza && new Date(a.scadenza).getHours()+new Date(a.scadenza).getMinutes()>0 && <div style={{fontSize:10,marginTop:3}}>{new Date(a.scadenza).toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"})}</div>}</div>;
   const nomeCliente = id => clienti.find(c => c.id === id)?.ragione_sociale || "";
   const coloreEvento = e => aziende.find(a => a.id === e.azienda_id)?.colore || "#0b7bc4";
   const ora = value => new Date(value).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
@@ -1266,6 +1272,8 @@ function CalendarioVisite({ session }) {
   const titoloPeriodo = viewMode === "mese" ? `${MESI[currentDate.getMonth()]} ${currentDate.getFullYear()}` : viewMode === "giorno" ? currentDate.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : `${giorni[0].toLocaleDateString("it-IT", {day:"numeric",month:"short"})} – ${giorni[6].toLocaleDateString("it-IT", {day:"numeric",month:"short",year:"numeric"})}`;
   return <div className="agenda-responsive" style={{ fontFamily: "Arial, sans-serif", color: COLORS.text, minWidth:0, width:"100%" }}>
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 20 }}><div><h2 style={{ fontSize: 23, margin: 0 }}>Agenda commerciale</h2><p style={{ color: COLORS.muted, fontSize: 12, marginTop: 6 }}>Visite, riunioni, telefonate e attività in un unico calendario</p></div><button onClick={() => apriNuovo()} style={{ background: COLORS.primary, color: "white", border: 0, borderRadius: 10, padding: "11px 17px", fontWeight: 700, cursor: "pointer" }}>+ Nuovo appuntamento</button></div>
+    <div style={{display:"flex",alignItems:"center",gap:13,flexWrap:"wrap",marginBottom:15,fontSize:12,color:"#60758b"}}><span style={{display:"inline-flex",alignItems:"center",gap:6}}><span style={{width:11,height:11,background:"#dbeafe",borderRadius:3}}/> Appuntamenti</span><label style={{display:"inline-flex",alignItems:"center",gap:6,cursor:"pointer"}}><input type="checkbox" checked={mostraAttivitaAgenda} onChange={e=>setMostraAttivitaAgenda(e.target.checked)}/><span style={{width:11,height:11,background:"#f7d970",borderRadius:3}}/> Attività</label><label style={{display:"inline-flex",alignItems:"center",gap:5,cursor:"pointer"}}><input type="checkbox" checked={mostraCompletateAgenda} onChange={e=>setMostraCompletateAgenda(e.target.checked)}/> Mostra completate</label></div>
+    {mostraAttivitaAgenda && attivitaSenzaData.length>0 && <section style={{background:"#fff",border:"1px solid #e2eaf2",borderRadius:13,padding:13,marginBottom:16}}><strong style={{fontSize:13,color:"#18354e"}}>Attività senza scadenza ({attivitaSenzaData.length})</strong><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,210px),1fr))",gap:7,marginTop:10}}>{attivitaSenzaData.map(schedaAttivita)}</div></section>}
     {error && <div style={{ color: COLORS.danger, marginBottom: 12, fontSize: 13 }}>{error}</div>}
     {mostraForm && <div style={{ background: "white", border: "1px solid " + COLORS.border, borderRadius: 14, padding: mobileAgenda ? 14 : 20, marginBottom: 20, maxWidth: 760, minWidth: 0, boxSizing: "border-box", boxShadow: "0 8px 24px rgba(0,0,0,.05)" }}><h3 style={{ marginTop: 0 }}>{editingId ? "Modifica appuntamento" : "Nuovo appuntamento"}</h3><div style={{ display: "grid", gridTemplateColumns: mobileAgenda ? "minmax(0,1fr)" : "repeat(auto-fit,minmax(190px,1fr))", gap: 12 }}>
       {campo("Titolo *", <input style={inputStyle} value={form.titolo} onChange={e=>setForm({...form,titolo:e.target.value})} placeholder="Es. Visita showroom" />)}
@@ -1301,11 +1309,12 @@ function CalendarioVisite({ session }) {
           </button>;
         })}
       </div>
+      {mostraAttivitaAgenda && attivitaDelGiorno(currentDate).length>0 && <div style={{background:"#fff",border:"1px solid #e3ebf3",borderRadius:13,padding:12,marginBottom:13}}><strong style={{fontSize:12,color:"#7c5b1c"}}>Attività del giorno</strong><div style={{marginTop:8}}>{attivitaDelGiorno(currentDate).map(schedaAttivita)}</div></div>}
       {viewMode==="mese" ? <div className="agenda-hybrid-month">
         <div className="agenda-hybrid-month-title">{MESI[currentDate.getMonth()]} {currentDate.getFullYear()}</div>
         <div className="agenda-hybrid-month-grid">
           {GIORNI_SETTIMANA.map(g=><span key={g} className="agenda-hybrid-month-label">{g}</span>)}
-          {getMonthGrid(currentDate).map(d=><button key={isoLocale(d)} className={isoLocale(d)===isoLocale(currentDate)?"selected":""} style={{opacity:d.getMonth()===currentDate.getMonth()?1:.4}} onClick={()=>{setCurrentDate(new Date(d));setViewMode("giorno")}}>{d.getDate()}{eventiGiorno(d).length>0&&<i/>}</button>)}
+          {getMonthGrid(currentDate).map(d=><button key={isoLocale(d)} className={isoLocale(d)===isoLocale(currentDate)?"selected":""} style={{opacity:d.getMonth()===currentDate.getMonth()?1:.4}} onClick={()=>{setCurrentDate(new Date(d));setViewMode("giorno")}}>{d.getDate()}{(eventiGiorno(d).length>0 || (mostraAttivitaAgenda && attivitaDelGiorno(d).length>0))&&<i style={{background:eventiGiorno(d).length>0?"#3480f2":"#e5ab24"}}/>}</button>)}
         </div>
       </div> : null}
       {viewMode === "settimana" ? <div className="agenda-week-scroll" aria-label="Calendario settimanale scorrevole">
@@ -1351,7 +1360,7 @@ function CalendarioVisite({ session }) {
       </>}
     </div> : loading ? <p>Caricamento appuntamenti...</p> : <div style={{ display: "grid", gridTemplateColumns: viewMode==="giorno"?"1fr":"repeat(7,minmax(0,1fr))", border:"1px solid "+COLORS.border, borderRadius:12, overflowX:"auto", background:"white" }}>
       {viewMode!=="giorno" && GIORNI_SETTIMANA.map(g=><div key={g} style={{ textAlign:"center", padding:10, fontSize:11, color:COLORS.muted, borderBottom:"1px solid "+COLORS.border }}>{g}</div>)}
-      {giorni.map(d=>{ const eventi=eventiGiorno(d), iso=isoLocale(d), isToday=iso===oggi(); return <div key={iso} style={{ minWidth:viewMode==="giorno"?"auto":95, minHeight:viewMode==="mese"?110:260, borderRight:"1px solid "+COLORS.border, borderBottom:"1px solid "+COLORS.border, padding:7, background:isToday?"#f0f8ff":"white", opacity:viewMode==="mese"&&d.getMonth()!==currentDate.getMonth()?.6:1 }}><button onClick={()=>{setCurrentDate(new Date(d));setViewMode("giorno")}} style={{ background:"none",border:0,cursor:"pointer",fontSize:12,fontWeight:isToday?800:600,color:COLORS.text,marginBottom:8 }}>{viewMode==="giorno"?d.toLocaleDateString("it-IT",{weekday:"long",day:"numeric",month:"long"}):d.getDate()}</button>{eventi.map(eventCard)}<button onClick={()=>apriNuovo(iso)} style={{ display:"block",background:"transparent",border:"1px dashed "+COLORS.border,color:COLORS.muted,borderRadius:6,fontSize:11,padding:"5px",cursor:"pointer",width:"100%",marginTop:5 }}>+ Aggiungi</button></div>})}
+      {giorni.map(d=>{ const eventi=eventiGiorno(d), iso=isoLocale(d), isToday=iso===oggi(); return <div key={iso} style={{ minWidth:viewMode==="giorno"?"auto":95, minHeight:viewMode==="mese"?110:260, borderRight:"1px solid "+COLORS.border, borderBottom:"1px solid "+COLORS.border, padding:7, background:isToday?"#f0f8ff":"white", opacity:viewMode==="mese"&&d.getMonth()!==currentDate.getMonth()?.6:1 }}><button onClick={()=>{setCurrentDate(new Date(d));setViewMode("giorno")}} style={{ background:"none",border:0,cursor:"pointer",fontSize:12,fontWeight:isToday?800:600,color:COLORS.text,marginBottom:8 }}>{viewMode==="giorno"?d.toLocaleDateString("it-IT",{weekday:"long",day:"numeric",month:"long"}):d.getDate()}</button>{mostraAttivitaAgenda && attivitaDelGiorno(d).map(schedaAttivita)}{eventi.map(eventCard)}<button onClick={()=>apriNuovo(iso)} style={{ display:"block",background:"transparent",border:"1px dashed "+COLORS.border,color:COLORS.muted,borderRadius:6,fontSize:11,padding:"5px",cursor:"pointer",width:"100%",marginTop:5 }}>+ Aggiungi</button></div>})}
     </div>}
     <style>{`@media(max-width:700px){
       .agenda-week-scroll{width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;background:#fff;border:1px solid #dce5f1;border-radius:14px}
@@ -1395,7 +1404,7 @@ function CalendarioVisite({ session }) {
       .agenda-responsive input[type=date],.agenda-responsive input[type=time]{min-width:0!important;width:100%!important;max-width:100%!important;box-sizing:border-box!important}
     }`}</style>
     <style>{`@media(max-width:700px){.agenda-responsive{max-width:100%;overflow:hidden}.agenda-responsive input[type="date"],.agenda-responsive input[type="time"]{width:100%!important;min-width:0!important;max-width:100%!important;display:block!important;box-sizing:border-box!important;-webkit-appearance:none;appearance:none}.agenda-responsive label{min-width:0!important;max-width:100%!important}.agenda-mobile-list{display:grid;gap:10px}.agenda-mobile-day{background:white;border:1px solid #dce5f1;border-radius:13px;padding:12px;min-width:0}.agenda-mobile-day-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:9px}.agenda-mobile-day-head button{border:0;background:transparent;color:#182a47;font-size:13px;font-weight:700;text-align:left;text-transform:capitalize}.agenda-mobile-day-head button:last-child{color:#2e72dd;white-space:nowrap;font-size:12px}.agenda-mobile-event{display:flex;flex-direction:column;align-items:flex-start;text-align:left;width:100%;min-width:0;gap:5px;border:1px solid #dce5f1;border-left:4px solid #3b82f6;border-radius:9px;padding:11px 12px;margin:7px 0;overflow-wrap:anywhere;color:#17233b}.agenda-mobile-event strong{font-size:12px}.agenda-mobile-event span{font-size:14px;font-weight:650}.agenda-mobile-event small{font-size:12px;color:#687b95}.agenda-mobile-empty{font-size:12px;color:#8a98ad;margin:8px 0 3px}.agenda-responsive input,.agenda-responsive textarea{font-size:16px!important}.agenda-responsive select{font-size:16px!important}}`}</style>
-    <p style={{ fontSize: 11, color: COLORS.muted, marginTop: 12 }}>Gli appuntamenti sono salvati nella nuova tabella “appuntamenti”. Lo storico della tabella “visite” resta invariato. Le notifiche automatiche non sono ancora attive.</p>
+    <p style={{ fontSize: 11, color: COLORS.muted, marginTop: 12 }}>Gli appuntamenti sono salvati nella nuova tabella “appuntamenti”. Lo storico della tabella “visite” resta invariato. Le notifiche dipendono dalla configurazione push del progetto.</p>
   </div>;
 }
 
@@ -1412,7 +1421,7 @@ function SelettoreVoce({ label, modalita, percentuale, valoreEuro, onChange, inp
   );
 }
 
-function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) {
+function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, vaiAllaPipeline }) {
   const [clienti, setClienti] = useState([]);
   const [aziende, setAziende] = useState([]);
   const [lista, setLista] = useState([]);
@@ -1569,6 +1578,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
   return (
     <div className="crm-preventivi-premium" style={{ fontFamily: "inherit", overflowX: "hidden", width: "100%" }}> 
       <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}><FileText size={20} color={COLORS.primary} /> Preventivi / Offerte</h2>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",background:"#f4f8ff",border:"1px solid #dce9f8",borderRadius:12,padding:"10px 13px",marginBottom:16}}><span style={{fontSize:12,color:"#526c84"}}>Le trattative commerciali sono gestite nella Pipeline. Il collegamento permanente al preventivo richiederà una verifica del database.</span><button type="button" onClick={vaiAllaPipeline} style={{background:"#fff",border:"1px solid #bdd5f0",borderRadius:9,padding:"8px 12px",color:"#1a66b1",fontSize:12,fontWeight:700,cursor:"pointer"}}>Apri Pipeline →</button></div>
       <div style={{ background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, marginBottom: 24, overflowX: "hidden" }}>
         <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>{editingId ? "Modifica preventivo" : "Nuovo preventivo"}</h3>
 
@@ -2775,6 +2785,7 @@ function AttivitaCRM({ session }) {
   const [messaggioAttivita, setMessaggioAttivita] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [usaOraAttivita, setUsaOraAttivita] = useState(false);
   const [errore, setErrore] = useState("");
   const headers = { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token, "Content-Type": "application/json" };
   const endpoint = SUPABASE_URL + "/rest/v1/crm_attivita";
@@ -2795,12 +2806,12 @@ function AttivitaCRM({ session }) {
     finally { setLoading(false); }
   };
   useEffect(() => { carica(); }, [session.access_token]);
-  const reset = () => { setForm(vuoto()); setEditingId(null); setErrore(""); };
+  const reset = () => { setUsaOraAttivita(false); setForm(vuoto()); setEditingId(null); setErrore(""); };
   const salva = async e => {
     e.preventDefault(); if (!form.titolo.trim() || saving) return;
     setSaving(true); setErrore("");
     try {
-      const payload = { titolo: form.titolo.trim(), tipo: form.tipo, scadenza: form.scadenza ? new Date(form.scadenza).toISOString() : null, priorita: form.priorita, stato: form.stato, cliente_id: form.cliente_id || null, azienda_id: form.azienda_id || null, note: form.note.trim(), user_id: session.user.id };
+      const payload = { titolo: form.titolo.trim(), tipo: form.tipo, scadenza: form.scadenza ? new Date(form.scadenza.length === 10 ? form.scadenza + "T00:00" : form.scadenza).toISOString() : null, priorita: form.priorita, stato: form.stato, cliente_id: form.cliente_id || null, azienda_id: form.azienda_id || null, note: form.note.trim(), user_id: session.user.id };
       const res = await fetch(endpoint + (editingId ? "?id=eq." + encodeURIComponent(editingId) : ""), { method: editingId ? "PATCH" : "POST", headers: { ...headers, Prefer: "return=minimal" }, body: JSON.stringify(payload) });
       if (!res.ok) { const info = await res.json().catch(() => ({})); throw new Error(info.message || "Salvataggio non riuscito"); }
       reset(); await carica();
@@ -2811,7 +2822,8 @@ function AttivitaCRM({ session }) {
     const d = a.scadenza ? new Date(a.scadenza) : null;
     const locale = d ? new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0,16) : "";
     setEditingId(a.id);
-    setForm({ titolo: a.titolo || "", tipo: a.tipo || "richiamare", scadenza: locale, priorita: a.priorita || "media", stato: a.stato || "da_fare", cliente_id: a.cliente_id || "", azienda_id: a.azienda_id || "", note: a.note || "" });
+    setUsaOraAttivita(Boolean(locale && !locale.endsWith("T00:00")));
+    setForm({ titolo: a.titolo || "", tipo: a.tipo || "richiamare", scadenza: locale && locale.endsWith("T00:00") ? locale.slice(0,10) : locale, priorita: a.priorita || "media", stato: a.stato || "da_fare", cliente_id: a.cliente_id || "", azienda_id: a.azienda_id || "", note: a.note || "" });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const completa = async a => {
@@ -2858,7 +2870,9 @@ function AttivitaCRM({ session }) {
           <label style={{ fontSize: 12 }}>Tipologia<select value={form.tipo} onChange={e => setForm(f => ({ ...f, tipo: e.target.value }))} style={{ ...campo, marginTop: 5 }}>{Object.entries(etichette).map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select></label>
           <label style={{ fontSize: 12 }}>Priorità<select value={form.priorita} onChange={e => setForm(f => ({ ...f, priorita: e.target.value }))} style={{ ...campo, marginTop: 5 }}><option value="bassa">Bassa</option><option value="media">Media</option><option value="alta">Alta</option></select></label>
         </div>
-        <label style={{ fontSize: 12 }}>Scadenza (facoltativa)<input type="datetime-local" value={form.scadenza} onChange={e => setForm(f => ({ ...f, scadenza: e.target.value }))} style={{ ...campo, marginTop: 5 }} /></label>
+        <label style={{ fontSize: 12 }}>Data (facoltativa)<input type="date" value={form.scadenza ? form.scadenza.slice(0,10) : ""} onChange={e => setForm(f => ({ ...f, scadenza: e.target.value ? e.target.value + (usaOraAttivita ? "T09:00" : "") : "" }))} style={{ ...campo, marginTop: 5 }} /></label>
+        <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:"#60758b"}}><input type="checkbox" checked={usaOraAttivita} onChange={e=>{setUsaOraAttivita(e.target.checked);setForm(f=>({...f,scadenza:f.scadenza?(e.target.checked?f.scadenza.slice(0,10)+"T09:00":f.scadenza.slice(0,10)):""}));}}/> Aggiungi un orario (facoltativo)</label>
+        {usaOraAttivita && <label style={{fontSize:12}}>Ora<input type="time" value={form.scadenza.includes("T") ? form.scadenza.slice(11,16) : "09:00"} disabled={!form.scadenza} onChange={e=>setForm(f=>({...f,scadenza:f.scadenza.slice(0,10)+"T"+e.target.value}))} style={{...campo,marginTop:5}}/></label>}
         <label style={{ fontSize: 12 }}>Cliente o architetto<select value={form.cliente_id} onChange={e => setForm(f => ({ ...f, cliente_id: e.target.value }))} style={{ ...campo, marginTop: 5 }}><option value="">Nessun collegamento</option>{clienti.map(c => <option key={c.id} value={c.id}>{c.ragione_sociale}{c.classificazione === "Architetto" ? " · Architetto" : ""}</option>)}</select></label>
         <label style={{ fontSize: 12 }}>Azienda mandante<select value={form.azienda_id} onChange={e => setForm(f => ({ ...f, azienda_id: e.target.value }))} style={{ ...campo, marginTop: 5 }}><option value="">Nessuna</option>{aziende.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}</select></label>
         <label style={{ fontSize: 12 }}>Stato<select value={form.stato} onChange={e => setForm(f => ({ ...f, stato: e.target.value }))} style={{ ...campo, marginTop: 5 }}><option value="da_fare">Da fare</option><option value="in_corso">In corso</option><option value="completata">Completata</option></select></label>
@@ -2873,7 +2887,7 @@ function AttivitaCRM({ session }) {
           const scaduta = a.stato !== "completata" && a.scadenza && new Date(a.scadenza).getTime() < adesso;
           const cliente = clienti.find(c => c.id === a.cliente_id);
           return <article key={a.id} style={{ border: "1px solid #e3ebf3", borderRadius: 12, padding: 13, background: a.stato === "completata" ? "#f8fafc" : "#fff" }}>
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}><input type="checkbox" checked={a.stato === "completata"} onChange={() => completa(a)} aria-label={a.stato === "completata" ? "Ripristina attività" : "Completa attività"} style={{ width: 18, height: 18, marginTop: 2, accentColor: "#276be3" }} /><div style={{ flex: 1, minWidth: 0 }}><strong style={{ fontSize: 14, textDecoration: a.stato === "completata" ? "line-through" : "none", overflowWrap: "anywhere" }}>{a.titolo}</strong><div style={{ color: "#72849a", fontSize: 12, marginTop: 4 }}>{etichette[a.tipo] || a.tipo} · Priorità {a.priorita}{a.stato === "in_corso" ? " · In corso" : ""}</div>{cliente && <div style={{ color: "#276be3", fontSize: 12, marginTop: 4 }}>{cliente.ragione_sociale}</div>}{a.scadenza && <div style={{ color: scaduta ? "#b83b3b" : "#62778c", fontSize: 12, marginTop: 5 }}>{scaduta ? "Scaduta · " : "Scadenza · "}{new Date(a.scadenza).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" })}</div>}{a.note && <div style={{ fontSize: 12, color: "#66798b", marginTop: 7, overflowWrap: "anywhere" }}>{a.note}</div>}</div></div>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}><input type="checkbox" checked={a.stato === "completata"} onChange={() => completa(a)} aria-label={a.stato === "completata" ? "Ripristina attività" : "Completa attività"} style={{ width: 18, height: 18, marginTop: 2, accentColor: "#276be3" }} /><div style={{ flex: 1, minWidth: 0 }}><strong style={{ fontSize: 14, textDecoration: a.stato === "completata" ? "line-through" : "none", overflowWrap: "anywhere" }}>{a.titolo}</strong><div style={{ color: "#72849a", fontSize: 12, marginTop: 4 }}>{etichette[a.tipo] || a.tipo} · Priorità {a.priorita}{a.stato === "in_corso" ? " · In corso" : ""}</div>{cliente && <div style={{ color: "#276be3", fontSize: 12, marginTop: 4 }}>{cliente.ragione_sociale}</div>}{a.scadenza && <div style={{ color: scaduta ? "#b83b3b" : "#62778c", fontSize: 12, marginTop: 5 }}>{scaduta ? "Scaduta · " : "Scadenza · "}{new Date(a.scadenza).toLocaleString("it-IT", { dateStyle: "short", ...(new Date(a.scadenza).getHours()===0 && new Date(a.scadenza).getMinutes()===0 ? {} : {timeStyle:"short"}) })}</div>}{a.note && <div style={{ fontSize: 12, color: "#66798b", marginTop: 7, overflowWrap: "anywhere" }}>{a.note}</div>}</div></div>
             <div style={{ display: "flex", gap: 12, marginTop: 11, paddingLeft: 28 }}><button type="button" onClick={() => modifica(a)} style={{ border: 0, background: "none", color: "#276be3", cursor: "pointer", padding: 0, fontSize: 12 }}>Modifica</button>{a.stato === "completata" && <button type="button" onClick={() => completa(a)} style={{border:0,background:"#eaf4ff",color:"#155f9e",borderRadius:7,padding:"5px 8px",cursor:"pointer",fontSize:12,fontWeight:700}}>Ripristina</button>}<button type="button" onClick={() => elimina(a)} style={{ border: 0, background: "none", color: "#b83b3b", cursor: "pointer", padding: 0, fontSize: 12 }}>Elimina</button></div>
           </article>;
         })}</div>}
@@ -2969,7 +2983,7 @@ function AppShell({ session, onLogout }) {
         {page==="storico_visite"&&<StoricoVisiteCRM session={session}/>}
         {page==="note"&&<NoteCRM session={session}/>}
         {page==="pipeline"&&<PipelineCommerciale session={session}/>}
-        {page==="preventivi"&&<PreventiviOfferte session={session} preventivoIniziale={preventivoAprireId} onPreventivoAperto={()=>setPreventivoAprireId(null)}/>}
+        {page==="preventivi"&&<PreventiviOfferte session={session} preventivoIniziale={preventivoAprireId} onPreventivoAperto={()=>setPreventivoAprireId(null)} vaiAllaPipeline={()=>scegli("pipeline")}/>}
         {page==="mappa"&&<MappaClienti session={session}/>}
         {page==="statistiche"&&<Statistiche session={session}/>}
         {page==="fatturato"&&<Fatturato session={session}/>}
