@@ -2765,9 +2765,6 @@ export default function App() {
     return () => document.removeEventListener("visibilitychange", tornaAttivo);
   }, []);
 
-  return () => clearTimeout(timer);
-  }, [session]);
-
   return (
     <>
       <style>{`
