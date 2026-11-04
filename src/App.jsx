@@ -889,6 +889,8 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [filtroClassificazione, setFiltroClassificazione] = useState("");
+  const [ricercaAnagrafica, setRicercaAnagrafica] = useState("");
+  const [vistaAnagrafica, setVistaAnagrafica] = useState("elenco");
   const [clienteApertoId, setClienteApertoId] = useState(null);
   const [sediForm, setSediForm] = useState([]);
   const [sediEsistenti, setSediEsistenti] = useState([]);
@@ -1004,7 +1006,7 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
 
   const inputStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
   const elencoSezione = list.filter(c => soloArchitetti ? c.classificazione === "Architetto" : c.classificazione !== "Architetto");
-  const filteredList = filtroClassificazione ? elencoSezione.filter((c) => c.classificazione === filtroClassificazione) : elencoSezione;
+  const filteredList = elencoSezione.filter(c => (!filtroClassificazione || c.classificazione === filtroClassificazione) && (!ricercaAnagrafica.trim() || [c.ragione_sociale, c.indirizzo, c.telefono, c.email, c.classificazione].some(v => String(v || "").toLocaleLowerCase("it").includes(ricercaAnagrafica.trim().toLocaleLowerCase("it")))));
 
   if (clienteApertoId) {
     return (
@@ -1077,31 +1079,31 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
           </div>
         </div>
         <div style={{ flex: "2 1 420px" }}>
-          <div style={{ marginBottom: 12 }}>
-            <select value={filtroClassificazione} onChange={(e) => setFiltroClassificazione(e.target.value)} style={{ ...inputStyle, maxWidth: 240, marginBottom: 0 }}>
-              <option value="">Tutte le classificazioni</option>
-              {(soloArchitetti ? ["Architetto"] : CLASSIFICAZIONI_ELENCO.filter(c => c !== "Architetto")).map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
+          <div style={{ marginBottom: 14, padding: 14, borderRadius: 14, border: "1px solid #e5edf5", background: "#fff" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+              <div><div style={{ fontSize: 15, fontWeight: 750, color: "#18324b" }}>{soloArchitetti ? "Studi e professionisti" : "Rubrica commerciale"}</div><div style={{ fontSize: 12, color: "#728298", marginTop: 3 }}>{filteredList.length} {soloArchitetti ? "architetti" : "clienti"} visualizzati</div></div>
+              <div style={{ display: "flex", gap: 5, padding: 4, borderRadius: 10, background: "#f0f5fa" }}>
+                {[ ["elenco", "Elenco"], ["schede", "Schede"] ].map(([id, label]) => <button key={id} type="button" onClick={() => setVistaAnagrafica(id)} aria-pressed={vistaAnagrafica === id} style={{ border: "none", borderRadius: 8, padding: "8px 11px", cursor: "pointer", background: vistaAnagrafica === id ? "#fff" : "transparent", color: vistaAnagrafica === id ? "#145b92" : "#667b90", fontWeight: 650, boxShadow: vistaAnagrafica === id ? "0 1px 5px #19344a18" : "none" }}>{label}</button>)}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
+              <input aria-label="Cerca nell'anagrafica" placeholder={soloArchitetti ? "Cerca studio, nome, città, telefono..." : "Cerca cliente, città, telefono..."} value={ricercaAnagrafica} onChange={e => setRicercaAnagrafica(e.target.value)} style={{ ...inputStyle, flex: "1 1 200px", marginBottom: 0, minWidth: 0, background: "#f9fbfd" }} />
+              {!soloArchitetti && <select aria-label="Filtra classificazione" value={filtroClassificazione} onChange={e => setFiltroClassificazione(e.target.value)} style={{ ...inputStyle, flex: "0 1 185px", marginBottom: 0 }}><option value="">Tutte le categorie</option>{CLASSIFICAZIONI_ELENCO.filter(c => c !== "Architetto").map(c => <option key={c} value={c}>{c}</option>)}</select>}
+            </div>
           </div>
-          {loading ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p> : filteredList.length === 0 ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun cliente trovato.</p> : (
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }} className="tabella-responsive">
-              <thead><tr style={{ textAlign: "left", borderBottom: "2px solid " + COLORS.border }}>
-                <th style={{ padding: "8px 6px" }}>Ragione sociale</th><th style={{ padding: "8px 6px" }}>Classificazione</th><th style={{ padding: "8px 6px" }}>Telefono</th><th style={{ padding: "8px 6px" }}></th>
-              </tr></thead>
-              <tbody>
-                {filteredList.map((c) => (
-                  <tr key={c.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
-                    <td style={{ padding: "8px 6px", fontWeight: 600 }} data-label="Cliente"><span onClick={() => setClienteApertoId(c.id)} style={{ cursor: "pointer", color: COLORS.primary }}>{c.ragione_sociale}</span></td>
-                    <td style={{ padding: "8px 6px" }} data-label="Classificazione">{c.classificazione || "-"}</td>
-                    <td style={{ padding: "8px 6px" }} data-label="Telefono">{c.telefono || "-"}</td>
-                    <td style={{ padding: "8px 6px", whiteSpace: "nowrap" }} data-label="">
-                      <button onClick={() => edit(c)} style={{ background: "none", border: "none", color: COLORS.primary, cursor: "pointer", fontSize: 12, marginRight: 10 }}>Modifica</button>
-                      <button onClick={() => remove(c.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 12 }}>Elimina</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {loading ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p> : filteredList.length === 0 ? <p style={{ padding: 20, color: COLORS.muted, fontSize: 13, textAlign: "center" }}>Nessun risultato. Prova a modificare la ricerca.</p> : vistaAnagrafica === "schede" ? (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: 12 }}>
+              {filteredList.map(c => <div key={c.id} style={{ border: "1px solid #e2eaf3", borderRadius: 15, padding: 15, background: "#fff", boxShadow: "0 3px 12px #19344a0a", minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 11 }}><div style={{ width: 38, height: 38, borderRadius: 11, background: "#e8f3fc", color: "#1967a0", display: "grid", placeItems: "center", fontWeight: 800, flexShrink: 0 }}>{String(c.ragione_sociale || "?").slice(0, 1).toUpperCase()}</div><div style={{ minWidth: 0 }}><button type="button" onClick={() => setClienteApertoId(c.id)} style={{ border: 0, background: "none", padding: 0, textAlign: "left", fontWeight: 750, color: "#18324b", cursor: "pointer", overflowWrap: "anywhere" }}>{c.ragione_sociale}</button><div style={{ fontSize: 11, color: "#64809a", marginTop: 3 }}>{c.classificazione || (soloArchitetti ? "Architetto" : "Cliente")}</div></div></div>
+                <div style={{ fontSize: 12, color: "#66788a", minHeight: 38, overflowWrap: "anywhere" }}>{c.indirizzo || "Indirizzo non indicato"}</div>
+                <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 13 }}><button type="button" onClick={() => setClienteApertoId(c.id)} style={{ border: 0, borderRadius: 8, background: "#eaf4fd", color: "#145b92", padding: "7px 10px", cursor: "pointer", fontWeight: 650 }}>Apri scheda</button><button type="button" onClick={() => edit(c)} style={{ border: "1px solid #e1eaf2", borderRadius: 8, background: "#fff", color: "#526b83", padding: "7px 10px", cursor: "pointer" }}>Modifica</button>{c.telefono && <a href={"tel:" + String(c.telefono).replace(/[^+0-9]/g, "")} style={{ textDecoration: "none", borderRadius: 8, padding: "7px 10px", color: "#145b92", background: "#f3f7fb" }}>Chiama</a>}</div>
+              </div>)}
+            </div>
+          ) : (
+            <div style={{ overflowX: "auto", border: "1px solid #e5edf5", borderRadius: 14, background: "#fff" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead><tr style={{ background: "#f6f9fc", textAlign: "left", color: "#60758b" }}><th style={{ padding: "13px 12px" }}>Nome</th><th style={{ padding: "13px 12px" }}>Categoria</th><th style={{ padding: "13px 12px" }}>Telefono</th><th style={{ padding: "13px 12px" }}>Azioni</th></tr></thead>
+              <tbody>{filteredList.map(c => <tr key={c.id} style={{ borderTop: "1px solid #edf1f5" }}><td style={{ padding: "12px", minWidth: 140 }}><button type="button" onClick={() => setClienteApertoId(c.id)} style={{ border: 0, background: "none", padding: 0, cursor: "pointer", color: "#155d93", fontWeight: 700, textAlign: "left" }}>{c.ragione_sociale}</button><div style={{ fontSize: 11, color: "#8794a3", marginTop: 3 }}>{c.indirizzo || ""}</div></td><td style={{ padding: "12px", color: "#63768b" }}>{c.classificazione || "—"}</td><td style={{ padding: "12px", whiteSpace: "nowrap" }}>{c.telefono ? <a href={"tel:" + String(c.telefono).replace(/[^+0-9]/g, "")} style={{ color: "#155d93" }}>{c.telefono}</a> : "—"}</td><td style={{ padding: "12px", whiteSpace: "nowrap" }}><button type="button" onClick={() => edit(c)} style={{ border: 0, background: "none", color: "#155d93", cursor: "pointer", marginRight: 8 }}>Modifica</button><button type="button" onClick={() => remove(c.id)} style={{ border: 0, background: "none", color: COLORS.danger, cursor: "pointer" }}>Elimina</button></td></tr>)}</tbody>
+            </table></div>
           )}
         </div>
       </div>
