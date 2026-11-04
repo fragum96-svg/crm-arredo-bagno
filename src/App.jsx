@@ -3473,6 +3473,89 @@ function StileCRMv12(){return <style>{`
 @media(max-width:768px){.crm-mobile-fab{display:flex;position:fixed;right:16px;bottom:calc(90px + env(safe-area-inset-bottom));z-index:1100;width:54px;height:54px;align-items:center;justify-content:center;border:0;border-radius:17px;background:#2c73e9;color:white;box-shadow:0 7px 22px #174da96b}.crm-modal-backdrop{padding-top:7vh}.crm-quick-panel,.crm-global-panel{max-height:83vh}.crm-reactivation{padding:13px}}
 `}</style>}
 
+// Fase F: registro persistente, isolato dalle funzioni demo esistenti.
+function RegistroCommercialeSupabase({session}) {
+  const [tab,setTab]=useState('relazioni');
+  const [agenzia,setAgenzia]=useState('');
+  const [clienti,setClienti]=useState([]);
+  const [mandanti,setMandanti]=useState([]);
+  const [preventivi,setPreventivi]=useState([]);
+  const [records,setRecords]=useState([]);
+  const [errore,setErrore]=useState('');
+  const [messaggio,setMessaggio]=useState('');
+  const [busy,setBusy]=useState(false);
+  const [form,setForm]=useState({cliente_id:'',azienda_id:'',stato:'potenziale',preventivo_id:'',scadenza:'',descrizione:'',quantita:'1',tipo:'campione',note:''});
+  const tabelle={relazioni:'crm_relazioni_mandanti',followup:'crm_followup_preventivi',campioni:'crm_campionature'};
+  const headers=()=>({apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+session.access_token,'Content-Type':'application/json'});
+  const richiesta=async (path,method='GET',payload)=>{
+    const response=await fetch(SUPABASE_URL+'/rest/v1/'+path,{method,headers:{...headers(),...(method!=='GET'?{Prefer:'return=representation'}:{})},...(payload===undefined?{}:{body:JSON.stringify(payload)})});
+    const raw=await response.text();let data;try{data=raw?JSON.parse(raw):[]}catch{data=raw}
+    if(!response.ok)throw new Error((data&&data.message)||('Errore '+response.status));
+    return data;
+  };
+  const carica=async (sezione=tab)=>{
+    setErrore('');
+    try{
+      const [a,c,m,p]=await Promise.all([
+        richiesta('crm_agenzie?select=id,nome&proprietario_id=eq.'+encodeURIComponent(session.user.id)),
+        richiesta('clienti?select=id,ragione_sociale&order=ragione_sociale.asc'),
+        richiesta('aziende_mandanti?select=id,nome&order=nome.asc'),
+        richiesta('preventivi?select=id,rif,data,cliente_id&order=data.desc')
+      ]);
+      if(!a.length)throw new Error('Nessuna agenzia associata al tuo account.');
+      setAgenzia(a[0].id);setClienti(c);setMandanti(m);setPreventivi(p);
+      const r=await richiesta(tabelle[sezione]+'?select=*&agenzia_id=eq.'+a[0].id+'&order=created_at.desc');setRecords(r);
+    }catch(e){setErrore(e.message)}
+  };
+  useEffect(()=>{carica(tab)},[tab,session.access_token]);
+  const salva=async()=>{
+    if(!agenzia)return;
+    setBusy(true);setErrore('');setMessaggio('');
+    try{
+      let dati={agenzia_id:agenzia};
+      if(tab==='relazioni'){
+        if(!form.cliente_id||!form.azienda_id)throw new Error('Seleziona cliente e mandante.');
+        dati={...dati,cliente_id:form.cliente_id,azienda_id:form.azienda_id,stato:form.stato,note:form.note||null};
+      }else if(tab==='followup'){
+        if(!form.preventivo_id||!form.scadenza)throw new Error('Seleziona preventivo e scadenza.');
+        dati={...dati,preventivo_id:form.preventivo_id,scadenza:new Date(form.scadenza+'T12:00:00').toISOString(),stato:'da_fare',note:form.note||null};
+      }else{
+        if(!form.cliente_id||!form.descrizione.trim())throw new Error('Seleziona cliente e descrizione.');
+        dati={...dati,cliente_id:form.cliente_id,azienda_id:form.azienda_id||null,descrizione:form.descrizione.trim(),tipo:form.tipo,quantita:Number(form.quantita),stato:'da_consegnare',note:form.note||null};
+        if(!(dati.quantita>0))throw new Error('Quantità non valida.');
+      }
+      await richiesta(tabelle[tab],'POST',dati);
+      setMessaggio('Salvato su Supabase.');setForm({cliente_id:'',azienda_id:'',stato:'potenziale',preventivo_id:'',scadenza:'',descrizione:'',quantita:'1',tipo:'campione',note:''});
+      await carica(tab);
+    }catch(e){setErrore(e.message)}finally{setBusy(false)}
+  };
+  const aggiorna=async (r,changes)=>{setBusy(true);setErrore('');try{await richiesta(tabelle[tab]+'?id=eq.'+r.id+'&agenzia_id=eq.'+agenzia,'PATCH',changes);await carica(tab)}catch(e){setErrore(e.message)}finally{setBusy(false)}};
+  const nomi=(items,id,key)=>items.find(x=>x.id===id)?.[key]||'—';
+  const inp={padding:10,border:'1px solid #cbd5cf',borderRadius:8,minWidth:0,width:'100%',background:'white'};
+  const btn={padding:'10px 14px',background:'#344a43',color:'white',border:0,borderRadius:8,cursor:'pointer'};
+  const campo=(titolo,elemento)=><label style={{display:'grid',gap:5,fontSize:13,color:'#46564e'}}>{titolo}{elemento}</label>;
+  const sel=(key,items,placeholder)=> <select style={inp} value={form[key]} onChange={e=>setForm(f=>({...f,[key]:e.target.value}))}><option value=''>{placeholder}</option>{items.map(x=><option key={x.id} value={x.id}>{x.label}</option>)}</select>;
+  return <section style={{padding:20,background:'white',border:'1px solid #dce4de',borderRadius:16,maxWidth:1050,margin:'0 auto'}}>
+    <h2 style={{marginTop:0}}>Registri commerciali · Supabase</h2>
+    <p style={{fontSize:13,color:'#586b60'}}>Queste tre sezioni salvano dati reali. Le altre funzioni del Laboratorio restano dimostrative finché non saranno integrate.</p>
+    <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:18}}>{[['relazioni','Mandanti per cliente'],['followup','Follow-up preventivi'],['campioni','Campionature']].map(([k,n])=><button key={k} style={{...btn,background:tab===k?'#344a43':'#e8eeea',color:tab===k?'white':'#344a43'}} onClick={()=>{setTab(k);setMessaggio('')}}>{n}</button>)}</div>
+    {errore&&<p role='alert' style={{color:'#a12a22'}}>{errore}</p>}{messaggio&&<p style={{color:'#197044'}}>{messaggio}</p>}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:12,marginBottom:14}}>
+      {tab==='relazioni'&&<>{campo('Cliente',sel('cliente_id',clienti.map(x=>({id:x.id,label:x.ragione_sociale})),'Seleziona cliente'))}{campo('Mandante',sel('azienda_id',mandanti.map(x=>({id:x.id,label:x.nome})),'Seleziona mandante'))}{campo('Stato',<select style={inp} value={form.stato} onChange={e=>setForm(f=>({...f,stato:e.target.value}))}>{['potenziale','in_trattativa','attivo','non_interessato'].map(x=><option key={x} value={x}>{x.replaceAll('_',' ')}</option>)}</select>)}</>}
+      {tab==='followup'&&<>{campo('Preventivo',sel('preventivo_id',preventivi.map(x=>({id:x.id,label:(x.rif||x.id.slice(0,8))+' · '+nomi(clienti,x.cliente_id,'ragione_sociale')})),'Seleziona preventivo'))}{campo('Data prossimo contatto',<input type='date' style={inp} value={form.scadenza} onChange={e=>setForm(f=>({...f,scadenza:e.target.value}))}/>)}</>}
+      {tab==='campioni'&&<>{campo('Cliente',sel('cliente_id',clienti.map(x=>({id:x.id,label:x.ragione_sociale})),'Seleziona cliente'))}{campo('Mandante facoltativo',sel('azienda_id',mandanti.map(x=>({id:x.id,label:x.nome})),'Nessun mandante'))}{campo('Descrizione',<input style={inp} value={form.descrizione} onChange={e=>setForm(f=>({...f,descrizione:e.target.value}))}/>)}{campo('Quantità',<input type='number' min='0.01' step='any' style={inp} value={form.quantita} onChange={e=>setForm(f=>({...f,quantita:e.target.value}))}/>)}{campo('Tipo',<select style={inp} value={form.tipo} onChange={e=>setForm(f=>({...f,tipo:e.target.value}))}><option value='campione'>Campione</option><option value='esposizione'>Esposizione</option></select>)}</>}
+      {campo('Note',<input style={inp} value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))}/>)}
+    </div>
+    <button disabled={busy||!agenzia} style={{...btn,opacity:busy?0.6:1}} onClick={salva}>{busy?'Attendere...':'Salva su Supabase'}</button>
+    <h3 style={{marginTop:24}}>Registrazioni salvate ({records.length})</h3>
+    {records.length===0&&<p style={{color:'#68776e'}}>Nessun elemento presente.</p>}
+    {records.map(r=><div key={r.id} style={{display:'flex',gap:12,justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',borderTop:'1px solid #e5ebe6',padding:'12px 0'}}>
+      <div><strong>{tab==='followup'?'Preventivo '+(preventivi.find(x=>x.id===r.preventivo_id)?.rif||r.preventivo_id?.slice(0,8)):nomi(clienti,r.cliente_id,'ragione_sociale')}</strong><div style={{fontSize:13,color:'#596a60'}}>{tab==='relazioni'?nomi(mandanti,r.azienda_id,'nome'):tab==='campioni'?r.descrizione+' · '+r.quantita+' pz':new Date(r.scadenza).toLocaleDateString('it-IT')}</div>{r.note&&<div style={{fontSize:12}}>{r.note}</div>}</div>
+      <select disabled={busy} style={{...inp,width:'auto'}} value={r.stato} onChange={e=>aggiorna(r,{stato:e.target.value})}>{(tab==='relazioni'?['potenziale','in_trattativa','attivo','non_interessato']:tab==='followup'?['da_fare','completato','annullato']:['da_consegnare','consegnato','in_esposizione','da_recuperare','recuperato']).map(x=><option key={x} value={x}>{x.replaceAll('_',' ')}</option>)}</select>
+    </div>)}
+  </section>;
+}
+
 // Laboratorio Fase 2: prototipo isolato, nessuna scrittura su Supabase.
 function LaboratorioCommercialeCRM() {
   const [tab, setTab] = useState("mandanti");
@@ -3641,7 +3724,7 @@ function AppShell({ session, onLogout }) {
     {id:"agenda",nome:"Agenda",icon:CalendarDays,items:[{key:"agenda",label:"Pannello agenda",icon:CalendarDays},{key:"visite",label:"Calendario e appuntamenti",icon:CalendarDays},{key:"attivita",label:"Attività e follow-up",icon:ClipboardList},{key:"storico_visite",label:"Storico visite",icon:ClipboardList}]},
     {id:"report",nome:"Report",icon:BarChart3,items:[{key:"centro",label:"Centro operativo",icon:Target},{key:"controllo",label:"Controllo Commerciale",icon:Wallet},{key:"fatturato",label:"Fatturato (ordini CRM)",icon:Wallet},{key:"statistiche",label:"Statistiche",icon:TrendingUp}]},
     {id:"mandanti",nome:"Mandanti",icon:Building2,items:[{key:"aziende",label:"Aziende mandanti",icon:Building2}]},
-    {id:"laboratorio",nome:"Laboratorio",icon:Settings,items:[{key:"laboratorio",label:"Nuove funzioni (demo)",icon:Settings}]},
+    {id:"laboratorio",nome:"Laboratorio",icon:Settings,items:[{key:"laboratorio",label:"Registri commerciali",icon:Settings}]},
   ];  const scegli = key => { setPage(key); if(window.innerWidth<768)setMenuOpen(false); };
   const avatar=(session.user.email||"FG").split("@")[0].slice(0,2).toUpperCase();
   return <div className="matrice-shell"><StileRiferimentoFotoCRM/><style>{`
@@ -3687,7 +3770,7 @@ function AppShell({ session, onLogout }) {
         {page==="attivita"&&<AttivitaCRM session={session}/>}
         {page==="clienti"&&<ClientiAnagrafica session={session} apriPreventivo={apriPreventivoCliente} apriGruppo={apriGruppoCliente}/>}
         {page==="architetti"&&<ClientiAnagrafica soloArchitetti session={session} apriPreventivo={apriPreventivoCliente} apriGruppo={apriGruppoCliente}/>}
-        {page==="laboratorio"&&<LaboratorioCommercialeCRM/>}
+        {page==="laboratorio"&&<><RegistroCommercialeSupabase session={session}/><details style={{marginTop:20}}><summary style={{cursor:"pointer",fontWeight:650}}>Apri il vecchio Laboratorio dimostrativo</summary><LaboratorioCommercialeCRM/></details></>}
         {page==="visite"&&<CalendarioVisite session={session}/>} 
         {page==="storico_visite"&&<StoricoVisiteCRM session={session}/>}
         {page==="note"&&<NoteCRM session={session}/>}
