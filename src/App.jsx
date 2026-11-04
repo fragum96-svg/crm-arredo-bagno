@@ -1110,7 +1110,7 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo }) {
 
 function CalendarioVisite({ session }) {
   const oggi = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
-  const nuovo = (data = oggi()) => ({ titolo: "", tipo: "visita", data, oraInizio: "09:00", oraFine: "10:00", stato: "programmato", cliente_id: "", sede_id: "", azienda_id: "", luogo: "", descrizione: "", note: "" });
+  const nuovo = (data = oggi()) => ({ titolo: "", tipo: "visita", data, oraInizio: "09:00", oraFine: "10:00", stato: "programmato", cliente_id: "", sede_id: "", azienda_id: "", luogo: "", descrizione: "", note: "", promemoria_minuti: 30, fineManuale: false });
   const [clienti, setClienti] = useState([]);
   const [aziende, setAziende] = useState([]);
   const [sedi, setSedi] = useState([]);
@@ -1125,6 +1125,14 @@ function CalendarioVisite({ session }) {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(nuovo());
   const [saving, setSaving] = useState(false);
+  const aggiungiMinuti = (ora, minuti) => {
+    if (!/^\d{2}:\d{2}$/.test(ora)) return ora;
+    const [h,m] = ora.split(":").map(Number);
+    const totale = (h * 60 + m + minuti) % 1440;
+    return `${String(Math.floor(totale/60)).padStart(2,"0")}:${String(totale%60).padStart(2,"0")}`;
+  };
+  const cambiaInizio = oraInizio => setForm(f => ({ ...f, oraInizio, oraFine: f.fineManuale ? f.oraFine : aggiungiMinuti(oraInizio, 60) }));
+
   const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token });
   const isoLocale = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
   const load = async () => {
@@ -1138,11 +1146,18 @@ function CalendarioVisite({ session }) {
     } catch (e) { setError(e.message); } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const target = params.get("appuntamento");
+    if (!target || !appuntamenti.length) return;
+    const trovato = appuntamenti.find(e => e.id === target);
+    if (trovato) { apriModifica(trovato); window.history.replaceState({}, "", window.location.pathname); }
+  }, [appuntamenti]);
   const apriNuovo = (data = isoLocale(currentDate)) => { setEditingId(null); setForm(nuovo(data)); setMostraForm(true); setError(""); };
   const apriModifica = (e) => {
     const inizio = new Date(e.inizio), fine = new Date(e.fine);
     setEditingId(e.id);
-    setForm({ titolo: e.titolo || "", tipo: e.tipo || "visita", data: isoLocale(inizio), oraInizio: `${String(inizio.getHours()).padStart(2,"0")}:${String(inizio.getMinutes()).padStart(2,"0")}`, oraFine: `${String(fine.getHours()).padStart(2,"0")}:${String(fine.getMinutes()).padStart(2,"0")}`, stato: e.stato || "programmato", cliente_id: e.cliente_id || "", sede_id: e.sede_id || "", azienda_id: e.azienda_id || "", luogo: e.luogo || "", descrizione: e.descrizione || "", note: e.note || "" });
+    setForm({ titolo: e.titolo || "", tipo: e.tipo || "visita", data: isoLocale(inizio), oraInizio: `${String(inizio.getHours()).padStart(2,"0")}:${String(inizio.getMinutes()).padStart(2,"0")}`, oraFine: `${String(fine.getHours()).padStart(2,"0")}:${String(fine.getMinutes()).padStart(2,"0")}`, stato: e.stato || "programmato", cliente_id: e.cliente_id || "", sede_id: e.sede_id || "", azienda_id: e.azienda_id || "", luogo: e.luogo || "", descrizione: e.descrizione || "", note: e.note || "", promemoria_minuti: e.promemoria_minuti ?? 30, fineManuale: true });
     setMostraForm(true); setError("");
   };
   const save = async () => {
@@ -1151,7 +1166,7 @@ function CalendarioVisite({ session }) {
     if (!Number.isFinite(inizio.getTime()) || !Number.isFinite(fine.getTime()) || fine <= inizio) { setError("Controlla data e orari: la fine deve essere successiva all'inizio."); return; }
     setSaving(true); setError("");
     try {
-      const body = { titolo: form.titolo.trim(), tipo: form.tipo, inizio: inizio.toISOString(), fine: fine.toISOString(), stato: form.stato, cliente_id: form.cliente_id || null, sede_id: form.sede_id || null, azienda_id: form.azienda_id || null, luogo: form.luogo || null, descrizione: form.descrizione || null, note: form.note || null };
+      const body = { titolo: form.titolo.trim(), tipo: form.tipo, inizio: inizio.toISOString(), fine: fine.toISOString(), stato: form.stato, cliente_id: form.cliente_id || null, sede_id: form.sede_id || null, azienda_id: form.azienda_id || null, luogo: form.luogo || null, descrizione: form.descrizione || null, note: form.note || null, promemoria_minuti: Number(form.promemoria_minuti), ...(!editingId ? {user_id:session.user.id} : {}) };
       const endpoint = SUPABASE_URL + "/rest/v1/appuntamenti" + (editingId ? "?id=eq." + editingId : "");
       const res = await fetch(endpoint, { method: editingId ? "PATCH" : "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
       if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.message || "Errore nel salvataggio"); }
@@ -1179,8 +1194,17 @@ function CalendarioVisite({ session }) {
       {campo("Titolo *", <input style={inputStyle} value={form.titolo} onChange={e=>setForm({...form,titolo:e.target.value})} placeholder="Es. Visita showroom" />)}
       {campo("Tipologia", <select style={inputStyle} value={form.tipo} onChange={e=>setForm({...form,tipo:e.target.value})}>{[["visita","Visita cliente"],["architetto","Appuntamento architetto"],["telefonata","Telefonata"],["riunione","Riunione"],["promemoria","Promemoria"],["attivita","Attività"],["altro","Altro"]].map(([v,t])=><option key={v} value={v}>{t}</option>)}</select>)}
       {campo("Data", <input type="date" style={inputStyle} value={form.data} onChange={e=>setForm({...form,data:e.target.value})}/>)}
-      {campo("Ora inizio", <input type="time" style={inputStyle} value={form.oraInizio} onChange={e=>setForm({...form,oraInizio:e.target.value})}/>)}
-      {campo("Ora fine", <input type="time" style={inputStyle} value={form.oraFine} onChange={e=>setForm({...form,oraFine:e.target.value})}/>)}
+      {campo("Ora inizio", <input type="time" style={inputStyle} value={form.oraInizio} onChange={e=>cambiaInizio(e.target.value)}/>)}
+      {campo("Ora fine", <input type="time" style={inputStyle} value={form.oraFine} onChange={e=>setForm(f=>({...f,oraFine:e.target.value,fineManuale:true}))}/>)}
+      {campo("Promemoria", <select style={inputStyle} value={String(form.promemoria_minuti)} onChange={e=>setForm(f=>({...f,promemoria_minuti:Number(e.target.value)}))}>
+        <option value="0">All'ora dell'appuntamento</option>
+        <option value="5">5 minuti prima</option><option value="15">15 minuti prima</option>
+        <option value="30">30 minuti prima</option><option value="60">1 ora prima</option>
+        <option value="120">2 ore prima</option><option value="1440">1 giorno prima</option>
+        <option value="2880">2 giorni prima</option>
+        {!([0,5,15,30,60,120,1440,2880].includes(Number(form.promemoria_minuti))) && <option value={form.promemoria_minuti}>Personalizzato: {form.promemoria_minuti} minuti</option>}
+      </select>)}
+      {campo("Promemoria personalizzato (minuti prima)", <input type="number" min="0" max="10080" step="1" style={inputStyle} value={form.promemoria_minuti} onChange={e=>setForm(f=>({...f,promemoria_minuti:e.target.value}))}/>)}
       {campo("Stato", <select style={inputStyle} value={form.stato} onChange={e=>setForm({...form,stato:e.target.value})}>{["programmato","completato","annullato","rinviato"].map(v=><option key={v} value={v}>{v}</option>)}</select>)}
       {campo("Cliente (facoltativo)", <select style={inputStyle} value={form.cliente_id} onChange={e=>setForm({...form,cliente_id:e.target.value,sede_id:""})}><option value="">Nessun cliente</option>{clienti.map(c=><option key={c.id} value={c.id}>{c.ragione_sociale}</option>)}</select>)}
       {campo("Sede / filiale", <select style={inputStyle} value={form.sede_id} disabled={!form.cliente_id} onChange={e=>setForm({...form,sede_id:e.target.value})}><option value="">Nessuna sede</option>{sedi.filter(s=>s.cliente_id===form.cliente_id).map(s=><option key={s.id} value={s.id}>{s.nome_sede || s.indirizzo}</option>)}</select>)}
@@ -1211,16 +1235,22 @@ function CalendarioVisite({ session }) {
         <div className="agenda-week-grid">
           <div className="agenda-week-corner">Ora</div>
           {getWeekDays(currentDate).map(d=><button type="button" key={isoLocale(d)} className={"agenda-week-day"+(isoLocale(d)===isoLocale(currentDate)?" selected":"")} onClick={()=>{setCurrentDate(new Date(d));setViewMode("giorno");}}><span>{d.toLocaleDateString("it-IT",{weekday:"short"}).replace(".","")}</span><strong>{d.getDate()}</strong></button>)}
-          {Array.from({length:13},(_,i)=>i+7).map(h=><div key={h} style={{display:"contents"}}>
-            <div className="agenda-week-hour">{String(h).padStart(2,"0")}:00</div>
-            {getWeekDays(currentDate).map(d=>{
-              const iso=isoLocale(d);
-              const items=eventiGiorno(d).filter(e=>new Date(e.inizio).getHours()===h);
-              return <div key={iso+":"+h} className="agenda-week-cell" onClick={()=>{apriNuovo(iso);setForm({...nuovo(iso),oraInizio:String(h).padStart(2,"0")+":00",oraFine:String(h+1).padStart(2,"0")+":00"});}}>
-                {items.map(e=><button key={e.id} type="button" className="agenda-week-event" onClick={ev=>{ev.stopPropagation();apriModifica(e);}} style={{borderLeftColor:coloreEvento(e),background:coloreEvento(e)+"20"}}><small>{ora(e.inizio)}</small><strong>{e.titolo}</strong></button>)}
-              </div>;
-            })}
-          </div>)}
+          <div className="agenda-week-hour-column">{Array.from({length:13},(_,i)=>i+7).map(h=><div key={h} className="agenda-week-hour">{String(h).padStart(2,"0")}:00</div>)}</div>
+          {getWeekDays(currentDate).map(d=>{
+            const iso=isoLocale(d);
+            return <div key={iso} className="agenda-week-day-column">
+              {Array.from({length:13},(_,i)=>i+7).map(h=><button type="button" key={h} className="agenda-week-background-slot" onClick={()=>{apriNuovo(iso);setForm({...nuovo(iso),oraInizio:String(h).padStart(2,"0")+":00",oraFine:String(h+1).padStart(2,"0")+":00"});}} aria-label={`Nuovo appuntamento ${iso} ore ${h}`}/>)}
+              {eventiGiorno(d).filter(e=>{
+                const ini=new Date(e.inizio), fin=new Date(e.fine);
+                return ini.getHours()*60+ini.getMinutes()<20*60 && fin.getHours()*60+fin.getMinutes()>7*60;
+              }).map(e=>{
+                const ini=new Date(e.inizio),fin=new Date(e.fine);
+                const start=Math.max(0,(ini.getHours()*60+ini.getMinutes()-420)/60*74);
+                const durata=Math.max(26,Math.min(962-start,(fin.getTime()-ini.getTime())/3600000*74));
+                return <button key={e.id} type="button" className="agenda-week-event agenda-week-positioned" onClick={()=>apriModifica(e)} style={{top:start,height:durata,borderLeftColor:coloreEvento(e),background:coloreEvento(e)+"25"}}><small>{ora(e.inizio)}–{ora(e.fine)}</small><strong>{e.titolo}</strong></button>;
+              })}
+            </div>;
+          })}
         </div>
         <div className="agenda-week-hint">Scorri lateralmente per vedere tutta la settimana · Tocca un giorno per aprirlo</div>
       </div> : <>
@@ -1248,11 +1278,16 @@ function CalendarioVisite({ session }) {
     </div>}
     <style>{`@media(max-width:700px){
       .agenda-week-scroll{width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;background:#fff;border:1px solid #dce5f1;border-radius:14px}
-      .agenda-week-grid{display:grid;grid-template-columns:46px repeat(7,145px);min-width:max-content;align-items:stretch}
+      .agenda-week-grid{display:grid;grid-template-columns:46px repeat(7,145px);grid-template-rows:54px 962px;min-width:max-content;align-items:stretch}
       .agenda-week-corner{position:sticky;left:0;z-index:3;background:#fff;color:#7b8ba3;font-size:10px;display:flex;align-items:center;justify-content:center;border-bottom:1px solid #dce5f1}
       .agenda-week-day{border:0;border-bottom:1px solid #dce5f1;border-left:1px solid #e9edf4;background:#fff;padding:10px 0;display:flex;align-items:center;justify-content:center;gap:6px;color:#53647e}
       .agenda-week-day strong{font-size:16px}.agenda-week-day span{font-size:11px;text-transform:capitalize}.agenda-week-day.selected{background:#eaf2ff;color:#174b94}
-      .agenda-week-hour{position:sticky;left:0;z-index:2;background:#fff;min-height:74px;border-bottom:1px solid #edf0f5;color:#7b8ba3;font-size:10px;padding:8px 3px;text-align:center}
+      .agenda-week-hour{background:#fff;height:74px;box-sizing:border-box;border-bottom:1px solid #edf0f5;color:#7b8ba3;font-size:10px;padding:8px 3px;text-align:center}
+      .agenda-week-day{grid-row:1}
+      .agenda-week-hour-column{grid-column:1;grid-row:2;position:sticky;left:0;z-index:2;background:white}
+      .agenda-week-day-column{position:relative;grid-row:2;height:962px;border-left:1px solid #e9edf4}
+      .agenda-week-background-slot{display:block;width:100%;height:74px;border:0;border-top:1px solid #edf0f5;background:transparent;cursor:pointer}
+      .agenda-week-positioned{position:absolute;left:3px;width:calc(100% - 6px);z-index:1;box-sizing:border-box;overflow:hidden}
       .agenda-week-cell{min-height:74px;border-bottom:1px solid #edf0f5;border-left:1px solid #edf0f5;padding:4px;display:flex;flex-direction:column;gap:3px}
       .agenda-week-event{width:100%;min-width:0;text-align:left;border:0;border-left:4px solid #277bd6;border-radius:6px;padding:5px;display:grid;gap:3px;color:#172b49;overflow:hidden}
       .agenda-week-event small{font-size:10px}.agenda-week-event strong{font-size:11px;line-height:1.2;overflow-wrap:anywhere}
@@ -2644,7 +2679,7 @@ function AttivaNotificheCRM({ session }) {
 
 function AppShell({ session, onLogout }) {
   const [menuOpen, setMenuOpen] = useState(typeof window === "undefined" ? true : window.innerWidth > 768);
-  const [page, setPage] = useState("dashboard");
+  const [page, setPage] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("appuntamento") ? "visite" : "dashboard");
   const [role, setRole] = useState("user");
   const [preventivoAprireId, setPreventivoAprireId] = useState(null);
   const [gruppoAprireId, setGruppoAprireId] = useState(null);
