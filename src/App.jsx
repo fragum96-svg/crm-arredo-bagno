@@ -2861,6 +2861,28 @@ function AttivitaCRM({ session }) {
   </div>;
 }
 
+function PannelloAgendaCRM({ session, goTo }) {
+  return <div style={{maxWidth:1000,margin:"0 auto"}}>
+    <div style={{marginBottom:22}}>
+      <div style={{fontSize:12,fontWeight:700,letterSpacing:1.1,color:"#1870c9",textTransform:"uppercase",marginBottom:6}}>Organizzazione</div>
+      <h1 style={{fontSize:"clamp(24px, 3vw, 32px)",fontWeight:750,color:"#172e45",margin:"0 0 8px"}}>Agenda e attività</h1>
+      <p style={{fontSize:14,color:"#64788c",margin:0}}>Appuntamenti, telefonate e follow-up in un unico punto di accesso.</p>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(min(100%, 240px), 1fr))",gap:15}}>
+      {[
+        {key:"visite",titolo:"Calendario",descrizione:"Appuntamenti, visite e impegni programmati.",Icon:CalendarDays},
+        {key:"attivita",titolo:"Attività e follow-up",descrizione:"Richiami, preventivi da inviare e cose da fare.",Icon:ClipboardList},
+        {key:"storico_visite",titolo:"Storico visite",descrizione:"Consulta gli incontri e le visite precedenti.",Icon:ClipboardList},
+      ].map(item => <button key={item.key} type="button" onClick={()=>goTo(item.key)} style={{textAlign:"left",background:"#fff",border:"1px solid #dce7f1",borderRadius:18,padding:22,cursor:"pointer",boxShadow:"0 5px 20px #173b5c0b",display:"flex",flexDirection:"column",gap:13,minHeight:172}}>
+        <span style={{width:43,height:43,borderRadius:13,background:"#eaf3ff",color:"#0969c7",display:"grid",placeItems:"center"}}><item.Icon size={22}/></span>
+        <span style={{fontSize:17,fontWeight:750,color:"#172e45"}}>{item.titolo}</span>
+        <span style={{fontSize:13,lineHeight:1.5,color:"#60778d"}}>{item.descrizione}</span>
+        <span style={{fontSize:12,color:"#0869ce",fontWeight:700,marginTop:"auto"}}>Apri →</span>
+      </button>)}
+    </div>
+  </div>;
+}
+
 function AppShell({ session, onLogout }) {
   const [menuOpen, setMenuOpen] = useState(typeof window === "undefined" ? true : window.innerWidth > 768);
   const [page, setPage] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("appuntamento") ? "visite" : "dashboard");
@@ -2875,8 +2897,7 @@ function AppShell({ session, onLogout }) {
     {id:"clienti",nome:"Clienti",icon:Users,items:[{key:"clienti",label:"Anagrafica clienti",icon:Users},{key:"architetti",label:"Architetti",icon:Users2},{key:"gruppi",label:"Gruppi d'acquisto",icon:Users2},{key:"mappa",label:"Mappa clienti",icon:MapIcon}]},
     {id:"mandanti",nome:"Mandanti",icon:Building2,items:[{key:"aziende",label:"Aziende mandanti",icon:Building2}]},
     {id:"opportunita",nome:"Opportunità",icon:Target,items:[{key:"pipeline",label:"Pipeline commerciale",icon:Target},{key:"preventivi",label:"Preventivi e offerte",icon:FileText},{key:"portafoglio",label:"Portafoglio ordini",icon:Briefcase},{key:"ordini",label:"Registro ordini",icon:ClipboardList}]},
-    {id:"attivita",nome:"Organizzazione",icon:ClipboardList,items:[{key:"attivita",label:"Attività e follow-up",icon:ClipboardList}]},
-    {id:"agenda",nome:"Agenda",icon:CalendarDays,items:[{key:"visite",label:"Calendario e appuntamenti",icon:CalendarDays},{key:"storico_visite",label:"Storico visite",icon:ClipboardList}]},
+    {id:"agenda",nome:"Agenda",icon:CalendarDays,items:[{key:"agenda",label:"Pannello agenda",icon:CalendarDays},{key:"visite",label:"Calendario e appuntamenti",icon:CalendarDays},{key:"attivita",label:"Attività e follow-up",icon:ClipboardList},{key:"storico_visite",label:"Storico visite",icon:ClipboardList}]},
     {id:"report",nome:"Report",icon:BarChart3,items:[{key:"controllo",label:"Controllo Commerciale",icon:Wallet},{key:"fatturato",label:"Fatturato (ordini CRM)",icon:Wallet},{key:"statistiche",label:"Statistiche",icon:TrendingUp}]},
   ];
   const scegli = key => { setPage(key); if(window.innerWidth<768)setMenuOpen(false); };
@@ -2897,6 +2918,7 @@ function AppShell({ session, onLogout }) {
         {page==="dashboard"&&<Dashboard session={session} goTo={scegli}/>}
         {page==="admin"&&role==="admin"&&<AdminPanel session={session}/>}
         {page==="aziende"&&<AziendeMandanti session={session}/>}
+        {page==="agenda"&&<PannelloAgendaCRM session={session} goTo={scegli}/>}
         {page==="attivita"&&<AttivitaCRM session={session}/>}
         {page==="clienti"&&<ClientiAnagrafica session={session} apriPreventivo={apriPreventivoCliente} apriGruppo={apriGruppoCliente}/>}
         {page==="architetti"&&<ClientiAnagrafica soloArchitetti session={session} apriPreventivo={apriPreventivoCliente} apriGruppo={apriGruppoCliente}/>}
@@ -2914,7 +2936,7 @@ function AppShell({ session, onLogout }) {
         {page==="gruppi"&&<GruppiAcquisto session={session} gruppoIniziale={gruppoAprireId} onGruppoAperto={()=>setGruppoAprireId(null)}/>}
       </main></div>
     <nav className="crm-mobile-bottom-nav" aria-label="Navigazione rapida">
-      {[{key:"dashboard",label:"Home",Icon:LayoutDashboard},{key:"clienti",label:"Clienti",Icon:Users},{key:"visite",label:"Agenda",Icon:CalendarDays},{key:"pipeline",label:"Pipeline",Icon:Target}].map(item=><button key={item.key} type="button" className={page===item.key?"active":""} onClick={()=>scegli(item.key)}><item.Icon size={20}/><span>{item.label}</span></button>)}
+      {[{key:"dashboard",label:"Home",Icon:LayoutDashboard},{key:"clienti",label:"Clienti",Icon:Users},{key:"agenda",label:"Agenda",Icon:CalendarDays},{key:"pipeline",label:"Pipeline",Icon:Target}].map(item=><button key={item.key} type="button" className={page===item.key?"active":""} onClick={()=>scegli(item.key)}><item.Icon size={20}/><span>{item.label}</span></button>)}
       <button type="button" className={menuOpen?"active":""} onClick={()=>setMenuOpen(true)}><MenuIcon size={20}/><span>Menu</span></button>
     </nav>
   </div>;
