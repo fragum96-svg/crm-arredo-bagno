@@ -429,7 +429,8 @@ function Dashboard({ session, goTo }) {
   return <div className="matrice-dashboard">
     <div className="matrice-welcome"><div><h1>Ciao Francesco <span aria-hidden="true">👋</span></h1><p>Oggi è {oggi.toLocaleDateString("it-IT",{weekday:"long",day:"numeric",month:"long"})}. Ecco il riepilogo della tua attività.</p></div><div className="crm-dashboard-quick"><button className="matrice-add" onClick={()=>goTo("clienti")}><Users size={16}/> Clienti</button><button className="matrice-add" onClick={()=>goTo("architetti")}><Users2 size={16}/> Architetti</button><button className="matrice-add" onClick={()=>goTo("visite")}><Plus size={16}/> Apri agenda</button></div></div>
     {errore && <p style={{color:"#c0392b"}}>{errore}</p>}
-    <div className="matrice-metrics">{metriche.map(m=>{const I=m.icona;return <button key={m.nome} className="matrice-metric" onClick={()=>goTo(m.pagina)}><span className="matrice-metric-icon"><I size={19}/></span><span><small>{m.nome}</small><strong>{loading?"…":m.valore}</strong><em>{m.nota}</em></span></button>})}</div>
+    <div className="crm-today-priority">
+      <section style={panel}><div className="matrice-section-head"><h3>Agenda di oggi</h3><button onClick={()=>goTo("visite")}><Plus size={15}/> Vedi agenda</button></div>{agenda.length===0?<p className="matrice-empty">Nessun appuntamento previsto oggi.</p>:agenda.slice(0,5).map(x=><div className="matrice-event" key={x.id}><span className="matrice-event-time">{new Date(x.inizio).toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"})}</span><span className="matrice-event-mark"/><span className="matrice-event-name">{x.titolo}</span></div>)}</section>
     <section className="crm-task-dashboard" style={{...panel, marginBottom:18}}>
       <div className="matrice-section-head"><h3><CheckSquare size={18} style={{verticalAlign:"middle",marginRight:8,color:"#1267e9"}}/>Attività e follow-up</h3><button onClick={()=>goTo("attivita")}>Apri attività <ArrowUpRight size={14}/></button></div>
       <div className="crm-task-summary">
@@ -438,12 +439,13 @@ function Dashboard({ session, goTo }) {
       {erroreAttivita && <p style={{color:"#b83232",fontSize:12}}>{erroreAttivita}</p>}
       {listaDashboard.length === 0 ? <p className="matrice-empty">Nessuna attività con scadenza da completare. <button type="button" onClick={()=>goTo("attivita")} style={{border:0,background:"none",color:"#1267e9",cursor:"pointer",fontWeight:650}}>Crea un'attività</button></p> : <div className="crm-task-list">{listaDashboard.map(a => <div key={a.id} className="crm-task-row"><button type="button" className="crm-task-check" disabled={!!azioneAttivita} onClick={()=>completaDaDashboard(a)} title="Segna come completata" aria-label={"Completa " + a.titolo}><Check size={15}/></button><div className="crm-task-info"><strong>{a.titolo}</strong><small>{etichettaAttivita(a)}{etichettaAttivita(a) ? " · " : ""}{a.scadenza ? new Date(a.scadenza).toLocaleString("it-IT",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}) : "Senza scadenza"}</small></div><span className="crm-task-priority" style={{color:a.priorita==="alta"?"#b56b0d":"#718094"}}>{a.priorita==="alta"?"Alta":a.priorita==="media"?"Media":"Bassa"}</span></div>)}</div>}
     </section>
+    <div className="crm-dashboard-finance-label"><h2>Analisi commerciale</h2><span>Fatturato, andamento e opportunità</span></div>
+    <div className="matrice-metrics">{metriche.map(m=>{const I=m.icona;return <button key={m.nome} className="matrice-metric" onClick={()=>goTo(m.pagina)}><span className="matrice-metric-icon"><I size={19}/></span><span><small>{m.nome}</small><strong>{loading?"…":m.valore}</strong><em>{m.nota}</em></span></button>})}</div>
     <div className="matrice-two">
       <section style={panel}><div className="matrice-section-head"><h3>Fatturato per mandante</h3><button onClick={()=>goTo("controllo")}>Dettagli <ArrowUpRight size={13}/></button></div><div className="matrice-total">Totale: <strong>{loading?"…":euro(fatturatoYTD)}</strong></div>{fatturatoMandanti.length===0?<p className="matrice-empty">Nessuna azienda mandante presente.</p>:fatturatoMandanti.map((a,i)=><div className="matrice-pipeline-row" key={a.id}><span className="matrice-dot" style={{background:a.colore||["#3478ed","#6c63db","#22a98b","#e4a34e"][i%4]}}/><span className="matrice-pipeline-name" title={a.nome}>{a.nome}</span><div className="matrice-track"><div style={{width:(fatturatoYTD>0?100*a.valore/fatturatoYTD:0)+"%",background:a.colore||"#3d79ed"}}/></div><strong>{euro(a.valore)}</strong><span className="matrice-percent">{fatturatoYTD?Math.round(a.valore/fatturatoYTD*100):0}%</span></div>)}</section>
       <section style={panel}><div className="matrice-section-head"><h3>Andamento fatturato</h3><button onClick={()=>goTo("controllo")}>Dettagli <ArrowUpRight size={13}/></button></div><p className="matrice-chart-sub">Anno {anno} · Registrazioni manuali aggregate per trimestre</p><div style={{height:215,width:"100%"}}><ResponsiveContainer width="100%" height="100%"><AreaChart data={trimestri} margin={{top:12,right:5,left:-16,bottom:0}}><defs><linearGradient id="matriceTrend" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4686f6" stopOpacity={0.22}/><stop offset="100%" stopColor="#4686f6" stopOpacity={0.01}/></linearGradient></defs><CartesianGrid stroke="#eef1f7" vertical={false}/><XAxis dataKey="periodo" tick={{fontSize:10,fill:"#8792a5"}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:"#8792a5"}} axisLine={false} tickLine={false} tickFormatter={v=>v>=1000?Math.round(v/1000)+"k":v}/><Tooltip formatter={v=>euro(v)}/><Area type="monotone" dataKey="valore" stroke="#367bf3" strokeWidth={2.5} fill="url(#matriceTrend)"/></AreaChart></ResponsiveContainer></div></section>
     </div>
     <div className="matrice-two matrice-bottom">
-      <section style={panel}><div className="matrice-section-head"><h3>Agenda di oggi</h3><button onClick={()=>goTo("visite")}><Plus size={15}/> Vedi agenda</button></div>{agenda.length===0?<p className="matrice-empty">Nessun appuntamento previsto oggi.</p>:agenda.slice(0,5).map(x=><div className="matrice-event" key={x.id}><span className="matrice-event-time">{new Date(x.inizio).toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"})}</span><span className="matrice-event-mark"/><span className="matrice-event-name">{x.titolo}</span></div>)}</section>
       <section style={panel}><div className="matrice-section-head"><h3>Opportunità in trattativa</h3><button onClick={()=>goTo("preventivi")}>Tutte <ArrowUpRight size={13}/></button></div>{opportunita.length===0?<p className="matrice-empty">Nessun preventivo aperto al momento.</p>:opportunita.slice(0,4).map((x,i)=><div className="matrice-opportunity" key={x.id}><span className="matrice-opportunity-mark" style={{background:i%2?"#a58de8":"#3982ee"}}/><div><strong>{data.clienti.find(c=>c.id===x.cliente_id)?.ragione_sociale||"Preventivo"}</strong><small>{x.stato==="inviato"?"Preventivo inviato":"Bozza"}</small></div><b>{euro(importo(x))}</b></div>)}</section>
     </div>
     <section className="crm-recent-notes" style={{...panel,marginTop:2}}><div className="matrice-section-head"><h3><StickyNote size={17} style={{verticalAlign:"middle",marginRight:8,color:"#e5a528"}}/>Note recenti</h3><button onClick={()=>goTo("note")}><Plus size={15}/> Nuova nota</button></div>{data.note.length===0?<p className="matrice-empty">Nessuna nota salvata. Crea la prima dalla sezione Note.</p>:data.note.map(n=><button className="crm-note-preview" key={n.id} onClick={()=>goTo("note")}><FileText size={15}/><span><strong>{n.titolo}</strong><small>{n.contenuto||""}</small></span><time>{new Date(n.created_at).toLocaleDateString("it-IT")}</time></button>)}</section>
@@ -3118,14 +3120,34 @@ function AppShell({ session, onLogout }) {
   const sezioni = [
     {id:"clienti",nome:"Clienti",icon:Users,items:[{key:"clienti",label:"Anagrafica clienti",icon:Users},{key:"gruppi",label:"Gruppi d'acquisto",icon:Users2},{key:"mappa",label:"Mappa clienti",icon:MapIcon}]},
     {id:"architetti",nome:"Architetti",icon:Users2,items:[{key:"architetti",label:"Studi e architetti",icon:Users2}]},
-    {id:"mandanti",nome:"Mandanti",icon:Building2,items:[{key:"aziende",label:"Aziende mandanti",icon:Building2}]},
     {id:"opportunita",nome:"Opportunità",icon:Target,items:[{key:"pipeline",label:"Pipeline commerciale",icon:Target},{key:"preventivi",label:"Preventivi e offerte",icon:FileText},{key:"portafoglio",label:"Portafoglio ordini",icon:Briefcase},{key:"ordini",label:"Registro ordini",icon:ClipboardList}]},
     {id:"agenda",nome:"Agenda",icon:CalendarDays,items:[{key:"agenda",label:"Pannello agenda",icon:CalendarDays},{key:"visite",label:"Calendario e appuntamenti",icon:CalendarDays},{key:"attivita",label:"Attività e follow-up",icon:ClipboardList},{key:"storico_visite",label:"Storico visite",icon:ClipboardList}]},
     {id:"report",nome:"Report",icon:BarChart3,items:[{key:"centro",label:"Centro operativo",icon:Target},{key:"controllo",label:"Controllo Commerciale",icon:Wallet},{key:"fatturato",label:"Fatturato (ordini CRM)",icon:Wallet},{key:"statistiche",label:"Statistiche",icon:TrendingUp}]},
-  ];
-  const scegli = key => { setPage(key); if(window.innerWidth<768)setMenuOpen(false); };
+    {id:"mandanti",nome:"Mandanti",icon:Building2,items:[{key:"aziende",label:"Aziende mandanti",icon:Building2}]},
+  ];  const scegli = key => { setPage(key); if(window.innerWidth<768)setMenuOpen(false); };
   const avatar=(session.user.email||"FG").split("@")[0].slice(0,2).toUpperCase();
-  return <div className="matrice-shell"><StileRiferimentoFotoCRM/>
+  return <div className="matrice-shell"><StileRiferimentoFotoCRM/><style>{`
+/* Contrasto e gerarchia della dashboard */
+.matrice-shell{background:#eaf0f8!important}
+.matrice-workspace{background:#eaf0f8!important}
+.matrice-topbar{background:#fff!important;border-bottom:1px solid #cdd8e8!important}
+.matrice-main{background:transparent!important}
+.matrice-dashboard .matrice-metrics .matrice-metric{background:#fff!important;border:1px solid #cbd7e8!important;box-shadow:0 5px 15px rgba(28,53,91,.09)!important}
+.matrice-dashboard .matrice-metrics .matrice-metric:first-child{background:#fff!important;border-color:#cbd7e8!important}
+.matrice-dashboard .matrice-metrics .matrice-metric:first-child strong{color:#15243c!important}
+.matrice-dashboard .matrice-metrics .matrice-metric:first-child small,.matrice-dashboard .matrice-metrics .matrice-metric:first-child em{color:#718099!important}
+.matrice-dashboard .matrice-two>section,.matrice-dashboard .crm-recent-notes,.matrice-dashboard .crm-task-dashboard,.matrice-dashboard .crm-today-priority>section{background:#fff!important;border:1px solid #cbd7e8!important;box-shadow:0 6px 18px rgba(28,53,91,.09)!important;border-radius:16px!important}
+.crm-today-priority{margin-bottom:16px}
+.crm-today-priority>section{border-left:4px solid #2775e7!important}
+.crm-today-priority .matrice-section-head h3{font-size:17px!important}
+.crm-dashboard-finance-label{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:23px 0 13px;padding:0 2px}
+.crm-dashboard-finance-label h2{font-size:17px!important;font-weight:750!important;margin:0!important;color:#1c3150!important}
+.crm-dashboard-finance-label span{font-size:12px;color:#667b98}
+.crm-task-dashboard{border-left:4px solid #e4aa40!important}
+.matrice-dashboard .matrice-section-head{border-bottom:1px solid #e8edf5;padding-bottom:11px;margin-bottom:13px}
+.matrice-dashboard .matrice-two>section{min-width:0}
+@media(max-width:768px){.matrice-shell,.matrice-workspace{background:#eaf0f8!important}.crm-dashboard-finance-label{display:block}.crm-dashboard-finance-label span{display:block;margin-top:4px}.crm-today-priority>section{padding:15px!important}}
+`}</style>
     <aside className={"matrice-sidebar"+(menuOpen?" is-open":"")}>
       <div className="matrice-brand"><div className="matrice-brand-icon"><BarChart3 size={29} strokeWidth={3}/></div><div><strong>CRM</strong></div><button className="matrice-close-menu" onClick={()=>setMenuOpen(false)}>×</button></div>
       <div className="matrice-nav-scroll"><button className={"matrice-nav-main"+(page==="dashboard"?" active":"")} onClick={()=>scegli("dashboard")}><LayoutDashboard size={17}/> Dashboard</button>
