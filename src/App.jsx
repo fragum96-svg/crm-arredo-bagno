@@ -235,9 +235,10 @@ function generaStampaHTML(preventivo, clienti, aziende) {
     return "<tr>" + cellaImg + "<td>" + (riga.articolo || "") + "</td><td>" + (riga.descrizione || "") + "</td><td>" + (riga.finitura || "") + "</td><td>" + (riga.quantita || "") + "</td><td>" + (riga.unita_misura || "") + "</td><td>" + formattaNumero(riga.prezzo_unitario) + "</td><td>" + (riga.sconto1 || 0) + "%</td><td>" + (riga.sconto2 || 0) + "%</td><td>" + (riga.sconto3 || 0) + "%</td><td>" + formattaNumero(nettoUnitario) + "</td><td>" + formattaNumero(netto) + "</td></tr>";
   }).join("");
 
-  function rigaVoce(label, modalita, valore, valoreGrezzo) {
+  function rigaVoce(label, modalita, valore, valoreGrezzo, percentuale) {
     if (modalita === "nascosto") return "";
     if (modalita === "escluso") return "<div>" + label + ": escluso</div>";
+    if (modalita === "percentuale") return "<div>" + label + ": " + formattaNumero(Number(percentuale) || 0).replace(/,00$/, "") + "%</div>";
     if (modalita === "euro" && valoreGrezzo !== undefined && valoreGrezzo !== "" && isNaN(parseFloat(String(valoreGrezzo).replace(",", ".")))) {
       return "<div>" + label + ": " + valoreGrezzo + "</div>";
     }
@@ -254,9 +255,9 @@ function generaStampaHTML(preventivo, clienti, aziende) {
     '<p style="margin-top:10px;">Spett.le: ' + nomeClienteStampa + (preventivo.rif ? " — Rif. " + preventivo.rif : "") + "</p>" +
     "<table><thead><tr>" + intestazioneColonne + "</tr></thead><tbody>" + righeHtml + "</tbody></table>" +
     '<div class="totali">' +
-    rigaVoce("Imballo", preventivo.imballo_modalita, tot.valoreImballo, preventivo.imballo_valore) +
-    rigaVoce("Trasporto", preventivo.trasporto_modalita, tot.valoreTrasporto, preventivo.trasporto_valore) +
-    rigaVoce("IVA", preventivo.iva_modalita, tot.valoreIva, preventivo.iva_valore) +
+    rigaVoce("Imballo", preventivo.imballo_modalita, tot.valoreImballo, preventivo.imballo_valore, preventivo.imballo_percentuale) +
+    rigaVoce("Trasporto", preventivo.trasporto_modalita, tot.valoreTrasporto, preventivo.trasporto_valore, preventivo.trasporto_percentuale) +
+    rigaVoce("IVA", preventivo.iva_modalita, tot.valoreIva, preventivo.iva_valore, preventivo.iva_percentuale) +
     "<div><strong>Totale: " + formattaNumero(tot.totaleFinale) + "</strong></div></div>" +
     (preventivo.modalita_pagamento ? '<p style="margin-top:20px;"><strong>Modalità di pagamento:</strong> ' + preventivo.modalita_pagamento + "</p>" : "") +
     (preventivo.note ? '<p style="margin-top:10px;"><strong>Note:</strong> ' + preventivo.note + "</p>" : "") +
@@ -316,28 +317,31 @@ async function stampaPreventivo(preventivo, clienti, aziende, session, onAntepri
       catch (err) { console.warn("Immagine non disponibile nel PDF", err); return null; }
     }));
     const haImmagini = righe.some((r, i) => Boolean(r.immagine_url && immagini[i]));
-    const navy = [25, 43, 67];
-    const muted = [95, 105, 119];
+    // Palette neutra dedicata al PDF; non modifica i colori del CRM.
+    const navy = [65, 69, 74];
+    const muted = [111, 115, 121];
     const drawHeader = () => {
       doc.setTextColor(...navy);
       doc.setFont("helvetica", "bold"); doc.setFontSize(16);
       doc.text(testoPdf(azienda?.nome || "PREVENTIVO"), margin, 16);
       doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(...muted);
       doc.text("Agente Francesco Gomiero" + (CONTATTI_AGENTE.email ? "  |  " + CONTATTI_AGENTE.email : "") + (CONTATTI_AGENTE.telefono ? "  |  " + CONTATTI_AGENTE.telefono : ""), margin, 22);
-      doc.setDrawColor(204, 211, 221); doc.line(margin, 26, pageW - margin, 26);
+      doc.setDrawColor(205, 207, 210); doc.line(margin, 26, pageW - margin, 26);
       doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(...navy);
-      doc.text("PREVENTIVO", margin, 36);
-      doc.setFont("helvetica", "normal"); doc.setFontSize(9);
-      doc.text("Rif.: " + testoPdf(preventivo.rif || "—"), pageW - margin, 33, { align: "right" });
-      doc.text("Data: " + dataPdf(preventivo.data), pageW - margin, 39, { align: "right" });
+      doc.text("PREVENTIVO", margin, 35);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...muted);
+      doc.text("Data: " + dataPdf(preventivo.data), margin, 41);
+      const colRif = pageW / 2;
       doc.setFontSize(8.5); doc.setTextColor(...muted);
-      doc.text("CLIENTE", margin, 44);
-      doc.text("CONDIZIONI DI PAGAMENTO", pageW / 2, 44);
+      doc.text("Spett.le", margin, 48);
+      doc.text("RIFERIMENTO", colRif, 48);
       doc.setTextColor(...navy); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
       const clienteNome = testoPdf(cliente?.ragione_sociale || preventivo.cliente_manuale || "—");
-      doc.text(doc.splitTextToSize(clienteNome, 120).slice(0, 2), margin, 50);
-      doc.text(doc.splitTextToSize(testoPdf(preventivo.modalita_pagamento || "Da concordare"), 120).slice(0, 2), pageW / 2, 50);
-      doc.setDrawColor(218, 224, 232); doc.line(margin, 60, pageW - margin, 60);
+      doc.text(doc.splitTextToSize(clienteNome, colRif - margin - 8).slice(0, 2), margin, 54);
+      doc.text(doc.splitTextToSize(testoPdf(preventivo.rif || "—"), pageW - colRif - margin).slice(0, 2), colRif, 54);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(...muted);
+      doc.text("Pagamento: " + testoPdf(preventivo.modalita_pagamento || "Da concordare"), margin, 62);
+      doc.setDrawColor(218, 220, 223); doc.line(margin, 66, pageW - margin, 66);
     };
     const head = [[...(haImmagini ? ["Img"] : []), "Articolo", "Descrizione", "Finitura", "UM", "Qtà", ...(soloNetto ? [] : ["Listino €", "Sconto"]), "Netto un. €", "Totale €"]];
     const body = righe.map((r, i) => {
@@ -352,11 +356,11 @@ async function stampaPreventivo(preventivo, clienti, aziende, session, onAntepri
     const columnStyles = Object.fromEntries(widths.map((cellWidth, i) => [i, { cellWidth }]));
     // Lascia spazio per il riepilogo nella pagina finale; autoTable ripete le intestazioni.
     autoTable(doc, {
-      head, body, startY: 65, margin: { left: margin, right: margin, top: 65, bottom: 20 },
+      head, body, startY: 71, margin: { left: margin, right: margin, top: 71, bottom: 20 },
       theme: "grid", showHead: "everyPage", rowPageBreak: "avoid",
       styles: { font: "helvetica", fontSize: 8, textColor: navy, lineColor: [224, 229, 235], lineWidth: 0.16, cellPadding: 2.4, overflow: "linebreak", valign: "middle" },
       headStyles: { fillColor: navy, textColor: 255, fontStyle: "bold", fontSize: 8 },
-      alternateRowStyles: { fillColor: [248, 250, 253] }, columnStyles,
+      alternateRowStyles: { fillColor: [247, 247, 247] }, columnStyles,
       didParseCell: data => {
         if (haImmagini && data.section === "body" && data.column.index === 0 && immagini[data.row.index]) {
           data.cell.styles.minCellHeight = 22;
@@ -372,19 +376,20 @@ async function stampaPreventivo(preventivo, clienti, aziende, session, onAntepri
       },
       didDrawPage: () => drawHeader(),
     });
-    let y = (doc.lastAutoTable?.finalY || 65) + 10;
+    let y = (doc.lastAutoTable?.finalY || 71) + 10;
     const summary = [
       ["Totale netto merce", formattaNumero(tot.totaleNetto) + " €"],
     ];
-    function voce(label, modalita, valore, grezzo) {
+    function voce(label, modalita, valore, grezzo, percentuale) {
       if (modalita === "nascosto") return;
       if (modalita === "escluso") summary.push([label, "Escluso"]);
+      else if (modalita === "percentuale") summary.push([label, formattaNumero(Number(percentuale) || 0).replace(/,00$/, "") + "%"]);
       else if (modalita === "euro" && grezzo !== undefined && grezzo !== "" && isNaN(parseFloat(String(grezzo).replace(",", ".")))) summary.push([label, testoPdf(grezzo)]);
       else summary.push([label, formattaNumero(valore) + " €"]);
     }
-    voce("Imballo", preventivo.imballo_modalita, tot.valoreImballo, preventivo.imballo_valore);
-    voce("Trasporto", preventivo.trasporto_modalita, tot.valoreTrasporto, preventivo.trasporto_valore);
-    voce("IVA", preventivo.iva_modalita, tot.valoreIva, preventivo.iva_valore);
+    voce("Imballo", preventivo.imballo_modalita, tot.valoreImballo, preventivo.imballo_valore, preventivo.imballo_percentuale);
+    voce("Trasporto", preventivo.trasporto_modalita, tot.valoreTrasporto, preventivo.trasporto_valore, preventivo.trasporto_percentuale);
+    voce("IVA", preventivo.iva_modalita, tot.valoreIva, preventivo.iva_valore, preventivo.iva_percentuale);
     summary.push(["TOTALE PREVENTIVO", formattaNumero(tot.totaleFinale) + " €"]);
     const noteLines = [
       ...(preventivo.modalita_pagamento ? ["Pagamento: " + testoPdf(preventivo.modalita_pagamento)] : []),
@@ -392,7 +397,7 @@ async function stampaPreventivo(preventivo, clienti, aziende, session, onAntepri
     ];
     const noteHeight = noteLines.reduce((h, t) => h + doc.splitTextToSize(t, pageW - 2 * margin).length * 4.2 + 3, 0);
     const summaryHeight = summary.length * 7 + 9;
-    if (y + summaryHeight + noteHeight > pageH - 16) { doc.addPage(); drawHeader(); y = 66; }
+    if (y + summaryHeight + noteHeight > pageH - 16) { doc.addPage(); drawHeader(); y = 72; }
     const x = pageW - margin - 106;
     summary.forEach(([label, value], i) => {
       const last = i === summary.length - 1;
@@ -407,7 +412,7 @@ async function stampaPreventivo(preventivo, clienti, aziende, session, onAntepri
     doc.setFont("helvetica", "normal"); doc.setTextColor(...navy); doc.setFontSize(8.5);
     noteLines.forEach(t => {
       const lines = doc.splitTextToSize(t, pageW - 2 * margin);
-      if (y + lines.length * 4.2 > pageH - 14) { doc.addPage(); drawHeader(); y = 66; }
+      if (y + lines.length * 4.2 > pageH - 14) { doc.addPage(); drawHeader(); y = 72; }
       doc.text(lines, margin, y); y += lines.length * 4.2 + 3;
     });
     const pages = doc.internal.getNumberOfPages();
