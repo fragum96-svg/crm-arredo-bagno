@@ -16,7 +16,9 @@ self.addEventListener("push", (event) => {
   } catch (error) {
     data = {
       title: "CRM",
-      body: event.data ? event.data.text() : "Nuovo promemoria"
+      body: event.data
+        ? event.data.text()
+        : "Nuovo promemoria"
     };
   }
 
@@ -41,16 +43,31 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  const url = new URL(
+  const target = new URL(
     event.notification.data?.url || "/",
     self.location.origin
   );
 
-  if (url.origin !== self.location.origin) {
+  // Sicurezza: consentiamo soltanto URL del CRM
+  if (target.origin !== self.location.origin) {
     return;
   }
 
-  event.waitUntil(
-    self.clients.openWindow(url.href)
-  );
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({
+      type: "window",
+      includeUncontrolled: true
+    });
+
+    // Se il CRM è già aperto, riutilizziamo la finestra
+    for (const client of windows) {
+      if (new URL(client.url).origin === target.origin) {
+        await client.navigate(target.href);
+        return client.focus();
+      }
+    }
+
+    // Altrimenti apriamo il CRM
+    return self.clients.openWindow(target.href);
+  })());
 });
