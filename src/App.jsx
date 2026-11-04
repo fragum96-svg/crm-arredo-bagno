@@ -2914,7 +2914,27 @@ function PipelineCommerciale({session, preventivoDaConvertire, onPreventivoRicev
     return false;
   };
   const clientiDisponibili=clienti;
-  const visibiliBase=opportunita.filter(o=> (vistaArchivio === "tutti" || (vistaArchivio === "conclusi" ? ["confermata","persa"].includes(o.fase) && (!o.crm_chiuso_il || (Date.now()-new Date(o.crm_chiuso_il).getTime()) >= 30*86400000) : !["confermata","persa"].includes(o.fase) || (o.crm_chiuso_il && (Date.now()-new Date(o.crm_chiuso_il).getTime()) < 30*86400000))) && (!aziendaFiltro||o.azienda_id===aziendaFiltro)&&((o.titolo||"")+" "+(clienti.find(c=>c.id===o.cliente_id)?.ragione_sociale||"")).toLowerCase().includes(search.toLowerCase()));
+  // Filtro solo visivo: nessun record viene cancellato o spostato nel database.
+  // crm_chiuso_il e' la data di conclusione; per vecchi record privi di data
+  // usiamo updated_at/created_at come ripiego, senza generare nuovi ordini.
+  const GIORNI_ACCETTATI_PIPELINE=7;
+  const GIORNI_RIFIUTATI_PIPELINE=30;
+  const giorniDaChiusura=o=>{
+    const valore=o.crm_chiuso_il||o.updated_at||o.created_at;
+    if(!valore)return 0; // record storico senza date: non nasconderlo per errore
+    const timestamp=new Date(valore).getTime();
+    return Number.isFinite(timestamp)?Math.max(0,Math.floor((Date.now()-timestamp)/86400000)):0;
+  };
+  const durataVisibilita=o=>o.fase==="confermata"?GIORNI_ACCETTATI_PIPELINE:o.fase==="persa"?GIORNI_RIFIUTATI_PIPELINE:null;
+  const conclusaArchiviata=o=>{
+    const giorni=durataVisibilita(o);
+    return giorni!==null&&giorniDaChiusura(o)>=giorni;
+  };
+  const visibiliBase=opportunita.filter(o=>
+    (vistaArchivio==="tutti" || (vistaArchivio==="conclusi" ? conclusaArchiviata(o) : !conclusaArchiviata(o))) &&
+    (!aziendaFiltro||o.azienda_id===aziendaFiltro) &&
+    ((o.titolo||"")+" "+(clienti.find(c=>c.id===o.cliente_id)?.ragione_sociale||"")).toLowerCase().includes(search.toLowerCase())
+  );
   const oggiPipeline=new Date().toLocaleDateString("sv-SE");
   const statoFollowup=o=>{
     if(["confermata","persa"].includes(o.fase)||!o.data_prossima_azione)return null;
@@ -2991,7 +3011,7 @@ function PipelineCommerciale({session, preventivoDaConvertire, onPreventivoRicev
   return <div className="crm-pipeline">
     <div className="matrice-welcome"><div><h1>Pipeline commerciale</h1><p>Trattative per mandante, dal primo contatto alla conferma.</p></div><button className="crm-primary-btn" onClick={()=>apriNuova()}><Plus size={15}/> Nuova opportunità</button></div>
     {error&&<div style={{background:"#fff0f0",color:"#a52121",padding:12,borderRadius:9,marginBottom:14}}>{error}</div>}
-    <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>{[{id:"attivi",label:"Attivi (conclusi ultimi 30 giorni)"},{id:"conclusi",label:"Archivio conclusi"},{id:"tutti",label:"Tutti"}].map(v=><button key={v.id} type="button" onClick={()=>setVistaArchivio(v.id)} style={{border:"1px solid #dae4ef",borderRadius:9,padding:"9px 12px",background:vistaArchivio===v.id?"#e7efff":"#fff",color:"#19385d",cursor:"pointer"}}>{v.label}</button>)}</div>
+    <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>{[{id:"attivi",label:"Attivi (accettati 7 gg · rifiutati 30 gg)"},{id:"conclusi",label:"Archivio conclusi"},{id:"tutti",label:"Tutti"}].map(v=><button key={v.id} type="button" onClick={()=>setVistaArchivio(v.id)} style={{border:"1px solid #dae4ef",borderRadius:9,padding:"9px 12px",background:vistaArchivio===v.id?"#e7efff":"#fff",color:"#19385d",cursor:"pointer"}}>{v.label}</button>)}</div>
     <div className="crm-pipeline-filters"><label style={label}>Azienda mandante<select style={input} value={aziendaFiltro} onChange={e=>setAziendaFiltro(e.target.value)}><option value="">Tutte le mandanti</option>{aziende.map(a=><option key={a.id} value={a.id}>{a.nome}</option>)}</select></label><label style={label}>Cerca opportunità<input style={input} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Titolo o cliente"/></label><label style={label}>Priorità follow-up<select style={input} value={filtroAzioni} onChange={e=>setFiltroAzioni(e.target.value)}><option value="tutte">Tutte le opportunità</option><option value="scaduta">Scaduti</option><option value="oggi">Da contattare oggi</option><option value="futura">Programmato</option><option value="senza">Senza prossima azione completa</option></select></label></div>
     <div className="crm-pipeline-stats"><div><small>Opportunità aperte</small><strong>{aperte.length}</strong></div><div><small>Valore trattative aperte</small><strong>{euro(totale)}</strong></div><div><small>Valore ponderato</small><strong>{euro(ponderato)}</strong></div><div><small>Follow-up scaduti</small><strong style={{color:scadute?"#b42318":"#17233b"}}>{scadute}</strong></div><div><small>Da contattare oggi</small><strong style={{color:daFareOggi?"#a65d0a":"#17233b"}}>{daFareOggi}</strong></div><div><small>Senza prossima azione completa</small><strong style={{color:senzaProssimaAzione?"#a65d0a":"#17233b"}}>{senzaProssimaAzione}</strong></div></div>
     {followupTarget&&<div role="dialog" aria-modal="true" aria-label="Pianifica follow-up" style={{position:"fixed",inset:0,zIndex:9999,background:"#102238aa",display:"grid",placeItems:"center",padding:16}}><form onSubmit={salvaFollowup} style={{background:"white",borderRadius:16,padding:22,width:"min(460px,100%)",display:"grid",gap:14,boxShadow:"0 16px 50px #0003"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><h3 style={{margin:0}}>Pianifica follow-up</h3><button type="button" onClick={()=>setFollowupTarget(null)}>Chiudi</button></div><small>{followupTarget.titolo}</small><label style={label}>Data ricontatto<input type="date" required style={input} value={followupForm.data} onChange={e=>setFollowupForm({...followupForm,data:e.target.value})}/></label><label style={label}>Prossima azione<input required style={input} value={followupForm.azione} onChange={e=>setFollowupForm({...followupForm,azione:e.target.value})}/></label><label style={label}>Note facoltative<textarea rows={3} style={input} value={followupForm.note} onChange={e=>setFollowupForm({...followupForm,note:e.target.value})}/></label><button type="submit" disabled={saving} className="crm-primary-btn">{saving?"Salvataggio...":"Salva follow-up e agenda"}</button></form></div>}
@@ -3018,6 +3038,7 @@ function PipelineCommerciale({session, preventivoDaConvertire, onPreventivoRicev
           <b>{euro(o.valore_stimato)}</b>
           {o.data_prossima_azione&&<small style={{color:statoFollowup(o)==="scaduta"?"#b42318":statoFollowup(o)==="oggi"?"#a65d0a":"#52749c",fontWeight:statoFollowup(o)==="scaduta"||statoFollowup(o)==="oggi"?700:400}}>{statoFollowup(o)==="scaduta"?"● SCADUTA · ":statoFollowup(o)==="oggi"?"● OGGI · ":"Prossima azione: "}{String(o.data_prossima_azione).slice(0,10).split("-").reverse().join("/")}</small>}
           {o.prossima_azione&&<small>{o.prossima_azione}</small>}
+          {durataVisibilita(o)!==null&&<small style={{color:o.fase==="confermata"?"#16845e":"#a65d0a",fontWeight:700}}>{conclusaArchiviata(o)?"● In archivio":"● Ancora "+Math.max(0,durataVisibilita(o)-giorniDaChiusura(o))+" giorni nella pipeline"}</small>}
           {o.fase==="sospesa"&&Math.floor((Date.now()-new Date(o.updated_at||o.created_at).getTime())/86400000)>=30&&<small style={{color:"#a65d0a",fontWeight:700}}>{Math.floor((Date.now()-new Date(o.updated_at||o.created_at).getTime())/86400000)>=90?"● Sospesa da 90+ giorni: valuta archivio":Math.floor((Date.now()-new Date(o.updated_at||o.created_at).getTime())/86400000)>=60?"● Sospesa da 60+ giorni":"● Sospesa da 30+ giorni: ricontattare"}</small>}
           {senzaAzione(o)&&<small style={{color:"#a65d0a",fontWeight:700}}>● Da pianificare</small>}
           {!["confermata","persa"].includes(o.fase)&&<button type="button" onClick={()=>pianificaFollowup(o)} style={{border:"1px solid #c8d9ef",background:"#f4f8ff",color:"#2369d5",borderRadius:7,padding:"7px 9px",fontSize:11,cursor:"pointer"}}>Pianifica follow-up</button>}
@@ -3026,7 +3047,7 @@ function PipelineCommerciale({session, preventivoDaConvertire, onPreventivoRicev
         </article>)}
         <button className="crm-pipeline-add" onClick={()=>apriNuova(f.id)}><Plus size={13}/> Aggiungi</button>
       </section>)}</div>}
-    <p style={{fontSize:11,color:"#8290a5",marginTop:15}}>Preventivi e pipeline condividono lo stato. Gli accettati e i rifiutati rimangono visibili 30 giorni, poi nell’archivio. I sospesi restano attivi.</p>
+    <p style={{fontSize:11,color:"#8290a5",marginTop:15}}>Preventivi e pipeline condividono lo stato. Gli accettati rimangono visibili 7 giorni e i rifiutati 30 giorni, poi nell’archivio. I sospesi restano attivi.</p>
     <style>{`.crm-pipeline-filters{display:flex;gap:15px;flex-wrap:wrap;margin-bottom:15px}.crm-pipeline-filters label{min-width:220px;flex:1}.crm-pipeline-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}.crm-pipeline-stats>div{background:#fff;border:1px solid #dce5f1;border-radius:12px;padding:16px}.crm-pipeline-stats small{display:block;color:#71819b;font-size:11px}.crm-pipeline-stats strong{font-size:21px;color:#17233b}.crm-pipeline-form{background:#fff;border:1px solid #dce5f1;border-radius:13px;padding:20px;margin-bottom:20px}.crm-pipeline-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;margin:15px 0}.crm-pipeline-board{display:grid;grid-template-columns:repeat(6,minmax(205px,1fr));gap:12px;overflow-x:auto;padding-bottom:16px}.crm-pipeline-column{min-width:205px;background:#e9eef7;border-radius:12px;padding:8px;align-self:start}.crm-pipeline-column-head{background:#fff;border-radius:9px;padding:12px;display:grid;gap:4px;margin-bottom:10px}.crm-pipeline-column-head strong{font-size:12px}.crm-pipeline-column-head span{font-size:11px;color:#71819b}.crm-pipeline-column-head small{font-size:12px;font-weight:700}.crm-pipeline-card{background:#fff;border:1px solid #dce5f1;border-radius:10px;padding:12px;margin-bottom:9px;display:grid;gap:7px;box-shadow:0 3px 10px #17233b0b}.crm-pipeline-card>strong{font-size:12px}.crm-pipeline-card>small{font-size:10px;color:#71819b}.crm-pipeline-card>b{font-size:15px}.crm-pipeline-card-actions{display:flex;gap:10px}.crm-pipeline-card-actions button,.crm-pipeline-add{border:0;background:transparent;color:#2369d5;cursor:pointer;font-size:11px}.crm-pipeline-add{display:flex;gap:5px;align-items:center;padding:9px}.crm-pipeline-card-actions button:last-child{color:#ba3a3a}@media(max-width:700px){.crm-pipeline-stats{grid-template-columns:1fr}.crm-pipeline-fields{grid-template-columns:1fr}.crm-pipeline-board{grid-template-columns:repeat(6,215px)}}`}</style>
   </div>;
 }
