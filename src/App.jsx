@@ -216,13 +216,44 @@ function generaStampaHTML(preventivo, clienti, aziende) {
     "</body></html>";
 }
 
-function stampaPreventivo(preventivo, clienti, aziende) {
-  const win = window.open("", "_blank");
-  if (!win) return;
-  win.document.write(generaStampaHTML(preventivo, clienti, aziende));
-  win.document.close();
-  win.focus();
-  setTimeout(() => win.print(), 300);
+let crmPdfLoader = null;
+function caricaHtml2Pdf() {
+  if (window.html2pdf) return Promise.resolve(window.html2pdf);
+  if (!crmPdfLoader) crmPdfLoader = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+    script.onload = () => window.html2pdf ? resolve(window.html2pdf) : reject(new Error("Libreria PDF non disponibile"));
+    script.onerror = () => reject(new Error("Impossibile caricare il generatore PDF. Controlla la connessione."));
+    document.head.appendChild(script);
+  }).catch(err => { crmPdfLoader = null; throw err; });
+  return crmPdfLoader;
+}
+async function stampaPreventivo(preventivo, clienti, aziende) {
+  // Generazione PDF diretta: niente window.open, che blocca le PWA iOS.
+  const html = generaStampaHTML(preventivo, clienti, aziende);
+  const nomeFile = "Preventivo_" + String(preventivo.rif || preventivo.id || "CRM").replace(/[^a-z0-9_-]/gi, "_") + ".pdf";
+  const host = document.createElement("div");
+  host.setAttribute("aria-hidden", "true");
+  Object.assign(host.style, { position:"fixed", left:"-12000px", top:"0", width:"794px", background:"white", zIndex:"-1" });
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  host.innerHTML = doc.body.innerHTML;
+  const css = doc.querySelector("style");
+  if (css) host.prepend(css.cloneNode(true));
+  document.body.appendChild(host);
+  try {
+    const pdf = await caricaHtml2Pdf();
+    const blob = await pdf().set({ margin:8, filename:nomeFile, image:{type:"jpeg",quality:0.98}, html2canvas:{scale:2,backgroundColor:"#ffffff",useCORS:true}, jsPDF:{unit:"mm",format:"a4",orientation:"portrait"}, pagebreak:{mode:["css","legacy"]} }).from(host).outputPdf("blob");
+    const file = new File([blob], nomeFile, { type:"application/pdf" });
+    if (navigator.share && navigator.canShare && navigator.canShare({files:[file]})) {
+      try { await navigator.share({files:[file],title:nomeFile}); return; }
+      catch(e) { if (e.name === "AbortError") return; }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href=url; a.download=nomeFile;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
+  } catch(err) { alert("Esportazione PDF non riuscita: " + (err.message || err) + ". Apri temporaneamente il CRM da Safari per esportare."); }
+  finally { host.remove(); }
 }
 
 function LoginScreen({ onLogin }) {
@@ -3107,7 +3138,87 @@ function CentroOperativoCRM({ session, goTo }) {
   </div>;
 }
 
+
+function RicercaGlobaleCRM({session, chiudi, naviga}) {
+  const [query,setQuery]=useState("");
+  const [risultati,setRisultati]=useState([]);
+  const [errore,setErrore]=useState("");
+  const [loading,setLoading]=useState(true);
+  useEffect(()=>{
+    let alive=true;
+    const fonti=[
+      ["clienti?select=id,ragione_sociale,classificazione", "Cliente", "clienti", x=>x.ragione_sociale],
+      ["aziende_mandanti?select=id,nome", "Mandante", "aziende", x=>x.nome],
+      ["opportunita_commerciali?select=*", "Opportunità", "pipeline", x=>x.titolo||x.nome||x.descrizione||"Opportunità"],
+      ["preventivi?select=id,rif,cliente_manuale", "Preventivo", "preventivi", x=>x.rif||x.cliente_manuale||"Preventivo"],
+      ["note_crm?select=id,titolo,contenuto", "Nota", "note", x=>x.titolo],
+    ];
+    Promise.all(fonti.map(async ([path,tipo,pagina,label])=>{
+      const r=await fetch(SUPABASE_URL+"/rest/v1/"+path,{headers:{apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+session.access_token}});
+      if(!r.ok)throw Error(tipo+": accesso non disponibile");
+      const data=await r.json();return (Array.isArray(data)?data:[]).map(x=>({id:x.id,tipo,pagina,nome:String(label(x)||""),dettaglio:tipo==="Cliente"?x.classificazione||"":""}));
+    })).then(parts=>{if(alive){setRisultati(parts.flat());setLoading(false);}}).catch(e=>{if(alive){setErrore(e.message);setLoading(false);}});
+    return ()=>{alive=false};
+  },[session.access_token]);
+  const normalizza=x=>String(x||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+  const matches=risultati.filter(x=>normalizza(x.nome+" "+x.tipo+" "+x.dettaglio).includes(normalizza(query))).slice(0,45);
+  return <div className="crm-modal-backdrop" onClick={chiudi}><section className="crm-global-panel" role="dialog" aria-modal="true" aria-label="Ricerca globale" onClick={e=>e.stopPropagation()}><div className="crm-global-head"><Search size={20}/><input autoFocus placeholder="Cerca clienti, architetti, mandanti, preventivi..." value={query} onChange={e=>setQuery(e.target.value)}/><button onClick={chiudi} aria-label="Chiudi ricerca">×</button></div><div className="crm-global-results">{loading?<p>Caricamento dati...</p>:errore?<p style={{color:"#b42318"}}>{errore}</p>:matches.length===0?<p>Nessun risultato.</p>:matches.map(x=><button key={x.tipo+x.id} onClick={()=>{naviga(x.tipo==="Cliente"&&x.dettaglio==="Architetto"?"architetti":x.pagina);chiudi();}}><span><strong>{x.nome}</strong><small>{x.dettaglio}</small></span><em>{x.tipo}</em></button>)}</div><small className="crm-global-hint">Seleziona un risultato per aprire la relativa sezione.</small></section></div>;
+}
+function ClientiDaRiattivareCRM({session,naviga}) {
+  const [giorni,setGiorni]=useState(30);
+  const [clienti,setClienti]=useState([]);
+  const [visite,setVisite]=useState([]);
+  const [contatti,setContatti]=useState([]);
+  const [errore,setErrore]=useState("");
+  const [loading,setLoading]=useState(true);
+  useEffect(()=>{
+    let alive=true;
+    const headers={apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+session.access_token};
+    Promise.all(["clienti?select=id,ragione_sociale,classificazione", "visite?select=cliente_id,data_visita", "attivita_cliente?select=cliente_id,data,tipo,descrizione"].map(async path=>{
+      const r=await fetch(SUPABASE_URL+"/rest/v1/"+path,{headers});const d=await r.json();if(!r.ok)throw Error(d.message||"Impossibile caricare i contatti");return d;
+    })).then(([c,v,a])=>{if(alive){setClienti(c);setVisite(v);setContatti(a);setLoading(false);}}).catch(e=>{if(alive){setErrore(e.message);setLoading(false);}});
+    return ()=>{alive=false};
+  },[session.access_token]);
+  const now=Date.now();
+  const contattiReali=contatti.filter(a=>/visita|telefon|chiamat|incontr|contatt|email|mail|whatsapp/i.test((a.tipo||"")+" "+(a.descrizione||""))&&!/programm|previst|da fare/i.test(a.descrizione||""));
+  const elenco=clienti.filter(c=>c.classificazione!=="Architetto").map(c=>{
+    const date=[...visite.filter(v=>v.cliente_id===c.id).map(v=>v.data_visita),...contattiReali.filter(a=>a.cliente_id===c.id).map(a=>a.data)].filter(Boolean).map(x=>new Date(x).getTime()).filter(t=>Number.isFinite(t)&&t<=now);
+    const ultima=date.length?Math.max(...date):null;
+    return {...c,ultima,trascorsi:ultima?Math.floor((now-ultima)/86400000):null};
+  }).filter(c=>c.trascorsi===null||c.trascorsi>=giorni).sort((a,b)=>(b.trascorsi??999999)-(a.trascorsi??999999));
+  return <section className="crm-reactivation"><div className="matrice-section-head"><h3><Clock3 size={17}/> Clienti da riattivare</h3><button onClick={()=>naviga("clienti")}>Apri clienti</button></div><div className="crm-reactivation-filters">{[30,60,90].map(n=><button key={n} className={giorni===n?"active":""} onClick={()=>setGiorni(n)}>{n} giorni</button>)}</div>{loading?<p>Caricamento...</p>:errore?<p style={{color:"#b42318"}}>{errore}</p>:<><p className="crm-reactivation-sub">{elenco.length} clienti senza contatti registrati negli ultimi {giorni} giorni. Le anagrafiche senza storico sono indicate separatamente.</p>{elenco.slice(0,8).map(c=><div className="crm-reactivation-row" key={c.id}><span><strong>{c.ragione_sociale}</strong><small>{c.trascorsi===null?"Nessun contatto registrato":"Ultimo contatto "+new Date(c.ultima).toLocaleDateString("it-IT")+" · "+c.trascorsi+" giorni fa"}</small></span><button onClick={()=>naviga("clienti")}>Apri</button></div>)}{elenco.length>8&&<small>Mostrati i primi 8 clienti. Puoi cambiare soglia con i filtri.</small>}{elenco.length===0&&<p>Nessun cliente da riattivare per questa soglia.</p>}</>}</section>;
+}
+function AzioniRapideCRM({session,chiudi,naviga}) {
+  const [azione,setAzione]=useState("");
+  const [titolo,setTitolo]=useState("");
+  const [note,setNote]=useState("");
+  const [data,setData]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [errore,setErrore]=useState("");
+  const links=[{key:"visite",label:"Appuntamento",icon:CalendarDays},{key:"attivita",label:"Attività / follow-up",icon:CheckSquare},{key:"note",label:"Nota",icon:StickyNote},{key:"clienti",label:"Cliente",icon:Users},{key:"pipeline",label:"Opportunità",icon:Target}];
+  const salva=async e=>{e.preventDefault();if(!titolo.trim())return;setBusy(true);setErrore("");try{
+    const isTask=azione==="attivita";
+    const payload=isTask?{titolo:titolo.trim(),tipo:"richiamare",scadenza:data?new Date(data+"T00:00").toISOString():null,priorita:"media",stato:"da_fare",note,user_id:session.user.id}:{titolo:titolo.trim(),contenuto:note,updated_at:new Date().toISOString()};
+    const endpoint=isTask?"crm_attivita":"note_crm";
+    const r=await fetch(SUPABASE_URL+"/rest/v1/"+endpoint,{method:"POST",headers:{apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(payload)});
+    if(!r.ok){const x=await r.json().catch(()=>({}));throw Error(x.message||"Errore di salvataggio");}
+    chiudi();naviga(isTask?"attivita":"note");
+  }catch(e){setErrore(e.message)}finally{setBusy(false)}};
+  return <div className="crm-modal-backdrop" onClick={chiudi}><section className="crm-quick-panel" role="dialog" aria-modal="true" aria-label="Aggiungi rapidamente" onClick={e=>e.stopPropagation()}><div className="crm-quick-heading"><strong>Nuova operazione</strong><button onClick={chiudi}>×</button></div>{!azione?<div className="crm-quick-grid">{links.map(l=><button key={l.key} onClick={()=>{if(l.key==="note"||l.key==="attivita")setAzione(l.key);else{chiudi();naviga(l.key)}}}><l.icon size={20}/>{l.label}</button>)}</div>:<form onSubmit={salva}><h3>{azione==="note"?"Nuova nota":"Nuova attività"}</h3><input required placeholder="Titolo" value={titolo} onChange={e=>setTitolo(e.target.value)}/>{azione==="attivita"&&<label>Scadenza (facoltativa)<input type="date" value={data} onChange={e=>setData(e.target.value)}/></label>}<textarea placeholder="Dettagli (facoltativi)" value={note} onChange={e=>setNote(e.target.value)}/>{errore&&<p style={{color:"#b42318"}}>{errore}</p>}<div className="crm-quick-actions"><button type="button" onClick={()=>setAzione("")}>Indietro</button><button disabled={busy} type="submit">{busy?"Salvataggio...":"Salva"}</button></div></form>}</section></div>;
+}
+function StileCRMv12(){return <style>{`
+.crm-modal-backdrop{position:fixed;inset:0;z-index:2500;background:#1425408a;display:flex;justify-content:center;align-items:flex-start;padding:10vh 15px 20px}
+.crm-global-panel,.crm-quick-panel{width:min(580px,100%);max-height:80vh;overflow:auto;background:white;border:1px solid #c8d7ec;border-radius:18px;box-shadow:0 18px 55px #10284640;padding:16px;color:#1d3351}
+.crm-global-head{display:flex;align-items:center;gap:10px}.crm-global-head input{flex:1;min-width:0;padding:12px;border:1px solid #d9e4f2;border-radius:10px}.crm-global-head button,.crm-quick-heading button{background:transparent;border:0;font-size:26px;color:#62738a;cursor:pointer}
+.crm-global-results{max-height:50vh;overflow:auto;margin-top:13px}.crm-global-results>button{display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;background:white;border:0;border-bottom:1px solid #e9eef6;padding:12px;cursor:pointer}.crm-global-results>button:hover{background:#f2f7ff}.crm-global-results strong,.crm-global-results small,.crm-reactivation-row strong,.crm-reactivation-row small{display:block}.crm-global-results small,.crm-reactivation-row small,.crm-global-hint{font-size:11px;color:#71849a}.crm-global-results em{font-style:normal;font-size:11px;color:#286bd4}
+.crm-quick-heading{display:flex;justify-content:space-between;align-items:center;font-size:18px}.crm-quick-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:18px}.crm-quick-grid button{background:#f5f9ff;border:1px solid #d9e6f6;border-radius:12px;padding:16px 8px;display:flex;flex-direction:column;align-items:center;gap:8px;color:#255fbb;font-weight:650;cursor:pointer}.crm-quick-panel form{display:flex;flex-direction:column;gap:12px}.crm-quick-panel input,.crm-quick-panel textarea{width:100%;box-sizing:border-box;border:1px solid #d9e4f2;border-radius:10px;padding:12px;font-size:16px}.crm-quick-panel textarea{min-height:100px}.crm-quick-actions{display:flex;justify-content:flex-end;gap:10px}.crm-quick-actions button{border:1px solid #cbd9ec;border-radius:9px;padding:10px 15px;background:#fff}.crm-quick-actions button[type=submit]{background:#2e74e8;color:white;border-color:#2e74e8}
+.crm-reactivation{background:white;border:1px solid #cbd7e8;box-shadow:0 6px 18px #1c355b17;border-radius:16px;padding:17px;margin:16px 0}.crm-reactivation .matrice-section-head h3{display:flex;align-items:center;gap:8px}.crm-reactivation-filters{display:flex;gap:8px;margin:10px 0}.crm-reactivation-filters button{padding:8px 13px;border:1px solid #d4e0f0;background:#f7faff;border-radius:9px;color:#45607f}.crm-reactivation-filters button.active{background:#2d70dc;color:white}.crm-reactivation-sub{font-size:12px;color:#71849a}.crm-reactivation-row{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid #edf1f7;padding:11px 0}.crm-reactivation-row button{background:#eaf2ff;border:0;border-radius:8px;padding:8px 11px;color:#2769d2}
+.crm-mobile-fab{display:none}
+@media(max-width:768px){.crm-mobile-fab{display:flex;position:fixed;right:16px;bottom:calc(90px + env(safe-area-inset-bottom));z-index:1100;width:54px;height:54px;align-items:center;justify-content:center;border:0;border-radius:17px;background:#2c73e9;color:white;box-shadow:0 7px 22px #174da96b}.crm-modal-backdrop{padding-top:7vh}.crm-quick-panel,.crm-global-panel{max-height:83vh}.crm-reactivation{padding:13px}}
+`}</style>}
 function AppShell({ session, onLogout }) {
+  const [ricercaGlobaleAperta,setRicercaGlobaleAperta]=useState(false);
+  const [azioniRapideAperte,setAzioniRapideAperte]=useState(false);
   const [menuOpen, setMenuOpen] = useState(typeof window === "undefined" ? true : window.innerWidth > 768);
   const [page, setPage] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("appuntamento") ? "visite" : "dashboard");
   const [role, setRole] = useState("user");
@@ -3158,10 +3269,11 @@ function AppShell({ session, onLogout }) {
       </div><div className="matrice-sidebar-foot"><span className="matrice-status-dot"/> CRM sviluppo <small>Ambiente di test</small></div>
     </aside>
     {menuOpen&&<div className="matrice-backdrop" onClick={()=>setMenuOpen(false)}/>}
-    <div className="matrice-workspace"><header className="matrice-topbar"><button className="matrice-menu-button" onClick={()=>setMenuOpen(v=>!v)} aria-label="Apri o chiudi menu"><MenuIcon size={19}/></button><span className="matrice-topbar-label">{page==="dashboard"?"Panoramica":sezioni.flatMap(x=>x.items).find(x=>x.key===page)?.label||"CRM"}</span><div className="matrice-topbar-actions"><button title="Vai ai clienti" onClick={()=>scegli("clienti")}><Search size={18}/></button><button title="Apri pannello agenda" onClick={()=>scegli("agenda")}><Bell size={18}/></button><span className="matrice-avatar" title={session.user.email}>{avatar}</span><button className="matrice-logout" onClick={onLogout} title="Esci"><LogOut size={17}/></button></div></header>
+    <div className="matrice-workspace"><header className="matrice-topbar"><button className="matrice-menu-button" onClick={()=>setMenuOpen(v=>!v)} aria-label="Apri o chiudi menu"><MenuIcon size={19}/></button><span className="matrice-topbar-label">{page==="dashboard"?"Panoramica":sezioni.flatMap(x=>x.items).find(x=>x.key===page)?.label||"CRM"}</span><div className="matrice-topbar-actions"><button title="Ricerca globale" onClick={()=>setRicercaGlobaleAperta(true)}><Search size={18}/></button><button title="Apri pannello agenda" onClick={()=>scegli("agenda")}><Bell size={18}/></button><span className="matrice-avatar" title={session.user.email}>{avatar}</span><button className="matrice-logout" onClick={onLogout} title="Esci"><LogOut size={17}/></button></div></header>
       <main key={page} className="page-content matrice-main">
         {page==="dashboard"&&<AttivaNotificheCRM session={session}/>}
         {page==="dashboard"&&<Dashboard session={session} goTo={scegli}/>}
+        {page==="dashboard"&&<ClientiDaRiattivareCRM session={session} naviga={scegli}/>}
         {page==="centro"&&<CentroOperativoCRM session={session} goTo={scegli}/>} 
         {page==="admin"&&role==="admin"&&<AdminPanel session={session}/>}
         {page==="aziende"&&<AziendeMandanti session={session}/>}
@@ -3182,6 +3294,10 @@ function AppShell({ session, onLogout }) {
         {page==="portafoglio"&&<PortafoglioOrdini session={session}/>}
         {page==="gruppi"&&<GruppiAcquisto session={session} gruppoIniziale={gruppoAprireId} onGruppoAperto={()=>setGruppoAprireId(null)}/>}
       </main></div>
+    <StileCRMv12/>
+    {ricercaGlobaleAperta&&<RicercaGlobaleCRM session={session} chiudi={()=>setRicercaGlobaleAperta(false)} naviga={scegli}/>}
+    {azioniRapideAperte&&<AzioniRapideCRM session={session} chiudi={()=>setAzioniRapideAperte(false)} naviga={scegli}/>}
+    <button className="crm-mobile-fab" aria-label="Aggiungi rapidamente" title="Aggiungi" onClick={()=>setAzioniRapideAperte(true)}><Plus size={27}/></button>
     <nav className="crm-mobile-bottom-nav" aria-label="Navigazione rapida">
       {[{key:"dashboard",label:"Home",Icon:LayoutDashboard},{key:"centro",label:"Operativo",Icon:Target},{key:"clienti",label:"Clienti",Icon:Users},{key:"agenda",label:"Agenda",Icon:CalendarDays},{key:"pipeline",label:"Pipeline",Icon:Target}].map(item=><button key={item.key} type="button" className={page===item.key?"active":""} onClick={()=>scegli(item.key)}><item.Icon size={20}/><span>{item.label}</span></button>)}
       <button type="button" className={menuOpen?"active":""} onClick={()=>setMenuOpen(true)}><MenuIcon size={20}/><span>Menu</span></button>
