@@ -1084,7 +1084,7 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
             <div style={kpiStyle}><div style={{fontSize:11,color:COLORS.muted}}>Trattative aperte ({opportunitaAperte.length})</div><strong style={{fontSize:21}}>{formattaEuro(valoreOpportunita)}</strong></div>
           </div>
           <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12,textAlign:"left"}}><thead><tr style={{color:COLORS.muted,borderBottom:"1px solid #dce5f1"}}><th style={{padding:9}}>Mandante</th><th style={{padding:9}}>Fatturato {annoEconomico}</th><th style={{padding:9}}>Portafoglio</th><th style={{padding:9}}>Opportunità aperte</th></tr></thead><tbody>{righeEconomiche.map(a=><tr key={a.id} style={{borderBottom:"1px solid #edf1f6"}}><td style={{padding:9,fontWeight:600}}>{a.nome}</td><td style={{padding:9}}>{formattaEuro(fatturatoAnno.filter(f=>f.azienda_id===a.id).reduce((t,f)=>t+Number(f.importo||0),0))}</td><td style={{padding:9}}>{formattaEuro(ultimeFotografie.get(a.id)?.importo||0)}</td><td style={{padding:9}}>{formattaEuro(opportunitaAperte.filter(o=>o.azienda_id===a.id).reduce((t,o)=>t+Number(o.valore_stimato||0),0))}</td></tr>)}{righeEconomiche.length===0&&<tr><td colSpan={4} style={{padding:12,color:COLORS.muted}}>Nessun dato commerciale registrato per questo cliente.</td></tr>}</tbody></table></div>
-          <p style={{fontSize:11,color:COLORS.muted,marginTop:12}}>Gli importi sono separati: non vengono sommati tra loro. Il portafoglio mostra l'ultima rilevazione disponibile per ciascuna mandante, non la somma dello storico.</p>
+          <p style={{fontSize:11,color:COLORS.muted,marginTop:12}}>Gli importi sono separati: non vengono sommati tra loro. Il portafoglio mostra l'ultima rilevazione disponibile per ciascuna mandante, non la somma dello storico. Per registrare fatturato e portafoglio insieme, apri Analisi e fatturato → Fatturato e portafoglio ordini.</p>
         </div>
       ))}
       {sezione("Opportunità commerciali", (
@@ -2753,6 +2753,9 @@ function ControlloCommerciale({ session }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [editing, setEditing] = useState(null);
+  const [registraPortafoglioInsieme,setRegistraPortafoglioInsieme] = useState(false);
+  const [importoPortafoglioInsieme,setImportoPortafoglioInsieme] = useState("");
+  const [dataPortafoglioInsieme,setDataPortafoglioInsieme] = useState(() => new Date().toLocaleDateString("en-CA"));
   const oggi = new Date();
   const dataOggi = [oggi.getFullYear(),String(oggi.getMonth()+1).padStart(2,"0"),String(oggi.getDate()).padStart(2,"0")].join("-");
   const vuoto = {cliente_id:"", periodicita:"mensile",periodo:String(oggi.getMonth()+1),anno:String(annoCorrente),importo:"",data_rilevazione:dataOggi,note:""};
@@ -2804,10 +2807,28 @@ function ControlloCommerciale({ session }) {
     if(tab==="portafoglio"&&(!form.data_rilevazione||form.data_rilevazione>dataOggi)){setError("Inserisci una data di rilevazione valida, non futura.");return;}
     const table=tab==="fatturato"?"fatturato_commerciale":"portafoglio_ordini";
     const body=tab==="fatturato"?{cliente_id:form.cliente_id,azienda_id:aziendaId,anno:Number(form.anno),periodicita:form.periodicita,periodo:Number(form.periodo),importo:Number(form.importo),note:form.note||null}:{cliente_id:form.cliente_id,azienda_id:aziendaId,data_rilevazione:form.data_rilevazione,importo:Number(form.importo),note:form.note||null};
+    if(tab==="fatturato" && !editing && registraPortafoglioInsieme) {
+      if(importoPortafoglioInsieme.trim()==="" || !Number.isFinite(Number(importoPortafoglioInsieme)) || Number(importoPortafoglioInsieme)<0){setError("Inserisci un importo valido per il portafoglio, anche zero.");return;}
+      if(!dataPortafoglioInsieme || dataPortafoglioInsieme>dataOggi){setError("La data del portafoglio non può essere futura.");return;}
+      if(portafogli.some(p=>p.azienda_id===aziendaId && p.cliente_id===form.cliente_id && p.data_rilevazione===dataPortafoglioInsieme)){setError("Esiste già una rilevazione di portafoglio per questo cliente, azienda e data: modificala dalla scheda Portafoglio.");return;}
+    }
     setSaving(true);
-    try {await request(table+(editing?"?id=eq."+editing:""),{method:editing?"PATCH":"POST",body:JSON.stringify(body)});await load();setEditing(null);setForm({...vuoto,anno:String(anno)});setSuccess("Registrazione salvata correttamente.");}
-    catch(e){setError(e.message.includes("registrazione_unica")||e.message.includes("rilevazione_unica")?"Esiste già una registrazione per questo cliente e periodo/data.":e.message);}
+    try {
+      await request(table+(editing?"?id=eq."+editing:""),{method:editing?"PATCH":"POST",body:JSON.stringify(body)});
+      if(tab==="fatturato" && !editing && registraPortafoglioInsieme){
+        try {
+          await request("portafoglio_ordini",{method:"POST",body:JSON.stringify({cliente_id:form.cliente_id,azienda_id:aziendaId,data_rilevazione:dataPortafoglioInsieme,importo:Number(importoPortafoglioInsieme),note:form.note||null})});
+        } catch(err) {
+          await load();
+          setRegistraPortafoglioInsieme(false);
+          setError("FATTURATO SALVATO, ma PORTAFOGLIO NON SALVATO: "+err.message+". Correggi soltanto il portafoglio, NON reinserire il fatturato.");
+          return;
+        }
+      }
+      await load();setEditing(null);setForm({...vuoto,anno:String(anno)});setRegistraPortafoglioInsieme(false);setImportoPortafoglioInsieme("");setSuccess("Registrazione salvata correttamente.");
+    } catch(e) {setError(e.message.includes("registrazione_unica")||e.message.includes("rilevazione_unica")?"Esiste già una registrazione per questo cliente e periodo/data.":e.message);}
     finally {setSaving(false);}
+
   };
   const elimina=async(r,tipo)=>{
     if(!window.confirm("Eliminare definitivamente questa registrazione?"))return;
@@ -2819,13 +2840,13 @@ function ControlloCommerciale({ session }) {
   const label={display:"block",fontSize:12,fontWeight:650,color:"#58677e",marginBottom:5};
   const btn={border:0,borderRadius:9,padding:"10px 15px",background:"#3479ee",color:"#fff",fontWeight:700,cursor:"pointer"};
   return <div style={{display:"grid",gap:16}}>
-    <div><h2 style={{margin:"0 0 5px",fontSize:23,color:"#15243c"}}>Controllo Commerciale</h2><p style={{margin:0,color:"#8490a3",fontSize:12}}>Fatturato e portafoglio ordini registrati manualmente · IVA esclusa</p></div>
+    <div><h2 style={{margin:"0 0 5px",fontSize:23,color:"#15243c"}}>Controllo Commerciale</h2><p style={{margin:0,color:"#8490a3",fontSize:12}}>Fatturato e portafoglio ordini: registrazione singola o combinata · IVA esclusa</p></div>
     <div style={{...box,display:"flex",gap:12,flexWrap:"wrap",alignItems:"end"}}>
       <div style={{flex:"1 1 220px"}}><label style={label}>Azienda mandante</label><select style={input} value={aziendaId} onChange={e=>{setAziendaId(e.target.value);setEditing(null);setForm({...vuoto,anno:String(anno)});}}><option value="">Seleziona azienda</option>{aziende.map(a=><option key={a.id} value={a.id}>{a.nome}</option>)}</select></div>
       <div style={{width:125}}><label style={label}>Anno fatturato</label><select style={input} value={anno} onChange={e=>{setAnno(Number(e.target.value));setEditing(null);setForm({...vuoto,anno:e.target.value});}}>{Array.from({length:8},(_,i)=>annoCorrente+1-i).map(y=><option key={y} value={y}>{y}</option>)}</select></div>
     </div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(185px,1fr))",gap:12}}>
-      {[{titolo:"Fatturato nell'anno",valore:fTotale,sub:"Somma dei periodi registrati"},{titolo:"Portafoglio attuale",valore:pTotale,sub:"Ultima rilevazione per cliente"},{titolo:"Volume commerciale",valore:fTotale+pTotale,sub:"Fatturato + portafoglio attuale"},{titolo:"Clienti associati",valore:clientiAmmessi.length,sub:"Abilitati per la mandante",numero:true}].map(x=><div key={x.titolo} style={box}><div style={{color:"#7b879a",fontSize:12}}>{x.titolo}</div><strong style={{display:"block",fontSize:23,margin:"9px 0",color:"#1c2d4b"}}>{x.numero?x.valore:euro(x.valore)}</strong><span style={{fontSize:11,color:"#96a0af"}}>{x.sub}</span></div>)}
+      {[{titolo:"Fatturato nell'anno",valore:fTotale,sub:"Somma dei periodi registrati"},{titolo:"Portafoglio attuale",valore:pTotale,sub:"Ultima rilevazione per cliente"},{titolo:"Volume commerciale",valore:fTotale+pTotale,sub:"Fatturato + portafoglio attuale"},{titolo:"Clienti associati",valore:clientiAmmessi.length,sub:"Presenti in anagrafica",numero:true}].map(x=><div key={x.titolo} style={box}><div style={{color:"#7b879a",fontSize:12}}>{x.titolo}</div><strong style={{display:"block",fontSize:23,margin:"9px 0",color:"#1c2d4b"}}>{x.numero?x.valore:euro(x.valore)}</strong><span style={{fontSize:11,color:"#96a0af"}}>{x.sub}</span></div>)}
     </div>
     {loading?<div style={box}>Caricamento dati…</div>:<>
       {aziende.length===0&&<div style={box}>Inserisci prima un'azienda mandante nella sezione Mandanti.</div>}
@@ -2842,6 +2863,14 @@ function ControlloCommerciale({ session }) {
           </>:<div><label style={label}>Data rilevazione *</label><input style={input} type="date" max={dataOggi} value={form.data_rilevazione} onChange={e=>setForm(f=>({...f,data_rilevazione:e.target.value}))}/></div>}
           <div><label style={label}>Importo netto (€) *</label><input style={input} type="number" min="0" step="0.01" placeholder="0,00" value={form.importo} onChange={e=>setForm(f=>({...f,importo:e.target.value}))}/></div>
         </div>
+        {tab==="fatturato" && !editing && <div style={{border:"1px solid #dbe5f3",background:"#f8fbff",borderRadius:12,padding:14,display:"grid",gap:10}}>
+          <label style={{display:"flex",alignItems:"center",gap:9,fontWeight:650,fontSize:13,color:"#29466b"}}><input type="checkbox" checked={registraPortafoglioInsieme} onChange={e=>setRegistraPortafoglioInsieme(e.target.checked)}/> Registrare anche il portafoglio ordini comunicato dalla mandante?</label>
+          {registraPortafoglioInsieme && <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12}}>
+            <div><label style={label}>Saldo portafoglio (€) *</label><input style={input} type="number" min="0" step="0.01" value={importoPortafoglioInsieme} onChange={e=>setImportoPortafoglioInsieme(e.target.value)}/></div>
+            <div><label style={label}>Data rilevazione *</label><input style={input} type="date" max={dataOggi} value={dataPortafoglioInsieme} onChange={e=>setDataPortafoglioInsieme(e.target.value)}/></div>
+          </div>}
+          <span style={{fontSize:11,color:"#667b98"}}>Il portafoglio è una fotografia alla data indicata, distinta dal fatturato. In caso di errore nel secondo salvataggio il CRM ti avviserà esplicitamente.</span>
+        </div>}
         <div><label style={label}>Note (facoltative)</label><textarea style={{...input,minHeight:60}} value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} placeholder="Dettagli della rilevazione"/></div>
         {error&&<div style={{color:"#b42318",fontSize:12}}>{error}</div>}{success&&<div style={{color:"#147d52",fontSize:12}}>{success}</div>}
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button style={btn} onClick={salva} disabled={saving||!aziendaId||clientiAmmessi.length===0}>{saving?"Salvataggio…":editing?"Salva modifiche":"Registra importo"}</button>{editing&&<button style={{...btn,background:"#edf1f7",color:"#475569"}} onClick={()=>nuovo(tab)}>Annulla modifica</button>}</div>
@@ -4086,17 +4115,22 @@ function AppShell({ session, onLogout }) {
   const sezioni = [
     {id:"clienti",nome:"Clienti",icon:Users,items:[{key:"clienti",label:"Anagrafica clienti",icon:Users},{key:"gruppi",label:"Gruppi d'acquisto",icon:Users2},{key:"mappa",label:"Mappa clienti",icon:MapIcon}]},
     {id:"architetti",nome:"Architetti",icon:Users2,items:[{key:"architetti",label:"Studi e architetti",icon:Users2}]},
-    {id:"opportunita",nome:"Opportunità",icon:Target,items:[{key:"pipeline",label:"Pipeline commerciale",icon:Target},{key:"preventivi",label:"Preventivi e offerte",icon:FileText},{key:"ordini",label:"Registro ordini",icon:ClipboardList}]},
+    {id:"opportunita",nome:"Opportunità",icon:Target,items:[{key:"pipeline",label:"Pipeline commerciale",icon:Target},{key:"preventivi",label:"Preventivi e offerte",icon:FileText},{key:"ordini",label:"Ordini confermati",icon:ClipboardList}]},
     {id:"agenda",nome:"Agenda",icon:CalendarDays,items:[{key:"agenda",label:"Pannello agenda",icon:CalendarDays},{key:"visite",label:"Calendario e appuntamenti",icon:CalendarDays},{key:"attivita",label:"Attività e follow-up",icon:ClipboardList},{key:"storico_visite",label:"Storico visite",icon:ClipboardList}]},
-    {id:"report",nome:"Report",icon:BarChart3,items:[{key:"direzionale",label:"Report direzionale",icon:BarChart3},{key:"centro",label:"Centro operativo",icon:Target},{key:"controllo",label:"Fatturato e portafoglio",icon:Wallet},{key:"fatturato",label:"Fatturato (ordini CRM)",icon:Wallet},{key:"statistiche",label:"Statistiche",icon:TrendingUp}]},
+    {id:"report",nome:"Analisi e fatturato",icon:BarChart3,items:[{key:"direzionale",label:"Report direzionale",icon:BarChart3},{key:"centro",label:"Da fare e priorità",icon:Target},{key:"controllo",label:"Fatturato e portafoglio ordini",icon:Wallet},{key:"fatturato",label:"Fatturato (ordini CRM)",icon:Wallet},{key:"statistiche",label:"Statistiche",icon:TrendingUp}]},
     {id:"mandanti",nome:"Mandanti",icon:Building2,items:[{key:"aziende",label:"Aziende mandanti",icon:Building2}]},
     {id:"laboratorio",nome:"Laboratorio",icon:Settings,items:[{key:"laboratorio",label:"Registri commerciali",icon:Settings}]},
   ];  const scegli = key => { setPage(key); if(window.innerWidth<768)setMenuOpen(false); };
   const avatar=(session.user.email||"FG").split("@")[0].slice(0,2).toUpperCase();
   return <div className="matrice-shell"><StileRiferimentoFotoCRM/><style>{`
 /* Contrasto e gerarchia della dashboard */
-.matrice-shell{background:#eaf0f8!important}
-.matrice-workspace{background:#eaf0f8!important}
+/* Fase completamento: interfaccia chiara, contrasto e leggibilita' */
+.matrice-sidebar .matrice-subnav button{font-size:13px!important;min-height:34px!important;line-height:1.35!important}
+.matrice-sidebar .matrice-nav-group-title{font-size:13px!important;min-height:40px!important}
+.matrice-main button:focus-visible,.matrice-sidebar button:focus-visible{outline:3px solid #89b4fa;outline-offset:2px}
+.matrice-main input:focus-visible,.matrice-main select:focus-visible,.matrice-main textarea:focus-visible{outline:2px solid #7daaf2;outline-offset:1px}
+.matrice-shell{background:#f5f7fb!important}
+.matrice-workspace{background:#f5f7fb!important}
 .matrice-topbar{background:#fff!important;border-bottom:1px solid #cdd8e8!important}
 .matrice-main{background:transparent!important}
 .matrice-dashboard .matrice-metrics .matrice-metric{background:#fff!important;border:1px solid #cbd7e8!important;box-shadow:0 5px 15px rgba(28,53,91,.09)!important}
