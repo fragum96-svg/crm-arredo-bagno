@@ -3482,6 +3482,47 @@ function LaboratorioCommercialeCRM() {
   const [campioni, setCampioni] = useState([{id:1,cliente:"Showroom dimostrativo",mandante:"CP Parquet",descrizione:"Pannello rovere - esempio",quantita:1,stato:"Consegnato"}]);
   const [nuovo, setNuovo] = useState({cliente:"",mandante:"",descrizione:"",quantita:1,stato:"Da consegnare"});
   const [nomeMarchio, setNomeMarchio] = useState("");
+  // Fase 4: pianificazione visite e importazione Excel, solo in memoria.
+  const [visiteDemo,setVisiteDemo] = useState([]);
+  const [visitaDemo,setVisitaDemo] = useState({cliente:"",comune:"",indirizzo:"",data:"",ora:"",priorita:"Media",nota:""});
+  const [filtroVisite,setFiltroVisite] = useState("");
+  const [excelDemo,setExcelDemo] = useState({nome:"",righe:[],colonne:[],errore:""});
+  const [mappaColonne,setMappaColonne] = useState({nome:"",email:"",telefono:"",comune:""});
+  const [righeSelezionate,setRigheSelezionate] = useState([]);
+  const leggiExcelDemo = async (file) => {
+    if(!file)return;
+    if(!/\.(xlsx|xls|csv)$/i.test(file.name)){setExcelDemo({nome:file.name,righe:[],colonne:[],errore:"Formato non supportato: scegli .xlsx, .xls o .csv"});return;}
+    try {
+      const buf=await file.arrayBuffer();
+      const wb=XLSX.read(buf,{type:"array",raw:false});
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:"",raw:false}).slice(0,500);
+      const cols=Array.from(new Set(rows.flatMap(r=>Object.keys(r))));
+      const trova=(parole)=>cols.find(c=>parole.some(x=>c.toLowerCase().includes(x)))||"";
+      setExcelDemo({nome:file.name,righe:rows,colonne:cols,errore:""});
+      setMappaColonne({nome:trova(["ragione sociale","cliente","studio","nominativo","nome"]),email:trova(["email","e-mail"]),telefono:trova(["telefono","cellulare","cell"]),comune:trova(["comune","città","citta","località"])});
+      setRigheSelezionate(rows.map((_,i)=>i));
+    } catch(e){setExcelDemo({nome:file.name,righe:[],colonne:[],errore:"Impossibile leggere il file: "+String(e?.message||e)});}
+  };
+  // Fase 5: registrazione rapida mobile e promemoria simulati (solo stato React).
+  const [contattiRapidiDemo,setContattiRapidiDemo]=useState([]);
+  const [contattoRapidoDemo,setContattoRapidoDemo]=useState({cliente:"",tipo:"Visita",note:"",mandanti:[],effettuato:true,prossimo:"",azione:""});
+  const [filtroCampioniDemo,setFiltroCampioniDemo]=useState("Tutti");
+  const [statoFiltroFollowupDemo,setStatoFiltroFollowupDemo]=useState("Tutti");
+  const scaricaCsvDemo = () => {
+    if(!excelDemo.righe.length||!mappaColonne.nome)return;
+    const escapeCsv=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
+    const lines=[["nome","email","telefono","comune"].join(";")];
+    excelDemo.righe.forEach((r,i)=>{if(righeSelezionate.includes(i))lines.push(["nome","email","telefono","comune"].map(k=>escapeCsv(r[mappaColonne[k]]||"")).join(";"));});
+    const blob=new Blob(["\ufeff"+lines.join("\r\n")],{type:"text/csv;charset=utf-8"});
+    const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="anteprima_anagrafiche_demo.csv";a.click();URL.revokeObjectURL(url);
+  };
+  // Simulatore provvigioni: dati esclusivamente locali, senza scritture remote.
+  const [ordiniDemo, setOrdiniDemo] = useState([]);
+  const [ordineDemo, setOrdineDemo] = useState({cliente:"",mandante:"",riferimento:"",netto:"",sconto:"",tipoProvvigione:"percentuale",percentuale:"",importo:"",stato:"Maturata"});
+  const numeroDemo = v => { const n=Number(String(v??"").trim().replace(/\s/g,"").replace(",",".")); return Number.isFinite(n)?n:0; };
+  const euroDemo = n => (Number(n)||0).toLocaleString("it-IT",{style:"currency",currency:"EUR"});
+  const calcolaDemo = o => o.tipoProvvigione==="importo" ? numeroDemo(o.importo) : Math.round(numeroDemo(o.netto)*numeroDemo(o.percentuale))/100;
+
   const input={padding:"10px 11px",border:"1px solid #dce3e8",borderRadius:9,width:"100%",background:"#fff",fontSize:14};
   const panel={background:"white",border:"1px solid #e0e5e7",borderRadius:15,padding:18,marginTop:15};
   const btn={border:"1px solid #cddbd4",background:"#f4f8f5",color:"#344a43",padding:"9px 13px",borderRadius:9,cursor:"pointer",fontWeight:650};
@@ -3490,7 +3531,7 @@ function LaboratorioCommercialeCRM() {
   return <div style={{maxWidth:1000,margin:"0 auto",color:"#26352f"}}>
     <h2 style={{marginBottom:5}}>Laboratorio commerciale</h2>
     <p style={{color:"#64716b",marginTop:0,fontSize:13}}>Anteprima interattiva delle prossime funzioni. I dati sono dimostrativi e restano solo in questa schermata: non vengono salvati nel CRM o su Supabase.</p>
-    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{[["mandanti","Mandanti per cliente"],["followup","Follow-up preventivi"],["campioni","Campionature"]].map(([id,t])=><button key={id} style={{...btn,background:tab===id?"#344a43":"#fff",color:tab===id?"#fff":"#344a43"}} onClick={()=>setTab(id)}>{t}</button>)}</div>
+    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{[["mandanti","Mandanti per cliente"],["followup","Follow-up preventivi"],["campioni","Campionature"],["provvigioni","Provvigioni (demo)"],["visite","Pianificazione visite"],["excel","Importazione Excel"],["rapido","Inserimento rapido iPhone"]].map(([id,t])=><button key={id} style={{...btn,background:tab===id?"#344a43":"#fff",color:tab===id?"#fff":"#344a43"}} onClick={()=>setTab(id)}>{t}</button>)}</div>
     {tab==="mandanti"&&<section style={panel}>
       <h3 style={{marginTop:0}}>Marchi trattati dal cliente</h3>
       <label style={label}>Cliente / architetto (esempio)</label><input style={input} value={cliente} onChange={e=>setCliente(e.target.value)}/>
@@ -3500,7 +3541,8 @@ function LaboratorioCommercialeCRM() {
     </section>}
     {tab==="followup"&&<section style={panel}>
       <h3 style={{marginTop:0}}>Follow-up dei preventivi</h3><p style={{fontSize:12,color:"#66756d"}}>Prototipo del registro: nella versione definitiva ogni riga sarà collegata al preventivo salvato.</p>
-      {followup.map(f=><div key={f.id} style={{padding:"12px 0",borderBottom:"1px solid #eef0ef",display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:10}}>
+      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:12}}><label style={label}>Filtra stato</label><select style={{...input,width:"auto"}} value={statoFiltroFollowupDemo} onChange={e=>setStatoFiltroFollowupDemo(e.target.value)}>{["Tutti","Bozza","Inviato","Da ricontattare","In trattativa","Accettato","Perso"].map(x=><option key={x}>{x}</option>)}</select></div>
+      {followup.filter(f=>statoFiltroFollowupDemo==="Tutti"||f.stato===statoFiltroFollowupDemo).map(f=><div key={f.id} style={{padding:"12px 0",borderBottom:"1px solid #eef0ef",display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:10}}>
         <div><label style={label}>Cliente</label><input style={input} value={f.cliente} onChange={e=>setFollowup(a=>a.map(x=>x.id===f.id?{...x,cliente:e.target.value}:x))}/></div>
         <div><label style={label}>Oggetto</label><input style={input} value={f.oggetto} onChange={e=>setFollowup(a=>a.map(x=>x.id===f.id?{...x,oggetto:e.target.value}:x))}/></div>
         <div><label style={label}>Stato</label><select style={input} value={f.stato} onChange={e=>setFollowup(a=>a.map(x=>x.id===f.id?{...x,stato:e.target.value}:x))}>{["Bozza","Inviato","Da ricontattare","In trattativa","Accettato","Perso"].map(x=><option key={x}>{x}</option>)}</select></div>
@@ -3511,11 +3553,69 @@ function LaboratorioCommercialeCRM() {
     </section>}
     {tab==="campioni"&&<section style={panel}>
       <h3 style={{marginTop:0}}>Registro campionature ed esposizioni</h3>
-      {campioni.map(c=><div key={c.id} style={{padding:"12px 0",borderBottom:"1px solid #eef0ef",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}><div style={{flex:"1 1 220px"}}><strong>{c.descrizione}</strong><div style={{fontSize:12,color:"#66756d"}}>{c.cliente} · {c.mandante} · Q.tà {c.quantita}</div></div><select style={{...input,width:"auto"}} value={c.stato} onChange={e=>setCampioni(a=>a.map(x=>x.id===c.id?{...x,stato:e.target.value}:x))}>{["Da consegnare","Consegnato","In esposizione","Da recuperare","Recuperato"].map(x=><option key={x}>{x}</option>)}</select><button style={btn} onClick={()=>setCampioni(a=>a.filter(x=>x.id!==c.id))}>Rimuovi</button></div>)}
+      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:12}}><label style={label}>Filtra materiali</label><select style={{...input,width:"auto"}} value={filtroCampioniDemo} onChange={e=>setFiltroCampioniDemo(e.target.value)}>{["Tutti","Da consegnare","Consegnato","In esposizione","Da recuperare","Recuperato"].map(x=><option key={x}>{x}</option>)}</select></div>
+      {campioni.filter(c=>filtroCampioniDemo==="Tutti"||c.stato===filtroCampioniDemo).map(c=><div key={c.id} style={{padding:"12px 0",borderBottom:"1px solid #eef0ef",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}><div style={{flex:"1 1 220px"}}><strong>{c.descrizione}</strong><div style={{fontSize:12,color:"#66756d"}}>{c.cliente} · {c.mandante} · Q.tà {c.quantita}</div></div><select style={{...input,width:"auto"}} value={c.stato} onChange={e=>setCampioni(a=>a.map(x=>x.id===c.id?{...x,stato:e.target.value}:x))}>{["Da consegnare","Consegnato","In esposizione","Da recuperare","Recuperato"].map(x=><option key={x}>{x}</option>)}</select><button style={btn} onClick={()=>setCampioni(a=>a.filter(x=>x.id!==c.id))}>Rimuovi</button></div>)}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:10,marginTop:16}}>
         {[['cliente','Cliente'],['mandante','Mandante'],['descrizione','Descrizione']].map(([k,t])=><div key={k}><label style={label}>{t}</label><input style={input} value={nuovo[k]} onChange={e=>setNuovo(n=>({...n,[k]:e.target.value}))}/></div>)}
         <div><label style={label}>Quantità</label><input style={input} type="number" min="1" value={nuovo.quantita} onChange={e=>setNuovo(n=>({...n,quantita:e.target.value}))}/></div>
       </div><button style={{...btn,marginTop:14}} disabled={!nuovo.cliente.trim()||!nuovo.descrizione.trim()} onClick={()=>{setCampioni(a=>[...a,{...nuovo,id:Date.now()}]);setNuovo({cliente:"",mandante:"",descrizione:"",quantita:1,stato:"Da consegnare"});}}>+ Registra campione dimostrativo</button>
+    </section>}
+    {tab==="provvigioni"&&<section style={panel}>
+      <h3 style={{marginTop:0}}>Simulatore provvigioni sugli ordini confermati</h3>
+      <p style={{fontSize:12,color:"#66756d"}}>Prototipo locale: nessun ordine o compenso viene salvato su Supabase. La provvigione non dipende automaticamente dallo sconto cliente: scegli tu percentuale o importo per ogni ordine. L'imponibile va inserito al netto degli sconti e al netto dell'IVA.</p>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:12}}>
+        {[["cliente","Cliente / architetto"],["riferimento","Riferimento ordine"],["netto","Imponibile provvigionale (€)"],["sconto","Sconti cliente (descrizione)"]].map(([k,t])=><div key={k}><label style={label}>{t}</label><input style={input} type={k==="netto"?"number":"text"} min={k==="netto"?"0":undefined} step={k==="netto"?"0.01":undefined} value={ordineDemo[k]} onChange={e=>setOrdineDemo(o=>({...o,[k]:e.target.value}))}/></div>)}
+        <div><label style={label}>Mandante</label><select style={input} value={ordineDemo.mandante} onChange={e=>setOrdineDemo(o=>({...o,mandante:e.target.value}))}><option value="">Seleziona mandante</option>{marchiDisponibili.map(m=><option key={m} value={m}>{m}</option>)}</select></div>
+        <div><label style={label}>Modalità provvigione</label><select style={input} value={ordineDemo.tipoProvvigione} onChange={e=>setOrdineDemo(o=>({...o,tipoProvvigione:e.target.value}))}><option value="percentuale">Percentuale scelta manualmente</option><option value="importo">Importo fisso scelto manualmente</option></select></div>
+        <div><label style={label}>{ordineDemo.tipoProvvigione==="percentuale"?"Provvigione (%)":"Provvigione (€)"}</label><input style={input} type="number" min="0" step="0.01" value={ordineDemo.tipoProvvigione==="percentuale"?ordineDemo.percentuale:ordineDemo.importo} placeholder="Inserisci valore" onChange={e=>setOrdineDemo(o=>({...o,[o.tipoProvvigione==="percentuale"?"percentuale":"importo"]:e.target.value}))}/></div>
+        <div><label style={label}>Stato provvigione</label><select style={input} value={ordineDemo.stato} onChange={e=>setOrdineDemo(o=>({...o,stato:e.target.value}))}><option>Maturata</option><option>Da liquidare</option><option>Liquidata</option></select></div>
+      </div>
+      <div style={{marginTop:15,padding:15,background:"#f4f8f5",borderRadius:11,border:"1px solid #dce9df"}}><span style={{color:"#64716b"}}>Provvigione calcolata</span><div style={{fontSize:25,fontWeight:750,color:"#344a43"}}>{euroDemo(calcolaDemo(ordineDemo))}</div><div style={{fontSize:12,color:"#64716b"}}>Il valore rimane associato all'ordine dimostrativo anche se modifichi la percentuale di un altro ordine.</div></div>
+      <button style={{...btn,marginTop:12}} disabled={!ordineDemo.cliente.trim()||!ordineDemo.mandante||!ordineDemo.riferimento.trim()||!(numeroDemo(ordineDemo.netto)>0)||!(ordineDemo.tipoProvvigione==="percentuale"?ordineDemo.percentuale!==""&&numeroDemo(ordineDemo.percentuale)>=0:ordineDemo.importo!==""&&numeroDemo(ordineDemo.importo)>=0)} onClick={()=>{setOrdiniDemo(a=>[{...ordineDemo,id:Date.now(),provvigione:calcolaDemo(ordineDemo)},...a]);setOrdineDemo({cliente:"",mandante:"",riferimento:"",netto:"",sconto:"",tipoProvvigione:"percentuale",percentuale:"",importo:"",stato:"Maturata"});}}>+ Registra ordine dimostrativo</button>
+      {ordiniDemo.length>0&&<div style={{marginTop:18}}><h4>Ordini dimostrativi</h4>{ordiniDemo.map(o=><div key={o.id} style={{padding:"12px 0",borderTop:"1px solid #e6eae8",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}><div><strong>{o.cliente}</strong> · {o.mandante}<div style={{fontSize:12,color:"#64716b"}}>Ordine {o.riferimento} · Netto {euroDemo(numeroDemo(o.netto))} · Sconto {o.sconto||"non specificato"} · {o.tipoProvvigione==="percentuale"?`${o.percentuale}%`:"Importo manuale"} · {o.stato}</div></div><div style={{fontWeight:750}}>{euroDemo(o.provvigione)}</div><button style={btn} onClick={()=>setOrdiniDemo(a=>a.filter(x=>x.id!==o.id))}>Rimuovi</button></div>)}<div style={{textAlign:"right",fontWeight:750,marginTop:12}}>Totale provvigioni demo: {euroDemo(ordiniDemo.reduce((a,o)=>a+o.provvigione,0))}</div></div>}
+    </section>}
+    {tab==="visite"&&<section style={panel}>
+      <h3 style={{marginTop:0}}>Pianificazione visite commerciali (demo)</h3>
+      <p style={{fontSize:12,color:"#66756d"}}>Organizza gli appuntamenti per comune, data e priorità. Nessuna visita viene registrata nell'agenda reale. I percorsi stradali non sono calcolati.</p>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:10}}>
+        {[["cliente","Cliente / studio"],["comune","Comune / zona"],["indirizzo","Indirizzo"],["data","Data"],["ora","Ora"],["nota","Obiettivo visita"]].map(([k,t])=><div key={k}><label style={label}>{t}</label><input style={input} type={k==="data"?"date":k==="ora"?"time":"text"} value={visitaDemo[k]} onChange={e=>setVisitaDemo(v=>({...v,[k]:e.target.value}))}/></div>)}
+        <div><label style={label}>Priorità</label><select style={input} value={visitaDemo.priorita} onChange={e=>setVisitaDemo(v=>({...v,priorita:e.target.value}))}>{["Alta","Media","Bassa"].map(x=><option key={x}>{x}</option>)}</select></div>
+      </div>
+      <button style={{...btn,marginTop:12}} disabled={!visitaDemo.cliente.trim()||!visitaDemo.data} onClick={()=>{setVisiteDemo(a=>[...a,{...visitaDemo,id:Date.now()}]);setVisitaDemo({cliente:"",comune:"",indirizzo:"",data:"",ora:"",priorita:"Media",nota:""});}}>+ Aggiungi visita dimostrativa</button>
+      <div style={{marginTop:18}}><label style={label}>Filtra per comune, cliente o priorità</label><input style={input} placeholder="Es. Roma, Viterbo, Alta..." value={filtroVisite} onChange={e=>setFiltroVisite(e.target.value)}/></div>
+      {visiteDemo.filter(v=>[v.cliente,v.comune,v.priorita].join(" ").toLowerCase().includes(filtroVisite.toLowerCase())).sort((a,b)=>(a.data+" "+a.ora).localeCompare(b.data+" "+b.ora)).map(v=><div key={v.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",padding:"12px 0",borderBottom:"1px solid #e6eae8"}}><div><strong>{v.cliente}</strong><div style={{fontSize:12,color:"#64716b"}}>{v.data} {v.ora} · {v.comune||"Zona non indicata"} · Priorità {v.priorita}</div><div style={{fontSize:12}}>{v.indirizzo} {v.nota&&" · "+v.nota}</div></div><button style={btn} onClick={()=>setVisiteDemo(a=>a.filter(x=>x.id!==v.id))}>Rimuovi</button></div>)}
+      {visiteDemo.length===0&&<p style={{fontSize:13,color:"#64716b"}}>Aggiungi una visita di prova per visualizzare il programma.</p>}
+    </section>}
+    {tab==="excel"&&<section style={panel}>
+      <h3 style={{marginTop:0}}>Anteprima importazione anagrafiche Excel (demo)</h3>
+      <p style={{fontSize:12,color:"#66756d"}}>Il file viene letto soltanto nel browser. Nessun dato viene importato nel CRM o inviato a Supabase. Anteprima limitata alle prime 500 righe del primo foglio.</p>
+      <label style={label}>Scegli un file .xlsx, .xls oppure .csv</label>
+      <input style={input} type="file" accept=".xlsx,.xls,.csv" onChange={e=>leggiExcelDemo(e.target.files?.[0])}/>
+      {excelDemo.errore&&<p style={{color:"#a23a30"}}>{excelDemo.errore}</p>}
+      {excelDemo.righe.length>0&&<div style={{marginTop:14}}>
+        <strong>{excelDemo.nome} — {excelDemo.righe.length} righe lette</strong>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10,marginTop:12}}>
+          {[["nome","Cliente / ragione sociale"],["email","Email"],["telefono","Telefono"],["comune","Comune"]].map(([k,t])=><div key={k}><label style={label}>{t}</label><select style={input} value={mappaColonne[k]} onChange={e=>setMappaColonne(m=>({...m,[k]:e.target.value}))}><option value="">Non associare</option>{excelDemo.colonne.map(c=><option key={c} value={c}>{c}</option>)}</select></div>)}
+        </div>
+        <p style={{fontSize:12,color:"#64716b"}}>Controllo preliminare: {excelDemo.righe.filter(r=>mappaColonne.nome&&String(r[mappaColonne.nome]||"").trim()).length} righe con nome; {excelDemo.righe.length-new Set(excelDemo.righe.map(r=>String(r[mappaColonne.nome]||"").trim().toLowerCase())).size} possibili nomi duplicati nel file (da verificare).</p>
+        <div style={{overflowX:"auto",maxHeight:360,marginTop:10}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr>{["Includi","Nome","Email","Telefono","Comune"].map(t=><th key={t} style={{textAlign:"left",padding:9,background:"#344a43",color:"white",position:"sticky",top:0}}>{t}</th>)}</tr></thead><tbody>{excelDemo.righe.slice(0,30).map((r,i)=><tr key={i} style={{background:i%2?"#f6f8f6":"white"}}><td style={{padding:8}}><input type="checkbox" checked={righeSelezionate.includes(i)} onChange={e=>setRigheSelezionate(a=>e.target.checked?[...a,i]:a.filter(x=>x!==i))}/></td>{["nome","email","telefono","comune"].map(k=><td key={k} style={{padding:8,borderBottom:"1px solid #e8eeea"}}>{String(r[mappaColonne[k]]||"").slice(0,90)}</td>)}</tr>)}</tbody></table></div>
+        <p style={{fontSize:12,color:"#64716b"}}>Mostrate al massimo 30 righe. {righeSelezionate.length} righe selezionate su {excelDemo.righe.length}. Il confronto con le anagrafiche esistenti sarà disponibile soltanto nella fase di integrazione, dopo aver definito i criteri anti-duplicato.</p>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button style={btn} disabled={!mappaColonne.nome||!righeSelezionate.length} onClick={scaricaCsvDemo}>Esporta CSV di anteprima</button><button style={{...btn,opacity:0.55,cursor:"not-allowed"}} disabled>Importa nel CRM — non disponibile in modalità demo</button></div>
+      </div>}
+    </section>}
+    {tab==="rapido"&&<section style={panel}>
+      <h3 style={{marginTop:0}}>Registrazione rapida da iPhone (demo)</h3>
+      <p style={{fontSize:12,color:"#66756d"}}>Interfaccia compatta per simulare una visita, chiamata, email o WhatsApp. Mandanti facoltativi e multipli. Il promemoria è facoltativo. Nessun salvataggio remoto.</p>
+      <div style={{maxWidth:480,margin:"0 auto",display:"grid",gap:12}}>
+        <div><label style={label}>Cliente o architetto *</label><input style={input} value={contattoRapidoDemo.cliente} onChange={e=>setContattoRapidoDemo(v=>({...v,cliente:e.target.value}))} placeholder="Nome cliente / studio"/></div>
+        <div><label style={label}>Tipo di contatto</label><select style={input} value={contattoRapidoDemo.tipo} onChange={e=>setContattoRapidoDemo(v=>({...v,tipo:e.target.value}))}>{["Visita","Telefonata","WhatsApp","Email","Altro"].map(x=><option key={x}>{x}</option>)}</select></div>
+        <div><label style={label}>Mandanti (facoltativi, selezione multipla)</label><div style={{display:"flex",flexWrap:"wrap",gap:8}}>{marchiDisponibili.map(m=><label key={m} style={{border:"1px solid #dce3e8",borderRadius:9,padding:"8px 10px",fontSize:13,background:contattoRapidoDemo.mandanti.includes(m)?"#e6f0ea":"#fff"}}><input type="checkbox" checked={contattoRapidoDemo.mandanti.includes(m)} onChange={e=>setContattoRapidoDemo(v=>({...v,mandanti:e.target.checked?[...v.mandanti,m]:v.mandanti.filter(x=>x!==m)}))}/> {m}</label>)}</div></div>
+        <div><label style={label}>Note</label><textarea style={{...input,minHeight:72}} value={contattoRapidoDemo.note} onChange={e=>setContattoRapidoDemo(v=>({...v,note:e.target.value}))} placeholder="Cosa è emerso dal contatto?"/></div>
+        <label style={{fontSize:13}}><input type="checkbox" checked={contattoRapidoDemo.effettuato} onChange={e=>setContattoRapidoDemo(v=>({...v,effettuato:e.target.checked}))}/> Contatto già effettuato (aggiorna ultimo contatto solo nella futura versione collegata)</label>
+        <div style={{padding:12,border:"1px solid #dce3e8",borderRadius:10}}><strong style={{fontSize:13}}>Vuoi programmare il prossimo contatto?</strong><div style={{display:"grid",gridTemplateColumns:"1fr",gap:8,marginTop:10}}><input type="date" style={input} value={contattoRapidoDemo.prossimo} onChange={e=>setContattoRapidoDemo(v=>({...v,prossimo:e.target.value}))}/><input style={input} placeholder="Prossima azione (facoltativa)" value={contattoRapidoDemo.azione} onChange={e=>setContattoRapidoDemo(v=>({...v,azione:e.target.value}))}/></div></div>
+        <button style={{...btn,background:"#344a43",color:"#fff",minHeight:46}} disabled={!contattoRapidoDemo.cliente.trim()} onClick={()=>{setContattiRapidiDemo(a=>[{...contattoRapidoDemo,id:Date.now(),registrato:new Date().toLocaleString("it-IT")},...a]);setContattoRapidoDemo({cliente:"",tipo:"Visita",note:"",mandanti:[],effettuato:true,prossimo:"",azione:""});}}>Registra attività di prova</button>
+      </div>
+      {contattiRapidiDemo.length>0&&<div style={{marginTop:20}}><h4>Storico di prova</h4>{contattiRapidiDemo.map(c=><div key={c.id} style={{borderTop:"1px solid #e6eae8",padding:"12px 0",fontSize:13}}><strong>{c.tipo} · {c.cliente}</strong><div style={{color:"#64716b",fontSize:12}}>{c.registrato} · {c.effettuato?"Effettuato":"Pianificato"} · {c.mandanti.length?c.mandanti.join(", "):"Nessun mandante"}</div>{c.note&&<div>{c.note}</div>}{c.prossimo&&<div>Prossimo contatto: {c.prossimo} {c.azione}</div>}</div>)}</div>}
     </section>}
     <p style={{fontSize:12,color:"#64716b",marginTop:15}}>Modalità laboratorio: ricaricando la pagina, i dati di prova vengono azzerati. Nessuna modifica al database.</p>
   </div>;
