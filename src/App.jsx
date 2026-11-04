@@ -66,7 +66,9 @@ const CRM_AGENCY_TABLES = new Set([
   'crm_attivita','crm_campionature','crm_followup_preventivi',
   'crm_liquidazioni_provvigioni','crm_provvigioni_ordini','crm_relazioni_mandanti',
   'documenti_cliente','opportunita_commerciali','ordini','ordini_confermati',
-  'preventivi','visite'
+  'preventivi','visite',
+  'fatturato_commerciale','gruppi_acquisto','listini','note_crm',
+  'portafoglio_ordini','sedi_cliente'
 ]);
 const crmAgencyCache = new Map();
 async function crmAgencyId(token) {
