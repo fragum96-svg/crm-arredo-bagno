@@ -1509,11 +1509,14 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
         modalita_pagamento: header.modalita_pagamento || null, modalita_prezzi_pdf: header.modalita_prezzi_pdf || "dettagliato",
         stato: header.stato || "bozza", note: header.note || null,
       };
+      // Non richiedere il record di ritorno: la tabella preventivi potrebbe non avere una policy SELECT.
       const res = editingId
-        ? await fetch(SUPABASE_URL + "/rest/v1/preventivi?id=eq." + editingId, { method: "PATCH", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) })
-        : await fetch(SUPABASE_URL + "/rest/v1/preventivi", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Errore nel salvataggio");
+        ? await fetch(SUPABASE_URL + "/rest/v1/preventivi?id=eq." + editingId, { method: "PATCH", headers: { ...headers(), Prefer: "return=minimal" }, body: JSON.stringify(body) })
+        : await fetch(SUPABASE_URL + "/rest/v1/preventivi", { method: "POST", headers: { ...headers(), Prefer: "return=minimal" }, body: JSON.stringify(body) });
+      if (!res.ok) {
+        const errore = await res.json().catch(() => null);
+        throw new Error(errore?.message || "Errore nel salvataggio (HTTP " + res.status + ")");
+      }
       resetForm(); load();
     } catch (err) { setError(err.message); } finally { setSaving(false); }
   };
