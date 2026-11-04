@@ -454,6 +454,7 @@ function AziendeMandanti({ session }) {
   const [list, setList] = useState([]);
   const [vistaMandanti, setVistaMandanti] = useState(() => typeof window !== "undefined" && window.innerWidth <= 700 ? "schede" : "elenco");
   const [ricercaMandanti, setRicercaMandanti] = useState("");
+  const [mostraFormMandanti, setMostraFormMandanti] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [uploadMsg, setUploadMsg] = useState(null);
@@ -514,7 +515,7 @@ function AziendeMandanti({ session }) {
     } finally { setUploadingId(null); }
   };
 
-  const resetForm = () => { setForm(emptyForm); setEditingId(null); };
+  const resetForm = () => { setMostraFormMandanti(false); setForm(emptyForm); setEditingId(null); };
   const save = async () => {
     if (!form.nome.trim()) { setError("Il nome azienda è obbligatorio."); return; }
     setSaving(true); setError("");
@@ -536,7 +537,7 @@ function AziendeMandanti({ session }) {
     } catch (err) { setError(err.message); } finally { setSaving(false); }
   };
   const edit = (azienda) => {
-    setEditingId(azienda.id);
+    setMostraFormMandanti(true); setEditingId(azienda.id);
     setForm({
       nome: azienda.nome || "", sconto1: azienda.sconto1 ?? "", sconto2: azienda.sconto2 ?? "",
       imballo_percentuale: azienda.imballo_percentuale ?? "", trasporto: azienda.trasporto || "",
@@ -557,10 +558,10 @@ function AziendeMandanti({ session }) {
   const inputStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
 
   return (
-    <div className="crm-mandanti-premium" style={{ fontFamily: "Arial, sans-serif" }}>
-      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}><Building2 size={20} color={COLORS.primary} /> Aziende mandanti</h2>
-      <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 280px", background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, maxWidth: 340 }}>
+    <div className="crm-mandanti-premium crm-ref-page">
+      <div className="crm-ref-heading"><h2>Aziende mandanti</h2><button className="crm-ref-primary" type="button" onClick={() => { if (mostraFormMandanti) resetForm(); else { resetForm(); setMostraFormMandanti(true); } }}>{mostraFormMandanti ? "Chiudi" : "+ Nuova azienda"}</button></div>
+      <div className="crm-ref-layout">
+        {mostraFormMandanti && <div className="crm-ref-form" style={{ flex: "1 1 280px", background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, maxWidth: 340 }}>
           <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>{editingId ? "Modifica azienda" : "Nuova azienda"}</h3>
           <input placeholder="Nome azienda *" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} style={inputStyle} />
           <input placeholder="Sconto 1 (%)" value={form.sconto1} onChange={(e) => setForm({ ...form, sconto1: e.target.value })} style={inputStyle} />
@@ -578,7 +579,8 @@ function AziendeMandanti({ session }) {
             {editingId && <button onClick={resetForm} style={{ padding: "9px 16px", background: "#fff", color: COLORS.primary, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13, cursor: "pointer" }}>Annulla</button>}
           </div>
         </div>
-        <div style={{ flex: "2 1 400px" }}>
+        }
+        <div className="crm-ref-list-area" style={{ flex: "2 1 400px" }}>
           {uploadMsg && <div style={{ fontSize: 12, marginBottom: 10, color: uploadMsg.type === "error" ? COLORS.danger : COLORS.success }}>{uploadMsg.text}</div>}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 14 }}>
             <input aria-label="Cerca aziende mandanti" placeholder="Cerca azienda, trasporto, note..." value={ricercaMandanti} onChange={e => setRicercaMandanti(e.target.value)} style={{ ...inputStyle, flex: "1 1 200px", marginBottom: 0, maxWidth: 390, background: "#fff" }} />
@@ -943,6 +945,25 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
 
 const CLASSIFICAZIONI_ELENCO = CLASSIFICAZIONI;
 
+
+// Elementi visivi delle anagrafiche: nessun dato dimostrativo, solo dati reali Supabase.
+const CRM_AVATAR_PALETTE = [ ["#dbeafe", "#155eef"], ["#f3d8ff", "#8a39c4"], ["#d5f7df", "#147d40"], ["#ffebc0", "#a05b00"], ["#ffe0e0", "#a62f35"], ["#e1e6f0", "#35435f"] ];
+function crmAvatarStyle(value) {
+  const n = [...String(value || "")].reduce((a, c) => a + c.charCodeAt(0), 0);
+  const [bg, fg] = CRM_AVATAR_PALETTE[n % CRM_AVATAR_PALETTE.length];
+  return { background: bg, color: fg };
+}
+function crmInitials(value) {
+  return String(value || "?").trim().split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0]).join("").toUpperCase();
+}
+function crmLocalita(indirizzo) {
+  const parti = String(indirizzo || "").split(",").map(s => s.trim()).filter(Boolean);
+  return parti.length ? parti[parti.length - 1] : "Località non indicata";
+}
+function crmFavoriteButton(id, favorites, setFavorites) {
+  const active = favorites.includes(id);
+  return <button type="button" className={"crm-ref-star" + (active ? " is-favorite" : "")} aria-label={active ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti"} aria-pressed={active} onClick={e => { e.stopPropagation(); setFavorites(old => old.includes(id) ? old.filter(x => x !== id) : [...old, id]); }}>{active ? "★" : "☆"}</button>;
+}
 function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti = false }) {
   const [list, setList] = useState([]);
   const [aziendeOptions, setAziendeOptions] = useState([]);
@@ -954,6 +975,11 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
   const [saving, setSaving] = useState(false);
   const [filtroClassificazione, setFiltroClassificazione] = useState("");
   const [ricercaAnagrafica, setRicercaAnagrafica] = useState("");
+  const [filtroStatoUI, setFiltroStatoUI] = useState("tutti");
+  const [mostraFormAnagrafica, setMostraFormAnagrafica] = useState(false);
+  const [preferitiAnagrafica, setPreferitiAnagrafica] = useState(() => { try { return JSON.parse(localStorage.getItem("crm-preferiti-anagrafiche") || "[]"); } catch { return []; } });
+  useEffect(() => { try { localStorage.setItem("crm-preferiti-anagrafiche", JSON.stringify(preferitiAnagrafica)); } catch {} }, [preferitiAnagrafica]);
+
   const [vistaAnagrafica, setVistaAnagrafica] = useState(() => typeof window !== "undefined" && window.innerWidth <= 700 ? "schede" : "elenco");
   const [clienteApertoId, setClienteApertoId] = useState(null);
   const [sediForm, setSediForm] = useState([]);
@@ -977,7 +1003,7 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
   };
   useEffect(() => { load(); }, []);
 
-  const resetForm = () => { setForm(emptyForm); setEditingId(null); setSediForm([]); setSediEsistenti([]); setNuovaSedeForm({ nome_sede: "", indirizzo: "" }); };
+  const resetForm = () => { setMostraFormAnagrafica(false); setForm(emptyForm); setEditingId(null); setSediForm([]); setSediEsistenti([]); setNuovaSedeForm({ nome_sede: "", indirizzo: "" }); };
 
   const aggiungiSedeAlForm = () => {
     if (!nuovaSedeForm.indirizzo.trim()) return;
@@ -1045,7 +1071,7 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
   };
 
   const edit = async (cliente) => {
-    setEditingId(cliente.id);
+    setMostraFormAnagrafica(true); setEditingId(cliente.id);
     setForm({
       ragione_sociale: cliente.ragione_sociale || "", indirizzo: cliente.indirizzo || "", telefono: cliente.telefono || "",
       email: cliente.email || "", classificazione: cliente.classificazione || "",
@@ -1070,7 +1096,7 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
 
   const inputStyle = { width: "100%", padding: "12px 13px", marginBottom: 12, border: "1px solid #dce7f1", borderRadius: 11, fontSize: 14, boxSizing: "border-box", background: "#fbfdff", color: "#18354e" };
   const elencoSezione = list.filter(c => soloArchitetti ? c.classificazione === "Architetto" : c.classificazione !== "Architetto");
-  const filteredList = elencoSezione.filter(c => (!filtroClassificazione || c.classificazione === filtroClassificazione) && (!ricercaAnagrafica.trim() || [c.ragione_sociale, c.indirizzo, c.telefono, c.email, c.classificazione].some(v => String(v || "").toLocaleLowerCase("it").includes(ricercaAnagrafica.trim().toLocaleLowerCase("it")))));
+  const filteredList = elencoSezione.filter(c => (!filtroClassificazione || c.classificazione === filtroClassificazione) && (filtroStatoUI !== "preferiti" || preferitiAnagrafica.includes(c.id)) && (!ricercaAnagrafica.trim() || [c.ragione_sociale, c.indirizzo, c.telefono, c.email, c.classificazione].some(v => String(v || "").toLocaleLowerCase("it").includes(ricercaAnagrafica.trim().toLocaleLowerCase("it")))));
 
   if (clienteApertoId) {
     return (
@@ -1080,10 +1106,11 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
   }
 
   return (
-    <div className="crm-anagrafiche-premium" style={{ fontFamily: "Arial, sans-serif" }}>
-      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}><Users size={20} color={COLORS.primary} /> {soloArchitetti ? "Anagrafica architetti" : "Anagrafica clienti"}</h2>
-      <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 300px", background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 22, maxWidth: 440 }}>
+    <div className="crm-anagrafiche-premium crm-ref-page">
+      <div className="crm-ref-heading"><h2>{soloArchitetti ? "Architetti" : "Clienti"}</h2><button className="crm-ref-primary" type="button" onClick={() => { if (mostraFormAnagrafica) resetForm(); else { resetForm(); setMostraFormAnagrafica(true); } }}>{mostraFormAnagrafica ? "Chiudi" : soloArchitetti ? "+ Nuovo architetto" : "+ Nuovo cliente"}</button></div>
+      <div className="crm-ref-layout">
+        {mostraFormAnagrafica && (
+        <div className="crm-ref-form" style={{ flex: "1 1 300px", background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 22, maxWidth: 440 }}>
           <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:1.2,color:"#2475b6",fontWeight:750,marginBottom:7}}>Anagrafica · {soloArchitetti ? "Architetti" : "Clienti"}</div>
           <h3 style={{ fontSize: 21, color: "#17354d", margin:"0 0 6px",letterSpacing:"-.5px" }}>{editingId ? "Modifica anagrafica" : soloArchitetti ? "Nuovo architetto" : "Nuovo cliente"}</h3>
           <p style={{fontSize:12,color:"#75899b",margin:"0 0 22px"}}>Inserisci i dati principali, poi completa le informazioni commerciali.</p>
@@ -1152,33 +1179,18 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
             {editingId && <button onClick={resetForm} style={{ padding: "9px 16px", background: "#fff", color: COLORS.primary, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13, cursor: "pointer" }}>Annulla</button>}
           </div>
         </div>
-        <div style={{ flex: "2 1 420px" }}>
-          <div style={{ marginBottom: 14, padding: 14, borderRadius: 14, border: "1px solid #e5edf5", background: "#fff" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
-              <div><div style={{ fontSize: 15, fontWeight: 750, color: "#18324b" }}>{soloArchitetti ? "Studi e professionisti" : "Rubrica commerciale"}</div><div style={{ fontSize: 12, color: "#728298", marginTop: 3 }}>{filteredList.length} {soloArchitetti ? "architetti" : "clienti"} visualizzati</div></div>
-              <div style={{ display: "flex", gap: 5, padding: 4, borderRadius: 10, background: "#f0f5fa" }}>
-                {[ ["elenco", "Elenco"], ["schede", "Schede"] ].map(([id, label]) => <button key={id} type="button" onClick={() => setVistaAnagrafica(id)} aria-pressed={vistaAnagrafica === id} style={{ border: "none", borderRadius: 8, padding: "8px 11px", cursor: "pointer", background: vistaAnagrafica === id ? "#fff" : "transparent", color: vistaAnagrafica === id ? "#145b92" : "#667b90", fontWeight: 650, boxShadow: vistaAnagrafica === id ? "0 1px 5px #19344a18" : "none" }}>{label}</button>)}
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
-              <input aria-label="Cerca nell'anagrafica" placeholder={soloArchitetti ? "Cerca studio, nome, città, telefono..." : "Cerca cliente, città, telefono..."} value={ricercaAnagrafica} onChange={e => setRicercaAnagrafica(e.target.value)} style={{ ...inputStyle, flex: "1 1 200px", marginBottom: 0, minWidth: 0, background: "#f9fbfd" }} />
-              {!soloArchitetti && <select aria-label="Filtra classificazione" value={filtroClassificazione} onChange={e => setFiltroClassificazione(e.target.value)} style={{ ...inputStyle, flex: "0 1 185px", marginBottom: 0 }}><option value="">Tutte le categorie</option>{CLASSIFICAZIONI_ELENCO.filter(c => c !== "Architetto").map(c => <option key={c} value={c}>{c}</option>)}</select>}
-            </div>
+        )}
+        <div className="crm-ref-list-area">
+          <div className="crm-ref-tools"><div className="crm-ref-search"><Search size={17}/><input aria-label="Cerca anagrafica" placeholder={soloArchitetti ? "Cerca architetto..." : "Cerca cliente..."} value={ricercaAnagrafica} onChange={e => setRicercaAnagrafica(e.target.value)}/></div>
+            {!soloArchitetti && <select aria-label="Filtra tipologia" value={filtroClassificazione} onChange={e => setFiltroClassificazione(e.target.value)}><option value="">Filtri · Tutte le tipologie</option>{CLASSIFICAZIONI_ELENCO.filter(c => c !== "Architetto").map(c => <option key={c} value={c}>{c}</option>)}</select>}
           </div>
-          {loading ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p> : filteredList.length === 0 ? <p style={{ padding: 20, color: COLORS.muted, fontSize: 13, textAlign: "center" }}>Nessun risultato. Prova a modificare la ricerca.</p> : vistaAnagrafica === "schede" ? (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: 12 }}>
-              {filteredList.map(c => <div key={c.id} style={{ border: "1px solid #e2eaf3", borderRadius: 15, padding: 15, background: "#fff", boxShadow: "0 3px 12px #19344a0a", minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 11 }}><div style={{ width: 38, height: 38, borderRadius: 11, background: "#e8f3fc", color: "#1967a0", display: "grid", placeItems: "center", fontWeight: 800, flexShrink: 0 }}>{String(c.ragione_sociale || "?").slice(0, 1).toUpperCase()}</div><div style={{ minWidth: 0 }}><button type="button" onClick={() => setClienteApertoId(c.id)} style={{ border: 0, background: "none", padding: 0, textAlign: "left", fontWeight: 750, color: "#18324b", cursor: "pointer", overflowWrap: "anywhere" }}>{c.ragione_sociale}</button><div style={{ fontSize: 11, color: "#64809a", marginTop: 3 }}>{c.classificazione || (soloArchitetti ? "Architetto" : "Cliente")}</div></div></div>
-                <div style={{ fontSize: 12, color: "#66788a", minHeight: 38, overflowWrap: "anywhere" }}>{c.indirizzo || "Indirizzo non indicato"}</div>
-                <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 13 }}><button type="button" onClick={() => setClienteApertoId(c.id)} style={{ border: 0, borderRadius: 8, background: "#eaf4fd", color: "#145b92", padding: "7px 10px", cursor: "pointer", fontWeight: 650 }}>Apri scheda</button><button type="button" onClick={() => edit(c)} style={{ border: "1px solid #e1eaf2", borderRadius: 8, background: "#fff", color: "#526b83", padding: "7px 10px", cursor: "pointer" }}>Modifica</button>{c.telefono && <a href={"tel:" + String(c.telefono).replace(/[^+0-9]/g, "")} style={{ textDecoration: "none", borderRadius: 8, padding: "7px 10px", color: "#145b92", background: "#f3f7fb" }}>Chiama</a>}</div>
-              </div>)}
-            </div>
-          ) : (
-            <div style={{ overflowX: "auto", border: "1px solid #e5edf5", borderRadius: 14, background: "#fff" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead><tr style={{ background: "#f6f9fc", textAlign: "left", color: "#60758b" }}><th style={{ padding: "13px 12px" }}>Nome</th><th style={{ padding: "13px 12px" }}>Categoria</th><th style={{ padding: "13px 12px" }}>Telefono</th><th style={{ padding: "13px 12px" }}>Azioni</th></tr></thead>
-              <tbody>{filteredList.map(c => <tr key={c.id} style={{ borderTop: "1px solid #edf1f5" }}><td style={{ padding: "12px", minWidth: 140 }}><button type="button" onClick={() => setClienteApertoId(c.id)} style={{ border: 0, background: "none", padding: 0, cursor: "pointer", color: "#155d93", fontWeight: 700, textAlign: "left" }}>{c.ragione_sociale}</button><div style={{ fontSize: 11, color: "#8794a3", marginTop: 3 }}>{c.indirizzo || ""}</div></td><td style={{ padding: "12px", color: "#63768b" }}>{c.classificazione || "—"}</td><td style={{ padding: "12px", whiteSpace: "nowrap" }}>{c.telefono ? <a href={"tel:" + String(c.telefono).replace(/[^+0-9]/g, "")} style={{ color: "#155d93" }}>{c.telefono}</a> : "—"}</td><td style={{ padding: "12px", whiteSpace: "nowrap" }}><button type="button" onClick={() => edit(c)} style={{ border: 0, background: "none", color: "#155d93", cursor: "pointer", marginRight: 8 }}>Modifica</button><button type="button" onClick={() => remove(c.id)} style={{ border: 0, background: "none", color: COLORS.danger, cursor: "pointer" }}>Elimina</button></td></tr>)}</tbody>
-            </table></div>
-          )}
+          <div className="crm-ref-tabs"><button className={filtroStatoUI === "tutti" ? "active" : ""} onClick={() => setFiltroStatoUI("tutti")}>Tutti ({elencoSezione.length})</button><button className={filtroStatoUI === "preferiti" ? "active" : ""} onClick={() => setFiltroStatoUI("preferiti")}>★ Preferiti ({elencoSezione.filter(c => preferitiAnagrafica.includes(c.id)).length})</button></div>
+          {loading ? <p className="crm-ref-empty">Caricamento...</p> : filteredList.length === 0 ? <p className="crm-ref-empty">Nessun risultato.</p> : <>
+            <div className="crm-ref-desktop"><table><thead><tr><th>{soloArchitetti ? "Architetto" : "Cliente"}</th><th>Tipologia</th><th>Località</th><th>Contatto</th><th>Preferiti</th><th>Azioni</th></tr></thead><tbody>
+              {filteredList.map(c => <tr key={c.id}><td><button className="crm-ref-name" onClick={() => setClienteApertoId(c.id)}><span className="crm-ref-avatar" style={crmAvatarStyle(c.ragione_sociale)}>{crmInitials(c.ragione_sociale)}</span><strong>{c.ragione_sociale}</strong></button></td><td>{c.classificazione || "—"}</td><td>{crmLocalita(c.indirizzo)}</td><td>{c.telefono || c.email || "—"}</td><td>{crmFavoriteButton(c.id, preferitiAnagrafica, setPreferitiAnagrafica)}</td><td><button className="crm-ref-action" onClick={() => edit(c)}>Modifica</button><button className="crm-ref-delete" onClick={() => remove(c.id)}>Elimina</button></td></tr>)}
+            </tbody></table></div>
+            <div className="crm-ref-mobile">{filteredList.map(c => <div className="crm-ref-mobile-row" key={c.id}><button className="crm-ref-mobile-open" onClick={() => setClienteApertoId(c.id)}><span className="crm-ref-avatar" style={crmAvatarStyle(c.ragione_sociale)}>{crmInitials(c.ragione_sociale)}</span><span className="crm-ref-mobile-copy"><strong>{c.ragione_sociale}</strong><small>{c.classificazione || (soloArchitetti ? "Architetto" : "Cliente")} · {crmLocalita(c.indirizzo)}</small></span></button>{crmFavoriteButton(c.id, preferitiAnagrafica, setPreferitiAnagrafica)}<button className="crm-ref-chevron" aria-label="Apri scheda" onClick={() => setClienteApertoId(c.id)}><ChevronRight size={19}/></button></div>)}</div>
+          </>}
         </div>
       </div>
     </div>
@@ -3113,7 +3125,7 @@ function AppShell({ session, onLogout }) {
   ];
   const scegli = key => { setPage(key); if(window.innerWidth<768)setMenuOpen(false); };
   const avatar=(session.user.email||"FG").split("@")[0].slice(0,2).toUpperCase();
-  return <div className="matrice-shell">
+  return <div className="matrice-shell"><StileRiferimentoFotoCRM/>
     <aside className={"matrice-sidebar"+(menuOpen?" is-open":"")}>
       <div className="matrice-brand"><div className="matrice-brand-icon"><BarChart3 size={29} strokeWidth={3}/></div><div><strong>CRM</strong></div><button className="matrice-close-menu" onClick={()=>setMenuOpen(false)}>×</button></div>
       <div className="matrice-nav-scroll"><button className={"matrice-nav-main"+(page==="dashboard"?" active":"")} onClick={()=>scegli("dashboard")}><LayoutDashboard size={17}/> Dashboard</button>
@@ -3330,6 +3342,69 @@ function scadenzaSessione(sessione) {
   if (sessione?.expires_at) return Number(sessione.expires_at) * 1000;
   return 0;
 }
+
+
+function StileRiferimentoFotoCRM() { return <style>{`
+  :root { --crm-ref-blue:#0865ed; --crm-ref-border:#e6eaf0; --crm-ref-ink:#111827; }
+  .matrice-shell {background:#f8f9fc!important;color:var(--crm-ref-ink)!important;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif!important}
+  .matrice-sidebar {background:#fff!important;border-right:1px solid #e6eaf0!important;color:#182135!important;box-shadow:none!important}
+  .matrice-brand {background:#fff!important;color:#101828!important;border-bottom:1px solid #e8ebf0!important}
+  .matrice-brand strong {font-size:17px!important;color:#111827!important}
+  .matrice-brand-icon {color:#0865ed!important}
+  .matrice-nav-main,.matrice-nav-group-title,.matrice-subnav button {color:#202a3a!important}
+  .matrice-nav-main:hover,.matrice-nav-group-title:hover,.matrice-subnav button:hover {background:#f1f5fb!important;color:#145bd5!important}
+  .matrice-nav-main.active,.matrice-subnav button.active {background:#dbeafe!important;color:#075fe4!important;box-shadow:none!important}
+  .matrice-sidebar-foot {border-color:#e8ebf0!important;color:#667085!important}
+  .matrice-sidebar-foot small {color:#98a2b3!important}
+  .matrice-topbar {background:#fff!important;border-bottom:1px solid #e8ebf0!important}
+  .crm-ref-page {font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif!important;color:#172033}
+  .crm-ref-heading {display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 18px}
+  .crm-ref-heading h2 {font-size:23px!important;font-weight:800;letter-spacing:-.6px;margin:0!important;color:#121a2b!important}
+  .crm-ref-primary {border:0;border-radius:7px;background:#0865ed;color:#fff;padding:11px 15px;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap;box-shadow:0 3px 9px #0865ed25}
+  .crm-ref-layout {display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start}
+  .crm-ref-form {max-width:410px!important;flex:1 1 310px!important;box-shadow:0 5px 20px #1d2a4410!important}
+  .crm-ref-list-area {flex:1 1 400px;min-width:0;background:#fff;border:1px solid var(--crm-ref-border);border-radius:13px;padding:18px;box-shadow:0 4px 15px #14233d0c}
+  .crm-ref-tools {display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+  .crm-ref-search {border:1px solid #d9e0ea;border-radius:8px;display:flex;align-items:center;gap:9px;padding:0 11px;flex:1 1 230px;min-width:0;color:#64748b;background:#fff}
+  .crm-ref-search input {border:0!important;outline:0!important;box-shadow:none!important;padding:11px 0;font-size:13px;flex:1;min-width:0;color:#101828;background:transparent}
+  .crm-ref-tools select {border:1px solid #d9e0ea;background:#fff;border-radius:8px;padding:11px;font-size:12px;max-width:100%;color:#344054}
+  .crm-ref-tabs {display:flex;gap:7px;align-items:center;border-bottom:1px solid #edf0f4;margin-bottom:8px;padding-bottom:10px}
+  .crm-ref-tabs button {border:0;background:#f4f6f9;color:#3b4557;border-radius:7px;padding:9px 13px;font-size:12px;font-weight:700;cursor:pointer}
+  .crm-ref-tabs button.active {background:#0865ed;color:white}
+  .crm-ref-desktop table {display:table!important;width:100%;border-collapse:collapse;white-space:normal!important;font-size:12px}
+  .crm-ref-desktop th {padding:13px 9px;text-align:left;background:#f7f8fa;font-size:11px;font-weight:750;color:#263144}
+  .crm-ref-desktop td {padding:12px 9px;border-bottom:1px solid #edf0f4;color:#475467;vertical-align:middle}
+  .crm-ref-name {display:flex;align-items:center;gap:10px;border:0;background:transparent;cursor:pointer;color:#111827;text-align:left;padding:0}
+  .crm-ref-name strong {font-size:12px;color:#121b2d}
+  .crm-ref-avatar {width:34px;height:34px;border-radius:50%;flex:0 0 34px;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;letter-spacing:-.3px}
+  .crm-ref-star {border:0;background:transparent;color:#53647e;font-size:24px;cursor:pointer;line-height:1;padding:5px}
+  .crm-ref-star.is-favorite {color:#f2ad00}
+  .crm-ref-action,.crm-ref-delete {border:0;background:transparent;cursor:pointer;color:#0865ed;font-size:11px;font-weight:650;padding:5px}
+  .crm-ref-delete {color:#bf3b44}
+  .crm-ref-mobile {display:none}
+  .crm-ref-empty {text-align:center;color:#8b95a5;font-size:13px;padding:25px 10px}
+  .crm-mandanti-premium .crm-ref-list-area > div:first-child {margin-bottom:15px!important}
+  .crm-mandanti-premium .crm-ref-list-area input[aria-label="Cerca aziende mandanti"] {border:1px solid #d9e0ea!important;border-radius:8px!important;padding:11px 12px!important}
+  @media(max-width:768px) {
+    .crm-ref-heading h2 {font-size:19px!important}
+    .crm-ref-primary {padding:10px 12px;font-size:11px}
+    .crm-ref-list-area {padding:10px 11px;border-radius:12px;flex-basis:100%;box-shadow:none}
+    .crm-ref-desktop {display:none!important}
+    .crm-ref-mobile {display:block}
+    .crm-ref-mobile-row {display:flex;align-items:center;gap:6px;min-height:67px;border-bottom:1px solid #edf0f4;padding:9px 0}
+    .crm-ref-mobile-row:last-child {border-bottom:0}
+    .crm-ref-mobile-open {flex:1;min-width:0;display:flex;align-items:center;gap:11px;background:none;border:0;text-align:left;padding:0;cursor:pointer}
+    .crm-ref-mobile-copy {display:block;min-width:0;flex:1}
+    .crm-ref-mobile-copy strong {display:block;font-size:13px;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .crm-ref-mobile-copy small {display:block;font-size:11px;color:#667085;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .crm-ref-chevron {border:0;background:transparent;color:#53647e;padding:2px}
+    .crm-ref-tabs {overflow-x:auto;white-space:nowrap}
+    .crm-ref-form {max-width:100%!important;flex-basis:100%!important}
+    .crm-ref-tools select {flex:1 1 100%}
+    .crm-mandanti-premium .tabella-responsive {display:none!important}
+    .crm-mandanti-premium .crm-ref-list-area > div:has(> div > strong) {box-shadow:none}
+  }
+`}</style>; }
 
 export default function App() {
   const [session, setSession] = useState(() => leggiSessioneSalvata());
