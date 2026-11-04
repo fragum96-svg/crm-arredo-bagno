@@ -144,7 +144,7 @@ async function registraAttivita(session, clienteId, tipo, descrizione) {
 }
 
 async function caricaFileStorage(session, bucket, path, file) {
-  const res = await crmFetch(SUPABASE_URL + "/storage/v1/object/" + bucket + "/" + path, {
+  const res = await crmFetch(SUPABASE_URL + "/storage/v1/object/" + encodeURIComponent(bucket) + "/" + path.split("/").map(encodeURIComponent).join("/"), {
     method: "POST",
     headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token },
     body: file,
@@ -176,6 +176,15 @@ async function urlImmagineAutorizzata(session, value) {
   if (!res.ok || !json.signedURL) throw new Error("Impossibile leggere l'immagine privata: " + (json.message || res.status));
   const signed = json.signedURL;
   return signed.startsWith("http") ? signed : SUPABASE_URL + (signed.startsWith("/storage/v1/") ? signed : "/storage/v1" + (signed.startsWith("/") ? signed : "/" + signed));
+}
+async function apriDocumentoPrivato(session, path) {
+  if (!path) return;
+  try {
+    const url = await urlImmagineAutorizzata(session, 'storage:' + path);
+    window.open(url, '_blank', 'noopener,noreferrer');
+  } catch (err) {
+    window.alert('Impossibile aprire il documento: ' + err.message);
+  }
 }
 function ImmaginePreventivo({ session, value, style }) {
   const [url, setUrl] = useState("");
@@ -990,7 +999,8 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
   const caricaDocumento = async (file) => {
     setUploadingDoc(true); setError("");
     try {
-      const path = clienteId + "/" + Date.now() + "_" + file.name;
+      const idAgenzia = await crmAgencyId(session.access_token);
+      const path = idAgenzia + "/clienti/" + clienteId + "/documenti/" + Date.now() + "_" + file.name;
       await caricaFileStorage(session, "documenti-clienti", path, file);
       await crmFetch(SUPABASE_URL + "/rest/v1/documenti_cliente", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: clienteId, nome_file: file.name, tipo_documento: "documento", storage_path: path }) });
       await registraAttivita(session, clienteId, "documento", "Caricato documento: " + file.name);
@@ -1002,7 +1012,7 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
     setSavingOrdine(true); setError("");
     try {
       let path = null;
-      if (fileOrdine) { path = clienteId + "/ordini/" + Date.now() + "_" + fileOrdine.name; await caricaFileStorage(session, "documenti-clienti", path, fileOrdine); }
+      if (fileOrdine) { const idAgenzia = await crmAgencyId(session.access_token); path = idAgenzia + "/clienti/" + clienteId + "/ordini/" + Date.now() + "_" + fileOrdine.name; await caricaFileStorage(session, "documenti-clienti", path, fileOrdine); }
       await crmFetch(SUPABASE_URL + "/rest/v1/ordini_confermati", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: clienteId, azienda_id: formOrdine.azienda_id, importo: Number(formOrdine.importo) || 0, data_ordine: formOrdine.data_ordine, note: formOrdine.note || null, storage_path: path }) });
       await registraAttivita(session, clienteId, "ordine", "Registrato ordine confermato di " + formattaEuro(formOrdine.importo));
       setFormOrdine({ azienda_id: "", importo: "", data_ordine: new Date().toISOString().slice(0, 10), note: "" });
@@ -1159,7 +1169,7 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
                 <span>{nomeAzienda(o.azienda_id)} — {new Date(o.data_ordine).toLocaleDateString("it-IT")}</span>
                 <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <strong>{formattaEuro(o.importo)}</strong>
-                  {o.storage_path && <a href={urlPubblicoStorage("documenti-clienti", o.storage_path)} target="_blank" rel="noreferrer" style={{ color: COLORS.primary, fontSize: 11 }}>PDF</a>}
+                  {o.storage_path && <button type="button" onClick={() => apriDocumentoPrivato(session, o.storage_path)} style={{ color: COLORS.primary, fontSize: 11, background: "none", border: 0, cursor: "pointer", padding: 0, textDecoration: "underline" }}>PDF</button>}
                   <button onClick={() => rimuoviOrdine(o.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 11 }}>Elimina</button>
                 </span>
               </div>
@@ -1186,7 +1196,7 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
       {sezione("Documenti", (
         <div>
           {documenti.length === 0 ? <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 12 }}>Nessun documento caricato.</p> : (
-            documenti.map((d) => (<div key={d.id} style={{ fontSize: 12, padding: "6px 0", borderBottom: "1px solid #f0f5f9" }}><a href={urlPubblicoStorage("documenti-clienti", d.storage_path)} target="_blank" rel="noreferrer" style={{ color: COLORS.primary }}>{d.nome_file}</a><span style={{ color: COLORS.muted, marginLeft: 8 }}>{new Date(d.created_at).toLocaleDateString("it-IT")}</span></div>))
+            documenti.map((d) => (<div key={d.id} style={{ fontSize: 12, padding: "6px 0", borderBottom: "1px solid #f0f5f9" }}><button type="button" onClick={() => apriDocumentoPrivato(session, d.storage_path)} style={{ color: COLORS.primary, background: "none", border: 0, cursor: "pointer", padding: 0, textDecoration: "underline" }}>{d.nome_file}</button><span style={{ color: COLORS.muted, marginLeft: 8 }}>{new Date(d.created_at).toLocaleDateString("it-IT")}</span></div>))
           )}
           <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: COLORS.primary, cursor: "pointer", marginTop: 10 }}>
             <Upload size={13} /> {uploadingDoc ? "Caricamento..." : "Carica documento"}
@@ -1781,7 +1791,8 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
       if (!file.type.startsWith("image/")) throw new Error("Seleziona un file immagine.");
       if (file.size > 8 * 1024 * 1024) throw new Error("Immagine troppo grande: massimo 8 MB.");
       const estensione = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
-      const path = "preventivi/" + Date.now() + "_" + Math.random().toString(36).slice(2, 10) + "." + estensione;
+      const idAgenzia = await crmAgencyId(session.access_token);
+      const path = idAgenzia + "/preventivi/" + Date.now() + "_" + Math.random().toString(36).slice(2, 10) + "." + estensione;
       await caricaFileStorage(session, "documenti-clienti", path, file);
       aggiornaRiga(rigaId, "immagine_url", "storage:" + path);
     } catch (err) { setError("Errore nel caricamento immagine: " + err.message); } finally { setCaricandoImmagine(null); }
