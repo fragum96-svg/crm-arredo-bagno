@@ -420,6 +420,8 @@ function Dashboard({ session, goTo }) {
 
 function AziendeMandanti({ session }) {
   const [list, setList] = useState([]);
+  const [vistaMandanti, setVistaMandanti] = useState("elenco");
+  const [ricercaMandanti, setRicercaMandanti] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [uploadMsg, setUploadMsg] = useState(null);
@@ -518,6 +520,8 @@ function AziendeMandanti({ session }) {
     } catch (err) { setError(err.message); }
   };
 
+  const aziendeFiltrate = list.filter(a => [a.nome, a.trasporto, a.resi, a.note].some(v => String(v || "").toLowerCase().includes(ricercaMandanti.trim().toLowerCase())));
+
   const inputStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
 
   return (
@@ -544,14 +548,42 @@ function AziendeMandanti({ session }) {
         </div>
         <div style={{ flex: "2 1 400px" }}>
           {uploadMsg && <div style={{ fontSize: 12, marginBottom: 10, color: uploadMsg.type === "error" ? COLORS.danger : COLORS.success }}>{uploadMsg.text}</div>}
-          {loading ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p> : list.length === 0 ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessuna azienda ancora inserita.</p> : (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 14 }}>
+            <input aria-label="Cerca aziende mandanti" placeholder="Cerca azienda, trasporto, note..." value={ricercaMandanti} onChange={e => setRicercaMandanti(e.target.value)} style={{ ...inputStyle, flex: "1 1 200px", marginBottom: 0, maxWidth: 390, background: "#fff" }} />
+            <div style={{ display: "inline-flex", padding: 4, background: "#edf3f8", borderRadius: 11, gap: 3 }}>
+              {[["elenco", "Elenco"], ["schede", "Schede"]].map(([id, label]) => <button key={id} type="button" aria-pressed={vistaMandanti === id} onClick={() => setVistaMandanti(id)} style={{ border: 0, borderRadius: 8, padding: "8px 12px", fontSize: 12, cursor: "pointer", background: vistaMandanti === id ? "#fff" : "transparent", color: vistaMandanti === id ? "#145b92" : "#63788d", fontWeight: 650, boxShadow: vistaMandanti === id ? "0 1px 5px #19344a18" : "none" }}>{label}</button>)}
+            </div>
+          </div>
+          {loading ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p> : aziendeFiltrate.length === 0 ? <p style={{ color: COLORS.muted, fontSize: 13 }}>{list.length ? "Nessuna azienda corrisponde alla ricerca." : "Nessuna azienda ancora inserita."}</p> : vistaMandanti === "schede" ? (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 230px), 1fr))", gap: 14 }}>
+              {aziendeFiltrate.map(azienda => (
+                <div key={azienda.id} style={{ background: "#fff", border: "1px solid #dce7ef", borderRadius: 16, padding: 17, boxShadow: "0 4px 14px #19344a0a", minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                    <span style={{ width: 38, height: 38, borderRadius: 12, background: (azienda.colore || "#0b7bc4") + "18", display: "grid", placeItems: "center", flexShrink: 0 }}><Building2 size={19} color={azienda.colore || "#0b7bc4"} /></span>
+                    <strong style={{ fontSize: 15, color: "#18354e", overflowWrap: "anywhere" }}>{azienda.nome}</strong>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9, fontSize: 12, color: "#52697c" }}>
+                    <span>Sconto 1<br /><strong style={{ color: "#18354e" }}>{azienda.sconto1 != null ? azienda.sconto1 + "%" : "—"}</strong></span>
+                    <span>Sconto 2<br /><strong style={{ color: "#18354e" }}>{azienda.sconto2 != null ? azienda.sconto2 + "%" : "—"}</strong></span>
+                    <span>Imballo<br /><strong style={{ color: "#18354e" }}>{azienda.imballo_percentuale != null ? azienda.imballo_percentuale + "%" : "—"}</strong></span>
+                    <span>Trasporto<br /><strong style={{ color: "#18354e", overflowWrap: "anywhere" }}>{azienda.trasporto || "—"}</strong></span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginTop: 16, paddingTop: 12, borderTop: "1px solid #e8eff4" }}>
+                    <button type="button" onClick={() => edit(azienda)} style={{ border: 0, background: "#eaf3fb", color: "#145b92", padding: "8px 11px", borderRadius: 8, fontWeight: 600, cursor: "pointer" }}>Modifica</button>
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "#145b92", fontSize: 12, cursor: "pointer" }}><Upload size={13} />{uploadingId === azienda.id ? "Caricamento..." : "Carica listino"}<input type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }} onChange={e => { const file = e.target.files?.[0]; if (file) caricaListino(azienda.id, file); e.target.value = ""; }} /></label>
+                    <button type="button" onClick={() => remove(azienda.id)} style={{ border: 0, background: "none", color: COLORS.danger, cursor: "pointer", fontSize: 12, marginLeft: "auto" }}>Elimina</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }} className="tabella-responsive">
               <thead><tr style={{ textAlign: "left", borderBottom: "2px solid " + COLORS.border }}>
                 <th style={{ padding: "8px 6px" }}>Nome</th><th style={{ padding: "8px 6px" }}>Sc. 1</th><th style={{ padding: "8px 6px" }}>Sc. 2</th>
                 <th style={{ padding: "8px 6px" }}>Imballo</th><th style={{ padding: "8px 6px" }}>Trasporto</th><th style={{ padding: "8px 6px" }}>Listino</th><th style={{ padding: "8px 6px" }}></th>
               </tr></thead>
               <tbody>
-                {list.map((azienda) => (
+                {aziendeFiltrate.map((azienda) => (
                   <tr key={azienda.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
                     <td style={{ padding: "8px 6px", fontWeight: 600 }} data-label="Nome">
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
