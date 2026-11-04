@@ -3961,6 +3961,60 @@ function LaboratorioCommercialeCRM() {
   </div>;
 }
 
+
+// Fase 2: report commerciale aggregato. Le fonti restano separate:
+// fatturato_commerciale = consuntivo, opportunita_commerciali = pipeline,
+// crm_provvigioni_ordini / crm_liquidazioni_provvigioni = compensi.
+function ReportDirezionaleCRM({session, goTo}) {
+  const [righe,setRighe]=useState({aziende:[],clienti:[],fatturato:[],opportunita:[],provvigioni:[],liquidazioni:[],attivita:[]});
+  const [anno,setAnno]=useState(new Date().getFullYear());
+  const [mandante,setMandante]=useState('');
+  const [loading,setLoading]=useState(true);
+  const [errore,setErrore]=useState('');
+  const carica=async()=>{
+    setLoading(true);setErrore('');
+    const h={apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+session.access_token};
+    const paths={aziende:'aziende_mandanti?select=id,nome&order=nome.asc',clienti:'clienti?select=id,ragione_sociale',fatturato:'fatturato_commerciale?select=azienda_id,cliente_id,anno,importo',opportunita:'opportunita_commerciali?select=id,titolo,cliente_id,azienda_id,fase,valore_stimato,probabilita,data_prossima_azione',provvigioni:'crm_provvigioni_ordini?select=id,azienda_id,cliente_id,importo_maturato,data_ordine',liquidazioni:'crm_liquidazioni_provvigioni?select=provvigione_id,importo',attivita:'crm_attivita?select=id,azienda_id,cliente_id,titolo,scadenza,stato'};
+    try{
+      const entries=await Promise.all(Object.entries(paths).map(async([key,path])=>{
+        const r=await fetch(SUPABASE_URL+'/rest/v1/'+path,{headers:h});
+        const d=await r.json().catch(()=>null);
+        if(!r.ok||!Array.isArray(d))throw Error(key+': '+(d?.message||'lettura non riuscita'));
+        return [key,d];
+      }));
+      setRighe(Object.fromEntries(entries));
+    }catch(e){setErrore(e.message)}finally{setLoading(false)}
+  };
+  useEffect(()=>{carica()},[session.access_token]);
+  const filtrati=(arr)=>arr.filter(x=>!mandante||x.azienda_id===mandante);
+  const f=filtrati(righe.fatturato).filter(x=>Number(x.anno)===Number(anno));
+  const totaleFatturato=f.reduce((a,x)=>a+Number(x.importo||0),0);
+  const opportunita=filtrati(righe.opportunita).filter(x=>!['vinta','persa','chiusa','annullata'].includes(String(x.fase||'').toLowerCase()));
+  const valorePipeline=opportunita.reduce((a,x)=>a+Number(x.valore_stimato||0),0);
+  const ponderata=opportunita.reduce((a,x)=>a+Number(x.valore_stimato||0)*Number(x.probabilita||0)/100,0);
+  const provvigioni=filtrati(righe.provvigioni).filter(x=>!x.data_ordine||String(x.data_ordine).slice(0,4)===String(anno));
+  const maturato=provvigioni.reduce((a,x)=>a+Number(x.importo_maturato||0),0);
+  const ids=new Set(provvigioni.map(x=>x.id));
+  const liquidato=righe.liquidazioni.filter(x=>ids.has(x.provvigione_id)).reduce((a,x)=>a+Number(x.importo||0),0);
+  const oggi=new Date().toISOString().slice(0,10);
+  const attivita=filtrati(righe.attivita).filter(x=>x.stato!=='completata'&&x.scadenza&&String(x.scadenza).slice(0,10)<=oggi);
+  const nome=(id)=>righe.aziende.find(x=>x.id===id)?.nome||'Non assegnata';
+  const euro=n=>Number(n||0).toLocaleString('it-IT',{style:'currency',currency:'EUR'});
+  const card={padding:18,borderRadius:15,background:'#fff',border:'1px solid #dce4f0',boxShadow:'0 4px 12px rgba(25,48,90,.035)'};
+  const mandanti=righe.aziende.map(a=>({...a,fatturato:f.filter(x=>x.azienda_id===a.id).reduce((n,x)=>n+Number(x.importo||0),0),pipeline:opportunita.filter(x=>x.azienda_id===a.id).reduce((n,x)=>n+Number(x.valore_stimato||0),0)})).sort((a,b)=>b.fatturato-a.fatturato);
+  return <section style={{maxWidth:1250,margin:'0 auto',padding:'20px 10px 35px',color:'#1d3150'}}>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:12,marginBottom:18}}><div><h2 style={{margin:'0 0 5px'}}>Report direzionale</h2><p style={{margin:0,color:'#6a7a90',fontSize:13}}>Consuntivo, trattative, provvigioni e attività: dati reali, senza sommare preventivi al fatturato.</p></div><button onClick={carica} style={{padding:'10px 14px',border:'1px solid #c9d7ea',borderRadius:9,background:'#fff',cursor:'pointer'}}>Aggiorna dati</button></div>
+    <div style={{display:'flex',gap:12,flexWrap:'wrap',marginBottom:16}}><label>Anno <select value={anno} onChange={e=>setAnno(Number(e.target.value))} style={{marginLeft:7,padding:9,borderRadius:8,border:'1px solid #cbd7e7'}}>{Array.from({length:6},(_,i)=>new Date().getFullYear()-i).map(y=><option key={y} value={y}>{y}</option>)}</select></label><label>Mandante <select value={mandante} onChange={e=>setMandante(e.target.value)} style={{marginLeft:7,padding:9,borderRadius:8,border:'1px solid #cbd7e7'}}><option value=''>Tutte le aziende</option>{righe.aziende.map(a=><option key={a.id} value={a.id}>{a.nome}</option>)}</select></label></div>
+    {loading&&<p>Caricamento report…</p>}{errore&&<p role='alert' style={{color:'#ad2929'}}>Impossibile completare il report: {errore}</p>}
+    {!loading&&!errore&&<>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(175px,1fr))',gap:12,marginBottom:18}}>{[['Fatturato consuntivo',euro(totaleFatturato)],['Pipeline aperta',euro(valorePipeline)],['Pipeline ponderata',euro(ponderata)],['Provvigioni maturate',euro(maturato)],['Provvigioni da liquidare',euro(Math.max(0,maturato-liquidato))],['Attività scadute / oggi',String(attivita.length)]].map(([label,value])=><div key={label} style={card}><div style={{fontSize:12,color:'#687b94',marginBottom:7}}>{label}</div><strong style={{fontSize:21,overflowWrap:'anywhere'}}>{value}</strong></div>)}</div>
+      <div style={card}><h3 style={{marginTop:0}}>Andamento per mandante</h3><div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:13,textAlign:'left'}}><thead><tr>{['Azienda','Fatturato anno','Pipeline aperta'].map(x=><th key={x} style={{padding:11,borderBottom:'1px solid #e2e9f1'}}>{x}</th>)}</tr></thead><tbody>{mandanti.map(a=><tr key={a.id}><td style={{padding:11,borderBottom:'1px solid #edf1f6'}}>{a.nome}</td><td style={{padding:11,borderBottom:'1px solid #edf1f6'}}>{euro(a.fatturato)}</td><td style={{padding:11,borderBottom:'1px solid #edf1f6'}}>{euro(a.pipeline)}</td></tr>)}</tbody></table></div></div>
+      <div style={{display:'flex',gap:10,flexWrap:'wrap',marginTop:15}}><button onClick={()=>goTo('pipeline')} style={{padding:'11px 15px',border:0,borderRadius:9,background:'#2568d6',color:'#fff',cursor:'pointer'}}>Apri pipeline</button><button onClick={()=>goTo('controllo')} style={{padding:'11px 15px',border:'1px solid #ccd7e7',borderRadius:9,background:'#fff',cursor:'pointer'}}>Controllo commerciale</button><button onClick={()=>goTo('attivita')} style={{padding:'11px 15px',border:'1px solid #ccd7e7',borderRadius:9,background:'#fff',cursor:'pointer'}}>Attività da gestire</button></div>
+      <p style={{fontSize:12,color:'#75849a',marginTop:14}}>Nota: le provvigioni sono filtrate per anno dell'ordine; le liquidazioni mostrate sono quelle riferite a tali provvigioni, indipendentemente dalla data di pagamento. La pipeline è una stima, non fatturato acquisito.</p>
+    </>}
+  </section>;
+}
+
 function AppShell({ session, onLogout }) {
   const [ricercaGlobaleAperta,setRicercaGlobaleAperta]=useState(false);
   const [azioniRapideAperte,setAzioniRapideAperte]=useState(false);
@@ -3979,7 +4033,7 @@ function AppShell({ session, onLogout }) {
     {id:"architetti",nome:"Architetti",icon:Users2,items:[{key:"architetti",label:"Studi e architetti",icon:Users2}]},
     {id:"opportunita",nome:"Opportunità",icon:Target,items:[{key:"pipeline",label:"Pipeline commerciale",icon:Target},{key:"preventivi",label:"Preventivi e offerte",icon:FileText},{key:"portafoglio",label:"Portafoglio ordini",icon:Briefcase},{key:"ordini",label:"Registro ordini",icon:ClipboardList}]},
     {id:"agenda",nome:"Agenda",icon:CalendarDays,items:[{key:"agenda",label:"Pannello agenda",icon:CalendarDays},{key:"visite",label:"Calendario e appuntamenti",icon:CalendarDays},{key:"attivita",label:"Attività e follow-up",icon:ClipboardList},{key:"storico_visite",label:"Storico visite",icon:ClipboardList}]},
-    {id:"report",nome:"Report",icon:BarChart3,items:[{key:"centro",label:"Centro operativo",icon:Target},{key:"controllo",label:"Controllo Commerciale",icon:Wallet},{key:"fatturato",label:"Fatturato (ordini CRM)",icon:Wallet},{key:"statistiche",label:"Statistiche",icon:TrendingUp}]},
+    {id:"report",nome:"Report",icon:BarChart3,items:[{key:"direzionale",label:"Report direzionale",icon:BarChart3},{key:"centro",label:"Centro operativo",icon:Target},{key:"controllo",label:"Controllo Commerciale",icon:Wallet},{key:"fatturato",label:"Fatturato (ordini CRM)",icon:Wallet},{key:"statistiche",label:"Statistiche",icon:TrendingUp}]},
     {id:"mandanti",nome:"Mandanti",icon:Building2,items:[{key:"aziende",label:"Aziende mandanti",icon:Building2}]},
     {id:"laboratorio",nome:"Laboratorio",icon:Settings,items:[{key:"laboratorio",label:"Registri commerciali",icon:Settings}]},
   ];  const scegli = key => { setPage(key); if(window.innerWidth<768)setMenuOpen(false); };
@@ -4020,6 +4074,7 @@ function AppShell({ session, onLogout }) {
         {page==="dashboard"&&<AttivaNotificheCRM session={session}/>}
         {page==="dashboard"&&<Dashboard session={session} goTo={scegli}/>}
         {page==="dashboard"&&<ClientiDaRiattivareCRM session={session} naviga={scegli}/>}
+        {page==="direzionale"&&<ReportDirezionaleCRM session={session} goTo={scegli}/>}
         {page==="centro"&&<CentroOperativoCRM session={session} goTo={scegli}/>} 
         {page==="admin"&&role==="admin"&&<AdminPanel session={session}/>}
         {page==="aziende"&&<AziendeMandanti session={session}/>}
@@ -4027,7 +4082,7 @@ function AppShell({ session, onLogout }) {
         {page==="attivita"&&<AttivitaCRM session={session}/>}
         {page==="clienti"&&<ClientiAnagrafica session={session} apriPreventivo={apriPreventivoCliente} apriGruppo={apriGruppoCliente}/>}
         {page==="architetti"&&<ClientiAnagrafica soloArchitetti session={session} apriPreventivo={apriPreventivoCliente} apriGruppo={apriGruppoCliente}/>}
-        {page==="laboratorio"&&<><CRMOperativitaUnificata session={session}/><RegistroCommercialeSupabase session={session}/><RegistroProvvigioniSupabase session={session}/><details style={{marginTop:20}}><summary style={{cursor:"pointer",fontWeight:650}}>Apri il vecchio Laboratorio dimostrativo</summary><LaboratorioCommercialeCRM/></details></>}
+        {page==="laboratorio"&&<><CRMOperativitaUnificata session={session}/><RegistroCommercialeSupabase session={session}/><RegistroProvvigioniSupabase session={session}/><details style={{marginTop:20}}><summary style={{cursor:"pointer",fontWeight:650}}>Apri il vecchio Laboratorio dimostrativo (NON salva su Supabase)</summary><LaboratorioCommercialeCRM/></details></>}
         {page==="visite"&&<CalendarioVisite session={session}/>} 
         {page==="storico_visite"&&<StoricoVisiteCRM session={session}/>}
         {page==="note"&&<NoteCRM session={session}/>}
