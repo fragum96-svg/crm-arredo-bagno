@@ -2546,6 +2546,102 @@ function PipelineCommerciale({session}) {
   </div>;
 }
 
+
+// Notifiche Web Push: funziona sulle PWA installate nella schermata Home di iPhone.
+const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+
+function chiaveVapidInByte(base64url) {
+  const base64 = base64url.replace(/-/g, "+").replace(/_/g, "/");
+  const decoded = atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "="));
+  return Uint8Array.from(decoded, carattere => carattere.charCodeAt(0));
+}
+
+function chiavePushInBase64Url(buffer) {
+  return btoa(String.fromCharCode(...new Uint8Array(buffer)))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function AttivaNotificheCRM({ session }) {
+  const [stato, setStato] = useState("");
+  const [occupato, setOccupato] = useState(false);
+  const [attivo, setAttivo] = useState(false);
+
+  useEffect(() => {
+    let valido = true;
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.ready
+        .then(reg => reg.pushManager?.getSubscription())
+        .then(sub => { if (valido) setAttivo(Boolean(sub)); })
+        .catch(() => {});
+    }
+    return () => { valido = false; };
+  }, []);
+
+  const attiva = async () => {
+    setStato("");
+    setOccupato(true);
+    try {
+      if (!VAPID_PUBLIC_KEY) throw new Error("Manca la chiave pubblica VAPID nella configurazione Vercel di sviluppo.");
+      if (!session?.user?.id || !session?.access_token) throw new Error("Sessione non valida: esci e accedi nuovamente.");
+      if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window))
+        throw new Error("Questo dispositivo non supporta le notifiche Web Push. Su iPhone apri la web app dalla schermata Home.");
+      const permesso = await Notification.requestPermission();
+      if (permesso !== "granted") throw new Error("Permesso notifiche non concesso. Controlla le impostazioni dell'iPhone.");
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: chiaveVapidInByte(VAPID_PUBLIC_KEY)
+        });
+      }
+      const p256dh = sub.getKey("p256dh");
+      const auth = sub.getKey("auth");
+      if (!p256dh || !auth) throw new Error("Il dispositivo non ha restituito le chiavi push.");
+      const risposta = await fetch(SUPABASE_URL + "/rest/v1/push_subscriptions?on_conflict=endpoint", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: "Bearer " + session.access_token,
+          Prefer: "resolution=merge-duplicates,return=minimal"
+        },
+        body: JSON.stringify({
+          user_id: session.user.id,
+          endpoint: sub.endpoint,
+          p256dh: chiavePushInBase64Url(p256dh),
+          auth_key: chiavePushInBase64Url(auth),
+          updated_at: new Date().toISOString()
+        })
+      });
+      if (!risposta.ok) {
+        const errore = await risposta.json().catch(() => ({}));
+        throw new Error(errore.message || errore.details || "Impossibile salvare il dispositivo su Supabase.");
+      }
+      setAttivo(true);
+      setStato("iPhone registrato correttamente. L'invio automatico dei promemoria sarà attivo dopo la configurazione del servizio di invio.");
+    } catch (errore) {
+      setStato("Attenzione: " + (errore.message || String(errore)));
+    } finally {
+      setOccupato(false);
+    }
+  };
+
+  return (
+    <div style={{ padding: "12px 14px", marginBottom: 14, background: "#fff", border: "1px solid #dce5f1", borderRadius: 12 }}>
+      <div style={{ fontWeight: 700, color: "#17233b", marginBottom: 7 }}>Notifiche iPhone</div>
+      <div style={{ fontSize: 12, color: "#65748b", marginBottom: 10 }}>
+        Registra questo dispositivo per ricevere i promemoria degli appuntamenti.
+      </div>
+      <button type="button" onClick={attiva} disabled={occupato}
+        style={{ background: "#2369d5", color: "#fff", border: 0, borderRadius: 9, padding: "10px 14px", fontWeight: 600, cursor: "pointer" }}>
+        {occupato ? "Attivazione..." : attivo ? "Verifica / aggiorna notifiche" : "Attiva notifiche"}
+      </button>
+      {stato && <div role="status" style={{ fontSize: 12, marginTop: 10, color: stato.startsWith("Attenzione") ? "#b33a3a" : "#176b40" }}>{stato}</div>}
+    </div>
+  );
+}
+
 function AppShell({ session, onLogout }) {
   const [menuOpen, setMenuOpen] = useState(typeof window === "undefined" ? true : window.innerWidth > 768);
   const [page, setPage] = useState("dashboard");
@@ -2577,6 +2673,7 @@ function AppShell({ session, onLogout }) {
     {menuOpen&&<div className="matrice-backdrop" onClick={()=>setMenuOpen(false)}/>}
     <div className="matrice-workspace"><header className="matrice-topbar"><button className="matrice-menu-button" onClick={()=>setMenuOpen(v=>!v)} aria-label="Apri o chiudi menu"><MenuIcon size={19}/></button><span className="matrice-topbar-label">{page==="dashboard"?"Panoramica":sezioni.flatMap(x=>x.items).find(x=>x.key===page)?.label||"CRM"}</span><div className="matrice-topbar-actions"><button title="Vai ai clienti" onClick={()=>scegli("clienti")}><Search size={18}/></button><button title="Apri agenda" onClick={()=>scegli("visite")}><Bell size={18}/></button><span className="matrice-avatar" title={session.user.email}>{avatar}</span><button className="matrice-logout" onClick={onLogout} title="Esci"><LogOut size={17}/></button></div></header>
       <main key={page} className="page-content matrice-main">
+        {page==="dashboard"&&<AttivaNotificheCRM session={session}/>}
         {page==="dashboard"&&<Dashboard session={session} goTo={scegli}/>}
         {page==="admin"&&role==="admin"&&<AdminPanel session={session}/>}
         {page==="aziende"&&<AziendeMandanti session={session}/>}
