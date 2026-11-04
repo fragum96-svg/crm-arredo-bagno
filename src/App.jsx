@@ -1849,8 +1849,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
     if (!window.confirm("Creare un ordine confermato da questo preventivo?")) return;
     try {
       const totCalc = calcolaTotaliPreventivo(p, p.righe || []);
-      await crmFetch(SUPABASE_URL + "/rest/v1/ordini_confermati", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: p.cliente_id, azienda_id: p.azienda_id, importo: totCalc.totaleFinale, data_ordine: new Date().toISOString().slice(0, 10), note: p.rif ? "Da preventivo " + p.rif : "Da preventivo" }) });
-      await crmFetch(SUPABASE_URL + "/rest/v1/preventivi?id=eq." + p.id, { method: "PATCH", headers: headers(), body: JSON.stringify({ fatturato: true }) });
+      await convertiPreventivoInOrdineControllato(p, headers());
       load();
     } catch (err) { setError(err.message); }
   };
@@ -2520,8 +2519,7 @@ function PortafoglioOrdini({ session }) {
     if (!window.confirm("Creare un ordine confermato da questo preventivo?")) return;
     try {
       const tot = calcolaTotaliPreventivo(pv, pv.righe || []);
-      await crmFetch(SUPABASE_URL + "/rest/v1/ordini_confermati", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: pv.cliente_id, azienda_id: pv.azienda_id, importo: tot.totaleFinale, data_ordine: new Date().toISOString().slice(0, 10), note: pv.rif ? "Da preventivo " + pv.rif : "Da preventivo" }) });
-      await crmFetch(SUPABASE_URL + "/rest/v1/preventivi?id=eq." + pv.id, { method: "PATCH", headers: headers(), body: JSON.stringify({ fatturato: true }) });
+      await convertiPreventivoInOrdineControllato(pv, headers());
       load();
     } catch (err) { setError(err.message); }
   };
@@ -4501,4 +4499,39 @@ export default function App() {
       )}
     </>
   );
+}
+
+// Fase 3: conversione controllata. Evita doppie conversioni sequenziali e non nasconde errori HTTP.
+// La prevenzione assoluta di conversioni simultanee richiede un vincolo DB/RPC transazionale.
+const conversioniPreventivoInCorso = new Set();
+async function convertiPreventivoInOrdineControllato(p, sessionHeaders) {
+  if (!p?.id || !p.cliente_id || !p.azienda_id) throw new Error("Il preventivo deve avere cliente e mandante associati.");
+  if (conversioniPreventivoInCorso.has(p.id)) throw new Error("Conversione già in corso per questo preventivo.");
+  conversioniPreventivoInCorso.add(p.id);
+  try {
+    const base = SUPABASE_URL + "/rest/v1/";
+    const leggi = await crmFetch(base + "preventivi?id=eq." + encodeURIComponent(p.id) + "&select=id,fatturato", { headers: sessionHeaders });
+    if (!leggi.ok) throw new Error("Impossibile verificare lo stato del preventivo: " + await leggi.text());
+    const record = await leggi.json();
+    if (!record?.length) throw new Error("Preventivo non trovato o non accessibile.");
+    if (record[0].fatturato) throw new Error("Questo preventivo risulta già convertito: operazione annullata.");
+    const marker = "[PREVENTIVO:" + p.id + "]";
+    const verifica = await crmFetch(base + "ordini_confermati?select=id&note=ilike." + encodeURIComponent("*" + marker + "*") + "&limit=1", { headers: sessionHeaders });
+    if (!verifica.ok) throw new Error("Impossibile controllare gli ordini esistenti: " + await verifica.text());
+    const esistenti = await verifica.json();
+    if (esistenti.length) throw new Error("Esiste già un ordine collegato a questo preventivo.");
+    const totale = calcolaTotaliPreventivo(p, p.righe || []).totaleFinale;
+    if (!Number.isFinite(Number(totale)) || Number(totale) < 0) throw new Error("Totale preventivo non valido.");
+    const note = (p.rif ? "Da preventivo " + p.rif : "Da preventivo") + " " + marker;
+    const creato = await crmFetch(base + "ordini_confermati", {
+      method: "POST", headers: { ...sessionHeaders, Prefer: "return=representation" },
+      body: JSON.stringify({ cliente_id: p.cliente_id, azienda_id: p.azienda_id, importo: totale, data_ordine: new Date().toISOString().slice(0, 10), note })
+    });
+    if (!creato.ok) throw new Error("Ordine non creato: " + await creato.text());
+    const aggiornato = await crmFetch(base + "preventivi?id=eq." + encodeURIComponent(p.id), {
+      method: "PATCH", headers: sessionHeaders, body: JSON.stringify({ fatturato: true })
+    });
+    if (!aggiornato.ok) throw new Error("Ordine creato, ma preventivo non aggiornato. Non ripetere la conversione: " + await aggiornato.text());
+    return true;
+  } finally { conversioniPreventivoInCorso.delete(p.id); }
 }
