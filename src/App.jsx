@@ -1321,6 +1321,10 @@ function CalendarioVisite({ session }) {
         <div className="agenda-week-grid">
           <div className="agenda-week-corner">Ora</div>
           {getWeekDays(currentDate).map(d=><button type="button" key={isoLocale(d)} className={"agenda-week-day"+(isoLocale(d)===isoLocale(currentDate)?" selected":"")} onClick={()=>{setCurrentDate(new Date(d));setViewMode("giorno");}}><span>{d.toLocaleDateString("it-IT",{weekday:"short"}).replace(".","")}</span><strong>{d.getDate()}</strong></button>)}
+          <div className="agenda-week-task-label">Attività</div>
+          {getWeekDays(currentDate).map(d => <div key={"att-"+isoLocale(d)} className="agenda-week-task-column">
+            {mostraAttivitaAgenda && attivitaDelGiorno(d).map(a => <div key={a.id} className="agenda-week-task" title={a.note || a.titolo}><strong>{a.stato === "completata" ? "✓ " : ""}{a.titolo}</strong>{a.scadenza && (new Date(a.scadenza).getHours() + new Date(a.scadenza).getMinutes() > 0) && <small>{new Date(a.scadenza).toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"})}</small>}</div>)}
+          </div>)}
           <div className="agenda-week-hour-column">{Array.from({length:13},(_,i)=>i+7).map(h=><div key={h} className="agenda-week-hour">{String(h).padStart(2,"0")}:00</div>)}</div>
           {getWeekDays(currentDate).map(d=>{
             const iso=isoLocale(d);
@@ -1364,14 +1368,18 @@ function CalendarioVisite({ session }) {
     </div>}
     <style>{`@media(max-width:700px){
       .agenda-week-scroll{width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;background:#fff;border:1px solid #dce5f1;border-radius:14px}
-      .agenda-week-grid{display:grid;grid-template-columns:46px repeat(7,145px);grid-template-rows:54px 962px;min-width:max-content;align-items:stretch}
+      .agenda-week-grid{display:grid;grid-template-columns:46px repeat(7,145px);grid-template-rows:54px minmax(56px,auto) 962px;min-width:max-content;align-items:stretch}
       .agenda-week-corner{position:sticky;left:0;z-index:3;background:#fff;color:#7b8ba3;font-size:10px;display:flex;align-items:center;justify-content:center;border-bottom:1px solid #dce5f1}
       .agenda-week-day{border:0;border-bottom:1px solid #dce5f1;border-left:1px solid #e9edf4;background:#fff;padding:10px 0;display:flex;align-items:center;justify-content:center;gap:6px;color:#53647e}
       .agenda-week-day strong{font-size:16px}.agenda-week-day span{font-size:11px;text-transform:capitalize}.agenda-week-day.selected{background:#eaf2ff;color:#174b94}
       .agenda-week-hour{background:#fff;height:74px;box-sizing:border-box;border-bottom:1px solid #edf0f5;color:#7b8ba3;font-size:10px;padding:8px 3px;text-align:center}
       .agenda-week-day{grid-row:1}
-      .agenda-week-hour-column{grid-column:1;grid-row:2;position:sticky;left:0;z-index:2;background:white}
-      .agenda-week-day-column{position:relative;grid-row:2;height:962px;border-left:1px solid #e9edf4}
+      .agenda-week-task-label{grid-column:1;grid-row:2;position:sticky;left:0;z-index:2;background:#fffaf0;border-bottom:1px solid #f2dfb4;color:#896722;font-size:9px;display:flex;align-items:center;justify-content:center}
+      .agenda-week-task-column{grid-row:2;background:#fffdf7;border-left:1px solid #f1e7cf;border-bottom:1px solid #f1e7cf;padding:4px;min-height:56px;box-sizing:border-box}
+      .agenda-week-task{background:#fff2bf;border-left:3px solid #e3a927;border-radius:5px;padding:5px 4px;margin-bottom:4px;color:#74541c;font-size:10px;overflow-wrap:anywhere}
+      .agenda-week-task strong{display:block;font-size:10px}.agenda-week-task small{display:block;font-size:9px;margin-top:2px}
+      .agenda-week-hour-column{grid-column:1;grid-row:3;position:sticky;left:0;z-index:2;background:white}
+      .agenda-week-day-column{position:relative;grid-row:3;height:962px;border-left:1px solid #e9edf4}
       .agenda-week-background-slot{display:block;width:100%;height:74px;border:0;border-top:1px solid #edf0f5;background:transparent;cursor:pointer}
       .agenda-week-positioned{position:absolute;left:3px;width:calc(100% - 6px);z-index:1;box-sizing:border-box;overflow:hidden}
       .agenda-week-cell{min-height:74px;border-bottom:1px solid #edf0f5;border-left:1px solid #edf0f5;padding:4px;display:flex;flex-direction:column;gap:3px}
