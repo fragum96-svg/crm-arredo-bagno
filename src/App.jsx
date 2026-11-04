@@ -1662,6 +1662,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
   const [aziende, setAziende] = useState([]);
   const [lista, setLista] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [filtroTipoProposta,setFiltroTipoProposta]=useState("tutti");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -1680,7 +1681,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
     imballo_modalita: "escluso", imballo_percentuale: 0, imballo_valore: 0,
     trasporto_modalita: "escluso", trasporto_percentuale: 0, trasporto_valore: 0,
     iva_modalita: "escluso", iva_percentuale: 22, iva_valore: 0,
-    modalita_pagamento: "", modalita_prezzi_pdf: "dettagliato", stato: "bozza", note: "",
+    modalita_pagamento: "", modalita_prezzi_pdf: "dettagliato", stato: "bozza", note: "", tipo_proposta: "commerciale", approvazione_proposta: "in_attesa",
   };
   const [header, setHeader] = useState(emptyHeader);
   const [righe, setRighe] = useState([nuovaRiga()]);
@@ -1747,7 +1748,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
         trasporto_modalita: header.trasporto_modalita, trasporto_percentuale: Number(header.trasporto_percentuale) || 0, trasporto_valore: Number(header.trasporto_valore) || 0,
         iva_modalita: header.iva_modalita, iva_percentuale: Number(header.iva_percentuale) || 0, iva_valore: Number(header.iva_valore) || 0,
         modalita_pagamento: header.modalita_pagamento || null, modalita_prezzi_pdf: header.modalita_prezzi_pdf || "dettagliato",
-        stato: header.stato || "bozza", note: header.note || null,
+        stato: header.stato || "bozza", note: header.note || null, tipo_proposta: header.tipo_proposta || "commerciale", approvazione_proposta: header.approvazione_proposta || "in_attesa",
       };
       // Non richiedere il record di ritorno: la tabella preventivi potrebbe non avere una policy SELECT.
       const res = editingId
@@ -1769,7 +1770,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
       trasporto_modalita: p.trasporto_modalita || "escluso", trasporto_percentuale: p.trasporto_percentuale || 0, trasporto_valore: p.trasporto_valore || 0,
       iva_modalita: p.iva_modalita || "escluso", iva_percentuale: p.iva_percentuale ?? 22, iva_valore: p.iva_valore || 0,
       modalita_pagamento: p.modalita_pagamento || "", modalita_prezzi_pdf: p.modalita_prezzi_pdf || "dettagliato",
-      stato: p.stato || "bozza", note: p.note || "",
+      stato: p.stato || "bozza", note: p.note || "", tipo_proposta: p.tipo_proposta || "commerciale", approvazione_proposta: p.approvazione_proposta || "in_attesa",
     });
     setRighe(p.righe && p.righe.length ? p.righe : [nuovaRiga()]);
   };
@@ -1841,6 +1842,11 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
           <input placeholder="RIF" value={header.rif} onChange={(e) => setHeader({ ...header, rif: e.target.value })} style={{ ...fieldStyle, maxWidth: isMobile ? "100%" : 160 }} />
         </div>
 
+        <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center",background:"#f5f8fc",padding:12,borderRadius:10,marginBottom:14}}>
+          <label style={{fontSize:12,fontWeight:650}}>Tipologia proposta <select style={fieldStyle} value={header.tipo_proposta} onChange={e=>setHeader({...header,tipo_proposta:e.target.value})}><option value="commerciale">Preventivo commerciale</option><option value="campionatura">Campionatura</option><option value="esposizione">Esposizione showroom</option></select></label>
+          {header.tipo_proposta!=="commerciale"&&<label style={{fontSize:12,fontWeight:650}}>Approvazione <select style={fieldStyle} value={header.approvazione_proposta} onChange={e=>setHeader({...header,approvazione_proposta:e.target.value})}><option value="in_attesa">In attesa di approvazione</option><option value="approvata">Approvata</option><option value="non_approvata">Non approvata</option></select></label>}
+          {header.tipo_proposta!=="commerciale"&&<span style={{fontSize:11,color:"#64748b"}}>Articoli, sconti e omaggi si compilano normalmente nelle righe del preventivo.</span>}
+        </div>
         {isMobile ? (
           <div style={{ marginBottom: 12 }}>
             {righe.map((riga, idx) => {
@@ -2004,19 +2010,20 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
         <iframe title="Anteprima PDF preventivo" src={anteprimaPdf.url} style={{ flex: 1, width: "100%", border: 0, background: "white" }} />
         <div style={{ color: "white", fontSize: 11, padding: 6 }}>Se iOS non mostra il PDF nell'anteprima, premi Scarica.</div>
       </div>}
-      <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>Preventivi salvati</h3>
+      <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>Preventivi salvati e registro campionature / esposizioni</h3>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>{[{id:"tutti",label:"Tutti"},{id:"commerciale",label:"Commerciali"},{id:"campionatura",label:"Campionature"},{id:"esposizione",label:"Esposizioni"}].map(x=><button key={x.id} type="button" onClick={()=>setFiltroTipoProposta(x.id)} style={{border:"1px solid #c8d9ef",background:filtroTipoProposta===x.id?"#344a43":"white",color:filtroTipoProposta===x.id?"white":"#344a43",padding:"7px 11px",borderRadius:9,cursor:"pointer"}}>{x.label}</button>)}</div>
       {loading ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p> : lista.length === 0 ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun preventivo salvato.</p> : (
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }} className="tabella-responsive">
           <thead><tr style={{ textAlign: "left", borderBottom: "2px solid " + COLORS.border }}>
-            <th style={{ padding: "8px 6px" }}>Stato</th><th style={{ padding: "8px 6px" }}>RIF</th><th style={{ padding: "8px 6px" }}>Data</th><th style={{ padding: "8px 6px" }}>Cliente</th><th style={{ padding: "8px 6px" }}>Azienda</th><th style={{ padding: "8px 6px" }}></th>
+            <th style={{ padding: "8px 6px" }}>Stato</th><th style={{ padding: "8px 6px" }}>Tipo / approvazione</th><th style={{ padding: "8px 6px" }}>RIF</th><th style={{ padding: "8px 6px" }}>Data</th><th style={{ padding: "8px 6px" }}>Cliente</th><th style={{ padding: "8px 6px" }}>Azienda</th><th style={{ padding: "8px 6px" }}></th>
           </tr></thead>
           <tbody>
-            {lista.map((preventivoSalvato) => {
+            {lista.filter(p=>filtroTipoProposta==="tutti"||(p.tipo_proposta||"commerciale")===filtroTipoProposta).map((preventivoSalvato) => {
               const infoStato = STATI_PREVENTIVO.find((s) => s.valore === preventivoSalvato.stato) || STATI_PREVENTIVO[0];
               return (
                 <tr key={preventivoSalvato.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
                   <td style={{ padding: "8px 6px" }} data-label="Stato"><span style={{ color: infoStato.colore, fontSize: 12, fontWeight: 700 }}>● {infoStato.label}</span></td>
-                  <td style={{ padding: "8px 6px" }} data-label="RIF">{preventivoSalvato.rif || "-"}</td>
+                  <td style={{ padding: "8px 6px" }} data-label="Tipo">{preventivoSalvato.tipo_proposta==="campionatura"?"Campionatura":preventivoSalvato.tipo_proposta==="esposizione"?"Esposizione":"Commerciale"}{preventivoSalvato.tipo_proposta&&preventivoSalvato.tipo_proposta!=="commerciale"?" · "+(preventivoSalvato.approvazione_proposta==="approvata"?"Approvata":preventivoSalvato.approvazione_proposta==="non_approvata"?"Non approvata":"In attesa"):""}</td><td style={{ padding: "8px 6px" }} data-label="RIF">{preventivoSalvato.rif || "-"}</td>
                   <td style={{ padding: "8px 6px" }} data-label="Data">{preventivoSalvato.data ? new Date(preventivoSalvato.data).toLocaleDateString("it-IT") : "-"}</td>
                   <td style={{ padding: "8px 6px" }} data-label="Cliente">{nomeClientePreventivo(preventivoSalvato)}</td>
                   <td style={{ padding: "8px 6px" }} data-label="Azienda">{nomeAzienda(preventivoSalvato.azienda_id)}</td>
@@ -2816,6 +2823,8 @@ function PipelineCommerciale({session, preventivoDaConvertire, onPreventivoRicev
   const [form,setForm]=useState(vuoto);
   const [editing,setEditing]=useState(null);
   const [showForm,setShowForm]=useState(false);
+  const [followupTarget,setFollowupTarget]=useState(null);
+  const [followupForm,setFollowupForm]=useState({data:"",azione:"",note:""});
   const [loading,setLoading]=useState(true);
   const [saving,setSaving]=useState(false);
   const [error,setError]=useState("");
@@ -2914,8 +2923,27 @@ function PipelineCommerciale({session, preventivoDaConvertire, onPreventivoRicev
     }catch(err){setError(err.message);}finally{setSaving(false);}
   }
   function pianificaFollowup(o){
-    modifica(o);
+    setFollowupTarget(o);
+    setFollowupForm({data:o.data_prossima_azione||"",azione:o.prossima_azione||"Richiamare il cliente",note:""});
     setError("");
+  }
+  async function salvaFollowup(e){
+    e.preventDefault();
+    if(!followupTarget||!followupForm.data||!followupForm.azione.trim())return;
+    setSaving(true);setError("");
+    try{
+      const o=followupTarget;
+      await request("opportunita_commerciali?id=eq."+o.id,{method:"PATCH",body:JSON.stringify({data_prossima_azione:followupForm.data,prossima_azione:followupForm.azione.trim(),updated_at:new Date().toISOString()})});
+      const descrizione="Follow-up pipeline: "+o.titolo+" — "+followupForm.azione.trim();
+      // L'agenda utilizza crm_attivita; crea un promemoria collegato all'opportunità.
+      // Il riferimento univoco nelle note consente di aggiornarlo ai ricontatti successivi.
+      const marker="[pipeline:"+o.id+"]";
+      const tasks=await request("crm_attivita?select=id,note&user_id=eq."+session.user.id+"&limit=1000");
+      const existing=(tasks||[]).find(t=>String(t.note||"").includes(marker));
+      const payload={titolo:descrizione,tipo:"richiamare",scadenza:new Date(followupForm.data+"T09:00:00").toISOString(),priorita:"media",stato:"da_fare",cliente_id:o.cliente_id||null,azienda_id:o.azienda_id||null,user_id:session.user.id,note:marker+(followupForm.note?"\n"+followupForm.note:"")};
+      await request("crm_attivita"+(existing?"?id=eq."+existing.id:""),{method:existing?"PATCH":"POST",body:JSON.stringify(payload)});
+      setFollowupTarget(null);await load();
+    }catch(err){setError("Follow-up non completato: "+err.message+". Controlla anche l'agenda prima di riprovare.");}finally{setSaving(false);}
   }
   async function cambiaFase(o,fase){
     if(o.fase===fase)return;
@@ -2932,6 +2960,7 @@ function PipelineCommerciale({session, preventivoDaConvertire, onPreventivoRicev
     {error&&<div style={{background:"#fff0f0",color:"#a52121",padding:12,borderRadius:9,marginBottom:14}}>{error}</div>}
     <div className="crm-pipeline-filters"><label style={label}>Azienda mandante<select style={input} value={aziendaFiltro} onChange={e=>setAziendaFiltro(e.target.value)}><option value="">Tutte le mandanti</option>{aziende.map(a=><option key={a.id} value={a.id}>{a.nome}</option>)}</select></label><label style={label}>Cerca opportunità<input style={input} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Titolo o cliente"/></label><label style={label}>Priorità follow-up<select style={input} value={filtroAzioni} onChange={e=>setFiltroAzioni(e.target.value)}><option value="tutte">Tutte le opportunità</option><option value="scaduta">Scaduti</option><option value="oggi">Da contattare oggi</option><option value="futura">Programmato</option><option value="senza">Senza prossima azione completa</option></select></label></div>
     <div className="crm-pipeline-stats"><div><small>Opportunità aperte</small><strong>{aperte.length}</strong></div><div><small>Valore trattative aperte</small><strong>{euro(totale)}</strong></div><div><small>Valore ponderato</small><strong>{euro(ponderato)}</strong></div><div><small>Follow-up scaduti</small><strong style={{color:scadute?"#b42318":"#17233b"}}>{scadute}</strong></div><div><small>Da contattare oggi</small><strong style={{color:daFareOggi?"#a65d0a":"#17233b"}}>{daFareOggi}</strong></div><div><small>Senza prossima azione completa</small><strong style={{color:senzaProssimaAzione?"#a65d0a":"#17233b"}}>{senzaProssimaAzione}</strong></div></div>
+    {followupTarget&&<div role="dialog" aria-modal="true" aria-label="Pianifica follow-up" style={{position:"fixed",inset:0,zIndex:9999,background:"#102238aa",display:"grid",placeItems:"center",padding:16}}><form onSubmit={salvaFollowup} style={{background:"white",borderRadius:16,padding:22,width:"min(460px,100%)",display:"grid",gap:14,boxShadow:"0 16px 50px #0003"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><h3 style={{margin:0}}>Pianifica follow-up</h3><button type="button" onClick={()=>setFollowupTarget(null)}>Chiudi</button></div><small>{followupTarget.titolo}</small><label style={label}>Data ricontatto<input type="date" required style={input} value={followupForm.data} onChange={e=>setFollowupForm({...followupForm,data:e.target.value})}/></label><label style={label}>Prossima azione<input required style={input} value={followupForm.azione} onChange={e=>setFollowupForm({...followupForm,azione:e.target.value})}/></label><label style={label}>Note facoltative<textarea rows={3} style={input} value={followupForm.note} onChange={e=>setFollowupForm({...followupForm,note:e.target.value})}/></label><button type="submit" disabled={saving} className="crm-primary-btn">{saving?"Salvataggio...":"Salva follow-up e agenda"}</button></form></div>}
     {showForm&&<form className="crm-pipeline-form" onSubmit={salva}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><h3>{editing?"Modifica opportunità":"Nuova opportunità"}</h3><button type="button" className="crm-secondary-btn" onClick={()=>setShowForm(false)}>Chiudi</button></div>
       <div className="crm-pipeline-fields">
         <label style={label}>Titolo *<input required style={input} value={form.titolo} onChange={e=>setForm({...form,titolo:e.target.value})} placeholder="Es. Fornitura rubinetteria villa"/></label>
