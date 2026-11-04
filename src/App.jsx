@@ -403,7 +403,7 @@ function Dashboard({ session, goTo }) {
     { nome:"Visite mese",valore:visiteMese,icona:CalendarDays,pagina:"visite",colore:"#3985ec",nota:"Da agenda commerciale" },
   ];
   return <div className="matrice-dashboard">
-    <div className="matrice-welcome"><div><h1>Ciao Francesco <span aria-hidden="true">👋</span></h1><p>Oggi è {oggi.toLocaleDateString("it-IT",{weekday:"long",day:"numeric",month:"long"})}. Ecco il riepilogo della tua attività.</p></div><button className="matrice-add" onClick={()=>goTo("visite")}><Plus size={16}/> Apri agenda</button></div>
+    <div className="matrice-welcome"><div><h1>Ciao Francesco <span aria-hidden="true">👋</span></h1><p>Oggi è {oggi.toLocaleDateString("it-IT",{weekday:"long",day:"numeric",month:"long"})}. Ecco il riepilogo della tua attività.</p></div><div className="crm-dashboard-quick"><button className="matrice-add" onClick={()=>goTo("clienti")}><Users size={16}/> Clienti</button><button className="matrice-add" onClick={()=>goTo("architetti")}><Users2 size={16}/> Architetti</button><button className="matrice-add" onClick={()=>goTo("visite")}><Plus size={16}/> Apri agenda</button></div></div>
     {errore && <p style={{color:"#c0392b"}}>{errore}</p>}
     <div className="matrice-metrics">{metriche.map(m=>{const I=m.icona;return <button key={m.nome} className="matrice-metric" onClick={()=>goTo(m.pagina)}><span className="matrice-metric-icon"><I size={19}/></span><span><small>{m.nome}</small><strong>{loading?"…":m.valore}</strong><em>{m.nota}</em></span></button>})}</div>
     <div className="matrice-two">
@@ -879,12 +879,12 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
 
 const CLASSIFICAZIONI_ELENCO = CLASSIFICAZIONI;
 
-function ClientiAnagrafica({ session, apriPreventivo, apriGruppo }) {
+function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti = false }) {
   const [list, setList] = useState([]);
   const [aziendeOptions, setAziendeOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const emptyForm = { ragione_sociale: "", indirizzo: "", telefono: "", email: "", classificazione: "", aziende_collaborate: [], condizioni_per_azienda: {}, competitor: "", note: "" };
+  const emptyForm = { ragione_sociale: "", indirizzo: "", telefono: "", email: "", classificazione: soloArchitetti ? "Architetto" : "", aziende_collaborate: [], condizioni_per_azienda: {}, competitor: "", note: "" };
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -1003,7 +1003,8 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo }) {
   };
 
   const inputStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
-  const filteredList = filtroClassificazione ? list.filter((c) => c.classificazione === filtroClassificazione) : list;
+  const elencoSezione = list.filter(c => soloArchitetti ? c.classificazione === "Architetto" : c.classificazione !== "Architetto");
+  const filteredList = filtroClassificazione ? elencoSezione.filter((c) => c.classificazione === filtroClassificazione) : elencoSezione;
 
   if (clienteApertoId) {
     return (
@@ -1014,10 +1015,10 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo }) {
 
   return (
     <div style={{ fontFamily: "Arial, sans-serif" }}>
-      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}><Users size={20} color={COLORS.primary} /> Anagrafica clienti</h2>
+      <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}><Users size={20} color={COLORS.primary} /> {soloArchitetti ? "Anagrafica architetti" : "Anagrafica clienti"}</h2>
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 300px", background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, maxWidth: 380 }}>
-          <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>{editingId ? "Modifica cliente" : "Nuovo cliente"}</h3>
+          <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>{editingId ? "Modifica" : soloArchitetti ? "Nuovo architetto" : "Nuovo cliente"}</h3>
           <input placeholder="Ragione sociale *" value={form.ragione_sociale} onChange={(e) => setForm({ ...form, ragione_sociale: e.target.value })} style={inputStyle} />
           <input placeholder="Indirizzo" value={form.indirizzo} onChange={(e) => setForm({ ...form, indirizzo: e.target.value })} style={inputStyle} />
           <input placeholder="Telefono" value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} style={inputStyle} />
@@ -1025,7 +1026,7 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo }) {
           <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 4 }}>Classificazione</label>
           <select value={form.classificazione} onChange={(e) => setForm({ ...form, classificazione: e.target.value })} style={inputStyle}>
             <option value="">-- seleziona --</option>
-            {CLASSIFICAZIONI_ELENCO.map((c) => <option key={c} value={c}>{c}</option>)}
+            {(soloArchitetti ? ["Architetto"] : CLASSIFICAZIONI_ELENCO.filter(c => c !== "Architetto")).map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
           <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 6 }}>Aziende mandanti con cui collabora</label>
           <div style={{ marginBottom: 10, maxHeight: 220, overflowY: "auto", border: "1px solid " + COLORS.border, borderRadius: 8, padding: 8 }}>
@@ -1079,7 +1080,7 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo }) {
           <div style={{ marginBottom: 12 }}>
             <select value={filtroClassificazione} onChange={(e) => setFiltroClassificazione(e.target.value)} style={{ ...inputStyle, maxWidth: 240, marginBottom: 0 }}>
               <option value="">Tutte le classificazioni</option>
-              {CLASSIFICAZIONI_ELENCO.map((c) => <option key={c} value={c}>{c}</option>)}
+              {(soloArchitetti ? ["Architetto"] : CLASSIFICAZIONI_ELENCO.filter(c => c !== "Architetto")).map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           {loading ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p> : filteredList.length === 0 ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun cliente trovato.</p> : (
@@ -2688,7 +2689,7 @@ function AppShell({ session, onLogout }) {
   const apriGruppoCliente = id => { setGruppoAprireId(id); setPage("gruppi"); };
   useEffect(() => { (async () => { try { const r=await fetch(SUPABASE_URL+"/rest/v1/profiles?id=eq."+session.user.id+"&select=role",{headers:{apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+session.access_token}}); const d=await r.json(); if(d&&d[0])setRole(d[0].role); } catch(e){} })(); },[session]);
   const sezioni = [
-    {id:"clienti",nome:"Clienti",icon:Users,items:[{key:"clienti",label:"Anagrafica",icon:Users},{key:"gruppi",label:"Gruppi d'acquisto",icon:Users2},{key:"mappa",label:"Mappa clienti",icon:MapIcon}]},
+    {id:"clienti",nome:"Clienti",icon:Users,items:[{key:"clienti",label:"Anagrafica clienti",icon:Users},{key:"architetti",label:"Architetti",icon:Users2},{key:"gruppi",label:"Gruppi d'acquisto",icon:Users2},{key:"mappa",label:"Mappa clienti",icon:MapIcon}]},
     {id:"mandanti",nome:"Mandanti",icon:Building2,items:[{key:"aziende",label:"Aziende mandanti",icon:Building2}]},
     {id:"opportunita",nome:"Opportunità",icon:Target,items:[{key:"pipeline",label:"Pipeline commerciale",icon:Target},{key:"preventivi",label:"Preventivi e offerte",icon:FileText},{key:"portafoglio",label:"Portafoglio ordini",icon:Briefcase},{key:"ordini",label:"Registro ordini",icon:ClipboardList}]},
     {id:"agenda",nome:"Agenda",icon:CalendarDays,items:[{key:"visite",label:"Calendario e appuntamenti",icon:CalendarDays},{key:"storico_visite",label:"Storico visite",icon:ClipboardList}]},
@@ -2713,6 +2714,7 @@ function AppShell({ session, onLogout }) {
         {page==="admin"&&role==="admin"&&<AdminPanel session={session}/>}
         {page==="aziende"&&<AziendeMandanti session={session}/>}
         {page==="clienti"&&<ClientiAnagrafica session={session} apriPreventivo={apriPreventivoCliente} apriGruppo={apriGruppoCliente}/>}
+        {page==="architetti"&&<ClientiAnagrafica soloArchitetti session={session} apriPreventivo={apriPreventivoCliente} apriGruppo={apriGruppoCliente}/>}
         {page==="visite"&&<CalendarioVisite session={session}/>}
         {page==="storico_visite"&&<StoricoVisiteCRM session={session}/>}
         {page==="note"&&<NoteCRM session={session}/>}
@@ -2781,6 +2783,50 @@ function StileGlobaleResponsive() {
     <style>{'\n.matrice-shell{background:linear-gradient(115deg,#eef2fa,#e3eaf7 72%,#f1f4fb)!important}\n.matrice-sidebar{background:linear-gradient(160deg,#101d34 0%,#172943 100%)!important;border-right:1px solid #253956!important;color:#eaf2ff!important;width:272px!important;flex-basis:272px!important}\n.matrice-brand{border-bottom:1px solid #30415d!important;color:#fff!important}\n.matrice-brand strong{font-size:28px!important;letter-spacing:.4px!important;color:#fff!important}\n.matrice-brand-icon{color:#dbeafe!important;background:transparent!important}\n.matrice-nav-main,.matrice-nav-group-title,.matrice-subnav button{color:#e1eaf8!important}\n.matrice-nav-main:hover,.matrice-nav-group-title:hover,.matrice-subnav button:hover{background:#273d5b!important}\n.matrice-nav-main.active,.matrice-subnav button.active{background:linear-gradient(90deg,#1462ce,#2479e7)!important;color:white!important}\n.matrice-subnav{border-left:1px solid #3c4f6b!important}\n.matrice-sidebar-foot{border-top:1px solid #344762!important;color:#b3c4df!important}\n.matrice-sidebar-foot small{color:#8fa5c4!important}\n.matrice-topbar{background:rgba(237,243,253,.88)!important;border-bottom:1px solid #dce5f3!important}\n.matrice-metric{box-shadow:0 7px 22px rgba(24,48,84,.07)!important}\n.matrice-metric:first-child{background:linear-gradient(125deg,#16263e,#354d6c)!important;border-color:#334b6c!important}\n.matrice-metric:first-child strong,.matrice-metric:first-child small,.matrice-metric:first-child em{color:#fff!important}\n.matrice-metric:first-child .matrice-metric-icon{background:#285ea2!important;color:#fff!important}\n.matrice-dashboard>div.matrice-two>section,.crm-recent-notes{box-shadow:0 8px 25px rgba(22,45,82,.065)!important;border-color:#dce5f3!important}\n.crm-notes-nav{margin-top:15px!important;border-top:1px solid #344762!important;padding-top:18px!important}\n.crm-recent-notes{margin-top:6px!important}\n.crm-note-preview{display:flex;align-items:center;gap:12px;width:100%;border:0;border-bottom:1px solid #e9edf4;background:transparent;padding:10px 5px;text-align:left;color:#293b56;cursor:pointer}\n.crm-note-preview span{flex:1;min-width:0}.crm-note-preview strong,.crm-note-preview small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.crm-note-preview strong{font-size:12px}.crm-note-preview small{font-size:11px;color:#8793a8}.crm-note-preview time{font-size:11px;color:#8290a5}\n.crm-notes-layout{display:grid;grid-template-columns:minmax(270px,370px) minmax(0,1fr);gap:20px;align-items:start}\n.crm-notes-editor,.crm-notes-list{background:#fff;border:1px solid #dce5f3;border-radius:15px;padding:22px;box-shadow:0 6px 22px rgba(24,48,84,.06)}\n.crm-notes-editor h3,.crm-notes-list h3{margin:0 0 19px;font-size:17px;color:#17233b}\n.crm-notes-editor label{display:block;font-size:12px;font-weight:650;color:#465570;margin-bottom:15px}.crm-notes-editor label input,.crm-notes-editor label select,.crm-notes-editor label textarea{display:block;margin-top:7px}\n.crm-primary-btn,.crm-secondary-btn{border-radius:9px;border:1px solid #2474e6;padding:10px 15px;cursor:pointer;font-weight:650}.crm-primary-btn{background:#2474e6;color:white}.crm-secondary-btn{background:white;color:#2474e6}\n.crm-notes-list-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}.crm-notes-list-head h3{margin:0}\n.crm-note-card{border:1px solid #e4eaf4;border-radius:12px;padding:17px;margin-bottom:12px;background:#fbfcff}.crm-note-card-top{display:flex;justify-content:space-between;gap:12px}.crm-note-card h4{font-size:14px;margin:0 0 5px}.crm-note-card small{color:#8592a7;font-size:11px}.crm-note-card p{font-size:12px;line-height:1.7;white-space:pre-wrap;color:#4c5a70;margin:12px 0 0}.crm-note-card-top button{background:transparent;border:0;color:#2573dc;cursor:pointer;font-size:11px;padding:5px}.crm-note-card-top .crm-danger-btn{color:#b42318}\n@media(max-width:850px){.crm-notes-layout{grid-template-columns:1fr}.matrice-sidebar{width:272px!important}}\n'}{'\n.matrice-shell{display:flex;min-height:100vh;background:#f6f8fc;color:#17233b;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}.matrice-shell button{font-family:inherit}.matrice-sidebar{width:244px;flex:0 0 244px;background:#fff;border-right:1px solid #e6eaf1;min-height:100vh;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;z-index:50}.matrice-brand{height:72px;display:flex;align-items:center;gap:9px;padding:0 18px;border-bottom:1px solid #eef0f5}.matrice-brand-icon{font-size:25px;color:#4a78d7}.matrice-brand strong{font-size:16px;letter-spacing:.035em;font-weight:800}.matrice-brand span{font-size:11px;color:#8a95a8;margin-left:5px;font-weight:700}.matrice-close-menu{display:none}.matrice-nav-scroll{padding:14px 10px;overflow-y:auto;flex:1}.matrice-nav-main,.matrice-nav-group-title,.matrice-subnav button{width:100%;display:flex;align-items:center;text-align:left;border:0;background:transparent;color:#34415a;cursor:pointer;border-radius:8px}.matrice-nav-main{padding:12px 12px;gap:11px;font-size:13px;font-weight:650}.matrice-nav-main.active,.matrice-subnav button.active{background:#e8f1ff;color:#2769df}.matrice-nav-group{margin-top:13px}.matrice-nav-group-title{padding:9px 11px;gap:10px;font-size:12.5px;font-weight:700}.matrice-nav-group-title span{flex:1}.matrice-subnav{margin:3px 0 0 24px;padding-left:8px;border-left:1px solid #e6ebf4}.matrice-subnav button{padding:8px 9px;gap:9px;font-size:12px;line-height:1.3;margin-bottom:2px}.matrice-nav-main:hover,.matrice-nav-group-title:hover,.matrice-subnav button:hover{background:#f2f6fd}.matrice-sidebar-foot{padding:14px 17px;border-top:1px solid #eef0f5;color:#586780;font-size:11px}.matrice-sidebar-foot small{display:block;margin:4px 0 0 16px;color:#9aa4b5}.matrice-status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#29b98d;margin-right:7px}.matrice-workspace{min-width:0;flex:1}.matrice-topbar{height:72px;background:#fff;border-bottom:1px solid #e6eaf1;display:flex;align-items:center;padding:0 28px;gap:12px;position:sticky;top:0;z-index:30}.matrice-topbar-label{font-size:13px;font-weight:650;color:#637089}.matrice-menu-button,.matrice-topbar-actions button{border:0;background:transparent;color:#41516e;cursor:pointer;padding:7px;display:flex;align-items:center}.matrice-menu-button{display:none}.matrice-topbar-actions{display:flex;align-items:center;gap:13px;margin-left:auto}.matrice-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#1b3868;color:#fff;font-size:11px;font-weight:750}.matrice-main{padding:26px 30px;max-width:1600px;margin:auto}.matrice-welcome{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:23px}.matrice-welcome h1{font-size:24px;letter-spacing:-.6px;margin:0 0 5px;font-weight:760;color:#15243c}.matrice-welcome p{font-size:12px;color:#8390a3;margin:0}.matrice-add{display:flex;align-items:center;gap:6px;padding:9px 12px;border:1px solid #dce6f7;border-radius:9px;background:#fff;color:#2b70e6;font-size:12px;font-weight:650;cursor:pointer}.matrice-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:16px}.matrice-metric{min-width:0;text-align:left;border:1px solid #e6eaf1;border-radius:13px;background:#fff;padding:17px;display:flex;gap:12px;align-items:flex-start;cursor:pointer;box-shadow:0 2px 8px rgba(20,38,70,.025)}.matrice-metric-icon{display:flex;align-items:center;justify-content:center;flex:0 0 37px;height:37px;background:#eaf2ff;color:#3e7bef;border-radius:9px}.matrice-metric span:last-child{min-width:0}.matrice-metric small,.matrice-metric em{display:block;font-size:11px;color:#8490a2;font-style:normal}.matrice-metric strong{display:block;color:#15243c;font-size:21px;line-height:1.6;white-space:nowrap;letter-spacing:-.5px}.matrice-metric em{font-size:10px}.matrice-two{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}.matrice-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:13px}.matrice-section-head h3{font-size:14px;font-weight:750;margin:0;color:#17233b}.matrice-section-head button{border:0;background:transparent;display:flex;align-items:center;gap:3px;font-size:11px;color:#3677e9;cursor:pointer}.matrice-total{font-size:11px;color:#8490a2;margin-bottom:16px}.matrice-total strong{color:#25334d;margin-left:5px}.matrice-pipeline-row{display:flex;align-items:center;gap:8px;margin-bottom:14px;font-size:11px}.matrice-dot{width:9px;height:9px;flex:0 0 9px;border-radius:50%}.matrice-pipeline-name{width:105px;flex:0 0 105px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#44536c}.matrice-track{height:7px;border-radius:9px;background:#edf2fa;flex:1;min-width:15px;overflow:hidden}.matrice-track div{height:100%;border-radius:9px}.matrice-pipeline-row strong{width:75px;text-align:right;font-size:11px;white-space:nowrap}.matrice-percent{width:30px;text-align:right;color:#7e8ba0;font-size:10px}.matrice-chart-sub{font-size:11px;color:#8c98a9;margin:-6px 0 8px}.matrice-empty{color:#8b97a8;font-size:12px;padding:17px 0}.matrice-event{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f0f2f7;font-size:12px}.matrice-event-time{color:#65748c;min-width:42px}.matrice-event-mark{width:6px;height:20px;border-radius:4px;background:#4d8cf5}.matrice-event-name{font-weight:600;color:#34415a}.matrice-opportunity{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #f0f2f7}.matrice-opportunity-mark{height:8px;width:8px;border-radius:50%;flex-shrink:0}.matrice-opportunity div{min-width:0;flex:1}.matrice-opportunity strong,.matrice-opportunity small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.matrice-opportunity strong{font-size:12px;color:#33415a}.matrice-opportunity small{font-size:10px;color:#8995a8;margin-top:3px}.matrice-opportunity b{font-size:12px;white-space:nowrap}.matrice-backdrop{display:none}@media(max-width:1150px){.matrice-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.matrice-two{grid-template-columns:1fr}}@media(max-width:768px){.matrice-sidebar{position:fixed;left:0;top:0;transform:translateX(-100%);transition:transform .2s;box-shadow:4px 0 25px rgba(25,43,77,.12)}.matrice-sidebar.is-open{transform:translateX(0)}.matrice-close-menu{display:block;margin-left:auto;border:0;background:transparent;font-size:25px;color:#8793a7}.matrice-backdrop{display:block;position:fixed;inset:0;background:rgba(20,32,56,.32);z-index:45}.matrice-menu-button{display:flex}.matrice-topbar{height:60px;padding:0 14px}.matrice-main{padding:17px 13px!important}.matrice-welcome h1{font-size:20px}.matrice-welcome p{font-size:11px}.matrice-add{font-size:0}.matrice-add svg{width:17px}.matrice-metrics{gap:9px}.matrice-metric{padding:11px;gap:8px}.matrice-metric-icon{width:30px;height:30px;flex-basis:30px}.matrice-metric strong{font-size:16px}.matrice-metric small{font-size:10px}.matrice-metric em{font-size:9px}.matrice-pipeline-name{width:75px;flex-basis:75px}.matrice-pipeline-row strong{width:63px;font-size:10px}}\n' + "* { box-sizing: border-box; } body { transition: background 0.2s ease; } button { transition: all 0.18s ease; } button:hover:not(:disabled) { filter: brightness(0.96); transform: translateY(-1px); } button:active:not(:disabled) { transform: translateY(0) scale(0.98); } input, select, textarea { transition: border-color 0.18s ease, box-shadow 0.18s ease; } input:focus, select:focus, textarea:focus { outline: none; border-color: #0b7bc4 !important; box-shadow: 0 0 0 3px rgba(11,123,196,0.12); } .dashboard-card { transition: transform 0.2s ease, box-shadow 0.2s ease; } .dashboard-card:hover { transform: translateY(-4px); box-shadow: 0 10px 28px rgba(11,123,196,0.14) !important; } .nav-item { transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease; } .nav-item:hover { background: #f2f8fc !important; } table tbody tr { transition: background 0.15s ease; } table tbody tr:hover { background: #f7fbfe; } @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } } .page-content { animation: fadeSlideIn 0.25s ease; } .app-sidebar-backdrop { display: none; } @media (max-width: 768px) { main * { min-width: 0; } body { overflow-x: hidden; } .app-sidebar { position: fixed !important; top: 61px; left: 0; height: calc(100vh - 61px) !important; z-index: 40; box-shadow: 4px 0 16px rgba(0,0,0,0.15); } .app-sidebar-backdrop { display: block !important; position: fixed; top: 61px; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.35); z-index: 35; } table { display: block; overflow-x: auto; white-space: nowrap; } .tabella-righe-preventivo, .tabella-responsive { white-space: normal; } .tabella-righe-preventivo thead, .tabella-responsive thead { display: none; } .tabella-righe-preventivo, .tabella-righe-preventivo tbody, .tabella-righe-preventivo tr, .tabella-righe-preventivo td, .tabella-responsive, .tabella-responsive tbody, .tabella-responsive tr, .tabella-responsive td { display: block; width: 100%; } .tabella-righe-preventivo tr, .tabella-responsive tr { border: 1px solid #e2edf5; border-radius: 6px; margin-bottom: 6px; padding: 4px; } .tabella-righe-preventivo td, .tabella-responsive td { display: flex; align-items: flex-start; justify-content: flex-start; flex-direction: column; gap: 1px; padding: 3px 4px; border: none; font-size: 11.5px; width: 100%; max-width: 100%; } .tabella-righe-preventivo td::before, .tabella-responsive td::before { content: attr(data-label); font-size: 9px; color: #7c8b98; } .tabella-righe-preventivo td input, .tabella-righe-preventivo td select { width: 100% !important; max-width: 100% !important; flex: none; } .form-header-preventivo select, .form-header-preventivo input { max-width: none !important; width: 100% !important; } input, select, textarea { font-size: 16px !important; } main:not(.matrice-main) { padding: 10px !important; } .email-utente { display: none; } header { padding: 10px 12px !important; } h2 { font-size: 17px !important; margin-bottom: 8px !important; } h3 { font-size: 13px !important; } }"}</style>
   );
 }
+
+
+function StilePremium2026() { return <style>{`
+/* CRM sviluppo — interfaccia chiara 2026, solo presentazione */
+.matrice-shell{background:#f7f9fd!important;color:#17253b!important}
+.matrice-sidebar{background:#fff!important;border-right:1px solid #e8edf5!important;color:#27364e!important;box-shadow:none!important}
+.matrice-brand{border-bottom:1px solid #eef1f6!important;color:#1b3155!important}
+.matrice-brand strong{color:#1c355e!important;font-size:21px!important;letter-spacing:-.7px!important}
+.matrice-brand-icon{color:#3779e8!important;background:#eaf2ff!important;border-radius:12px!important;padding:7px!important;display:flex!important}
+.matrice-nav-main,.matrice-nav-group-title,.matrice-subnav button{color:#465873!important;font-weight:600!important}
+.matrice-nav-main:hover,.matrice-nav-group-title:hover,.matrice-subnav button:hover{background:#f2f6fc!important;color:#205bc5!important}
+.matrice-nav-main.active,.matrice-subnav button.active{background:#eaf2ff!important;color:#2469d9!important;box-shadow:inset 3px 0 0 #3479ee!important}
+.matrice-nav-group{margin-top:10px!important}
+.matrice-nav-group-title{font-size:12px!important;color:#5a6b85!important}
+.matrice-subnav{border-left:1px solid #e8edf5!important}
+.matrice-sidebar-foot{background:#fbfcff!important;border-top:1px solid #e9eef6!important;color:#64748b!important}
+.matrice-sidebar-foot small{color:#96a3b5!important}
+.matrice-topbar{background:rgba(255,255,255,.97)!important;border-bottom:1px solid #e8edf5!important;backdrop-filter:blur(14px)}
+.matrice-main{max-width:1550px!important}
+.matrice-topbar-label{font-weight:750!important;color:#263e60!important}
+.matrice-avatar{background:#e9f1ff!important;color:#2468d9!important;border:1px solid #d4e4ff!important}
+.matrice-welcome{background:#fff;border:1px solid #e8edf5;border-radius:20px;padding:22px 24px;box-shadow:0 5px 20px rgba(28,58,104,.035);flex-wrap:wrap}
+.matrice-welcome h1{font-size:26px!important;color:#1b2f4d!important}
+.matrice-dashboard-quick,.crm-dashboard-quick{display:flex;gap:8px;flex-wrap:wrap}
+.matrice-add{background:#f4f8ff!important;border:1px solid #e1ebfb!important;color:#2e70d9!important;border-radius:11px!important;padding:10px 13px!important;font-size:12px!important}
+.matrice-metric{border:1px solid #e7edf6!important;border-radius:17px!important;background:#fff!important;box-shadow:0 5px 19px rgba(25,54,96,.045)!important;padding:19px!important}
+.matrice-metric:first-child{background:#fff!important;border-color:#e7edf6!important}
+.matrice-metric:first-child strong{color:#1b2f4d!important}.matrice-metric:first-child small,.matrice-metric:first-child em{color:#8490a2!important}
+.matrice-metric-icon,.matrice-metric:first-child .matrice-metric-icon{background:#eaf2ff!important;color:#3579e8!important;border-radius:11px!important}
+.matrice-metric strong{font-size:23px!important;color:#1b2f4d!important}
+.matrice-dashboard .matrice-two>section,.matrice-dashboard .crm-recent-notes{border:1px solid #e7edf6!important;border-radius:17px!important;box-shadow:0 5px 19px rgba(25,54,96,.045)!important}
+.matrice-section-head h3{color:#1e3352!important;font-size:14px!important}
+.crm-notes-nav{border-top:1px solid #e9eef6!important}
+@media(max-width:768px){
+ .matrice-sidebar{background:#fff!important;box-shadow:8px 0 35px rgba(27,47,78,.15)!important}
+ .matrice-welcome{padding:15px!important;border-radius:15px!important}
+ .matrice-welcome h1{font-size:21px!important}
+ .crm-dashboard-quick{width:100%;gap:6px}
+ .crm-dashboard-quick .matrice-add{font-size:11px!important;flex:1;justify-content:center;padding:9px 5px!important}
+ .crm-dashboard-quick .matrice-add svg{width:14px;height:14px}
+ .matrice-metric{padding:12px!important;border-radius:13px!important}
+ .matrice-metric strong{font-size:17px!important}
+}
+`}</style>; }
 
 async function rinnovaSessione(refreshToken) {
   try {
@@ -2916,6 +2962,7 @@ export default function App() {
         }
       `}</style>
       <StileMobileCRM />
+      <StilePremium2026 />
       <StileGlobaleResponsive />
       {verificaAccesso ? (
         <div style={{ padding: 36, textAlign: "center", color: "#17233b" }}>Ripristino accesso al CRM...</div>
