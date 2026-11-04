@@ -1144,6 +1144,7 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
         </div>
       ))}
 
+      <CampionatureSchedaCliente preventivi={preventivi}/>
       {sezione("Cronologia attività", (
         <div>
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
@@ -3553,7 +3554,18 @@ function RegistroCommercialeSupabase({session}) {
         dati={...dati,cliente_id:form.cliente_id,azienda_id:form.azienda_id||null,descrizione:form.descrizione.trim(),tipo:form.tipo,quantita:Number(form.quantita),stato:'da_consegnare',note:form.note||null};
         if(!(dati.quantita>0))throw new Error('Quantità non valida.');
       }
-      await richiesta(tabelle[tab],'POST',dati);
+      const esistente=tab==='followup'?records.find(r=>r.preventivo_id===form.preventivo_id&&r.stato==='da_fare'):null;
+      const creati=esistente
+        ? await richiesta('crm_followup_preventivi?id=eq.'+esistente.id,'PATCH',dati)
+        : await richiesta(tabelle[tab],'POST',dati);
+      if(tab==='followup'&&(creati?.[0]?.id||esistente?.id)){
+        const f=creati?.[0]||esistente,p=preventivi.find(x=>x.id===form.preventivo_id);
+        try{
+          const taskEsistenti=await richiesta('crm_attivita?select=id,note&user_id=eq.'+session.user.id);
+          const task=taskEsistenti.find(t=>String(t.note||'').includes('[preventivo-followup:'+f.id+']'));
+          await richiesta('crm_attivita'+(task?'?id=eq.'+task.id:''),task?'PATCH':'POST',{agenzia_id:agenzia,user_id:session.user.id,titolo:'Follow-up preventivo '+(p?.rif||f.id.slice(0,8)),tipo:'richiamare',scadenza:dati.scadenza,priorita:'media',stato:'da_fare',cliente_id:p?.cliente_id||null,note:'[preventivo-followup:'+f.id+']'+(form.note?'\n'+form.note:'')});
+        }catch(e){setErrore('Follow-up salvato, ma promemoria agenda non creato: '+e.message)}
+      }
       setMessaggio('Salvato su Supabase.');setForm({cliente_id:'',azienda_id:'',stato:'potenziale',preventivo_id:'',scadenza:'',descrizione:'',quantita:'1',tipo:'campione',note:''});
       await carica(tab);
     }catch(e){setErrore(e.message)}finally{setBusy(false)}
@@ -3567,7 +3579,7 @@ function RegistroCommercialeSupabase({session}) {
   return <section style={{padding:20,background:'white',border:'1px solid #dce4de',borderRadius:16,maxWidth:1050,margin:'0 auto'}}>
     <h2 style={{marginTop:0}}>Registri commerciali · Supabase</h2>
     <p style={{fontSize:13,color:'#586b60'}}>Queste tre sezioni salvano dati reali. Le altre funzioni del Laboratorio restano dimostrative finché non saranno integrate.</p>
-    <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:18}}>{[['relazioni','Mandanti per cliente'],['followup','Follow-up preventivi'],['campioni','Campionature']].map(([k,n])=><button key={k} style={{...btn,background:tab===k?'#344a43':'#e8eeea',color:tab===k?'white':'#344a43'}} onClick={()=>{setTab(k);setMessaggio('')}}>{n}</button>)}</div>
+    <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:18}}>{[['relazioni','Mandanti per cliente'],['followup','Follow-up preventivi']].map(([k,n])=><button key={k} style={{...btn,background:tab===k?'#344a43':'#e8eeea',color:tab===k?'white':'#344a43'}} onClick={()=>{setTab(k);setMessaggio('')}}>{n}</button>)}</div>
     {errore&&<p role='alert' style={{color:'#a12a22'}}>{errore}</p>}{messaggio&&<p style={{color:'#197044'}}>{messaggio}</p>}
     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:12,marginBottom:14}}>
       {tab==='relazioni'&&<>{campo('Cliente',sel('cliente_id',clienti.map(x=>({id:x.id,label:x.ragione_sociale})),'Seleziona cliente'))}{campo('Mandante',sel('azienda_id',mandanti.map(x=>({id:x.id,label:x.nome})),'Seleziona mandante'))}{campo('Stato',<select style={inp} value={form.stato} onChange={e=>setForm(f=>({...f,stato:e.target.value}))}>{['potenziale','in_trattativa','attivo','non_interessato'].map(x=><option key={x} value={x}>{x.replaceAll('_',' ')}</option>)}</select>)}</>}
@@ -3582,6 +3594,222 @@ function RegistroCommercialeSupabase({session}) {
       <div><strong>{tab==='followup'?'Preventivo '+(preventivi.find(x=>x.id===r.preventivo_id)?.rif||r.preventivo_id?.slice(0,8)):nomi(clienti,r.cliente_id,'ragione_sociale')}</strong><div style={{fontSize:13,color:'#596a60'}}>{tab==='relazioni'?nomi(mandanti,r.azienda_id,'nome'):tab==='campioni'?r.descrizione+' · '+r.quantita+' pz':new Date(r.scadenza).toLocaleDateString('it-IT')}</div>{r.note&&<div style={{fontSize:12}}>{r.note}</div>}</div>
       <select disabled={busy} style={{...inp,width:'auto'}} value={r.stato} onChange={e=>aggiorna(r,{stato:e.target.value})}>{(tab==='relazioni'?['potenziale','in_trattativa','attivo','non_interessato']:tab==='followup'?['da_fare','completato','annullato']:['da_consegnare','consegnato','in_esposizione','da_recuperare','recuperato']).map(x=><option key={x} value={x}>{x.replaceAll('_',' ')}</option>)}</select>
     </div>)}
+  </section>;
+}
+
+
+
+// Fase unica: pannello operativo persistente, dati reali Supabase.
+function CRMOperativitaUnificata({session}) {
+  const [tab,setTab]=useState('campionature');
+  const [agenzia,setAgenzia]=useState('');
+  const [clienti,setClienti]=useState([]),[mandanti,setMandanti]=useState([]);
+  const [campioni,setCampioni]=useState([]),[visite,setVisite]=useState([]),[followup,setFollowup]=useState([]),[tasks,setTasks]=useState([]);
+  const [errore,setErrore]=useState(''),[messaggio,setMessaggio]=useState(''),[busy,setBusy]=useState(false);
+  const [visita,setVisita]=useState({cliente_id:'',azienda_id:'',titolo:'Visita commerciale',data:'',ora:'09:00',luogo:'',note:''});
+  const [fileRighe,setFileRighe]=useState([]),[colonne,setColonne]=useState([]),[mappa,setMappa]=useState({nome:'',email:'',telefono:'',indirizzo:'',classificazione:''});
+  const [selezione,setSelezione]=useState([]),[esitoImport,setEsitoImport]=useState(null);
+  const [ricerca,setRicerca]=useState('');
+  const h=()=>({apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+session.access_token,'Content-Type':'application/json'});
+  const api=async(path,method='GET',payload)=>{
+    const res=await fetch(SUPABASE_URL+'/rest/v1/'+path,{method,headers:{...h(),...(method!=='GET'?{Prefer:'return=representation'}:{})},...(payload===undefined?{}:{body:JSON.stringify(payload)})});
+    const raw=await res.text();let data;try{data=raw?JSON.parse(raw):[]}catch{data=raw}
+    if(!res.ok)throw Error(data?.message||('Errore HTTP '+res.status));return data;
+  };
+  const carica=async()=>{
+    try {
+      const [a,c,m,p,v,f,t]=await Promise.all([
+        api('crm_agenzie?select=id&proprietario_id=eq.'+session.user.id),
+        api('clienti?select=id,ragione_sociale,email,telefono,indirizzo,agenzia_id&order=ragione_sociale.asc'),
+        api('aziende_mandanti?select=id,nome&order=nome.asc'),
+        api('preventivi?select=id,rif,data,cliente_id,azienda_id,tipo_proposta,approvazione_proposta,righe&tipo_proposta=in.(campionatura,esposizione)&order=data.desc'),
+        api('appuntamenti?select=id,titolo,inizio,stato,cliente_id,azienda_id,luogo,note&tipo=eq.visita&order=inizio.asc'),
+        api('crm_followup_preventivi?select=*&order=scadenza.asc'),
+        api('crm_attivita?select=id,note,scadenza,stato,titolo&user_id=eq.'+session.user.id)
+      ]);
+      setAgenzia(a[0]?.id||'');setClienti(c);setMandanti(m);setCampioni(p);setVisite(v);setFollowup(f);setTasks(t);setErrore('');
+    } catch(e){setErrore(e.message)}
+  };
+  useEffect(()=>{carica()},[session.access_token]);
+  const nome=(id)=>clienti.find(c=>c.id===id)?.ragione_sociale||'Cliente non associato';
+  const azienda=(id)=>mandanti.find(m=>m.id===id)?.nome||'—';
+  const inp={width:'100%',boxSizing:'border-box',padding:'10px 11px',border:'1px solid #cbd8d0',borderRadius:9,background:'white',fontSize:13};
+  const btn={background:'#344a43',color:'white',padding:'10px 15px',border:0,borderRadius:9,cursor:'pointer'};
+  const field=(title,child)=><label style={{display:'grid',gap:5,fontSize:12,color:'#40544a'}}>{title}{child}</label>;
+  const cambiaCampione=async(p,stato)=>{
+    setBusy(true);setErrore('');try{await api('preventivi?id=eq.'+p.id,'PATCH',{approvazione_proposta:stato});await carica();setMessaggio('Stato campionatura aggiornato.')}catch(e){setErrore(e.message)}finally{setBusy(false)}
+  };
+  const salvaVisita=async()=>{
+    setBusy(true);setErrore('');setMessaggio('');try{
+      if(!agenzia||!visita.cliente_id||!visita.data)throw Error('Seleziona cliente e data.');
+      const start=new Date(visita.data+'T'+visita.ora+':00');if(Number.isNaN(start.getTime()))throw Error('Data e ora non valide.');
+      const end=new Date(start.getTime()+60*60*1000);
+      await api('appuntamenti','POST',{agenzia_id:agenzia,user_id:session.user.id,titolo:visita.titolo||'Visita commerciale',tipo:'visita',inizio:start.toISOString(),fine:end.toISOString(),stato:'programmato',cliente_id:visita.cliente_id,azienda_id:visita.azienda_id||null,luogo:visita.luogo||null,note:visita.note||null});
+      setVisita({cliente_id:'',azienda_id:'',titolo:'Visita commerciale',data:'',ora:'09:00',luogo:'',note:''});await carica();setMessaggio('Visita salvata nell’agenda Supabase.');
+    }catch(e){setErrore(e.message)}finally{setBusy(false)}
+  };
+  const normalizza=x=>String(x??'').trim().toLocaleLowerCase('it').replace(/\s+/g,' ');
+  const importaFile=async(file)=>{
+    setErrore('');setEsitoImport(null);if(!file)return;
+    try{
+      const data=await file.arrayBuffer();const wb=XLSX.read(data,{type:'array'});const sheet=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(sheet,{defval:'',raw:false}).slice(0,1000);
+      if(!rows.length)throw Error('Nessuna riga da importare.');
+      const keys=Object.keys(rows[0]);setFileRighe(rows);setColonne(keys);setSelezione(rows.map((_,i)=>i));
+      const find=(names)=>keys.find(k=>names.some(n=>normalizza(k).includes(n)))||'';
+      setMappa({nome:find(['ragione sociale','cliente','nominativo','studio','nome']),email:find(['email','e-mail']),telefono:find(['telefono','cellulare','phone']),indirizzo:find(['indirizzo','address','comune']),classificazione:find(['classificazione','tipologia','categoria'])});
+    }catch(e){setErrore('File non leggibile: '+e.message)}
+  };
+  const anteprima=fileRighe.map((r,i)=>({i,nome:String(r[mappa.nome]||'').trim(),email:String(r[mappa.email]||'').trim(),telefono:String(r[mappa.telefono]||'').trim(),indirizzo:String(r[mappa.indirizzo]||'').trim(),classificazione:String(r[mappa.classificazione]||'').trim()}));
+  const esistenti=new Set(clienti.map(c=>normalizza(c.ragione_sociale)));
+  const selezionati=new Set(selezione);
+  const visti=new Set();
+  const valutati=anteprima.map(r=>{const key=normalizza(r.nome);const duplicato=!!key&&(esistenti.has(key)||visti.has(key));if(key)visti.add(key);return {...r,duplicato,pronto:!!key&&!duplicato&&selezionati.has(r.i)}});
+  const pronti=valutati.filter(r=>r.pronto);
+  const salvaImport=async()=>{
+    if(!agenzia||!pronti.length)return;
+    if(!window.confirm('Importare '+pronti.length+' nuove anagrafiche in Supabase? Le righe duplicate verranno escluse.'))return;
+    setBusy(true);setErrore('');setMessaggio('');let ok=0;let failed=[];
+    for(const r of pronti){
+      try{await api('clienti','POST',{agenzia_id:agenzia,ragione_sociale:r.nome,email:r.email||null,telefono:r.telefono||null,indirizzo:r.indirizzo||null,classificazione:r.classificazione||null});ok++}
+      catch(e){failed.push(r.nome+': '+e.message)}
+    }
+    setEsitoImport({ok,failed});setBusy(false);await carica();
+    if(ok)setMessaggio(ok+' clienti importati.');if(failed.length)setErrore(failed.length+' righe non importate: '+failed.slice(0,3).join(' | '));
+    setSelezione([]);
+  };
+  const completaFollowup=async(f)=>{
+    setBusy(true);setErrore('');try{
+      await api('crm_followup_preventivi?id=eq.'+f.id,'PATCH',{stato:'completato'});
+      const marker='[preventivo-followup:'+f.id+']';
+      const t=tasks.find(x=>String(x.note||'').includes(marker));
+      if(t)await api('crm_attivita?id=eq.'+t.id,'PATCH',{stato:'completata'});
+      await carica();setMessaggio('Follow-up completato.');
+    }catch(e){setErrore(e.message)}finally{setBusy(false)}
+  };
+  return <section style={{background:'#fff',border:'1px solid #dce6de',borderRadius:16,padding:20,margin:'16px auto',maxWidth:1100}}>
+    <h2 style={{margin:'0 0 5px'}}>Centro operativo · Supabase</h2>
+    <p style={{color:'#65756b',fontSize:13}}>Campionature dai preventivi, visite in agenda, follow-up e importazione anagrafiche con anteprima.</p>
+    <div style={{display:'flex',flexWrap:'wrap',gap:7,marginBottom:16}}>{[['campionature','Campionature'],['followup','Follow-up preventivi'],['visite','Pianifica visite'],['import','Importa Excel / CSV']].map(([k,label])=><button key={k} onClick={()=>{setTab(k);setMessaggio('')}} style={{...btn,background:tab===k?'#344a43':'#edf3ee',color:tab===k?'white':'#344a43'}}>{label}</button>)}</div>
+    {errore&&<p role='alert' style={{color:'#a32722',whiteSpace:'pre-wrap'}}>{errore}</p>}{messaggio&&<p style={{color:'#187044'}}>{messaggio}</p>}
+    {tab==='campionature'&&<><p style={{fontSize:13}}>Le campionature sono preventivi con tipologia «Campionatura». Non serve creare una seconda scheda. L'approvazione è modificabile qui o nei preventivi.</p><input style={{...inp,maxWidth:330}} placeholder='Cerca cliente o riferimento...' value={ricerca} onChange={e=>setRicerca(e.target.value)}/>{campioni.filter(p=>normalizza(nome(p.cliente_id)+' '+(p.rif||'')).includes(normalizza(ricerca))).map(p=><div key={p.id} style={{borderBottom:'1px solid #e2e9e4',padding:'13px 0',display:'flex',gap:12,justifyContent:'space-between',alignItems:'center',flexWrap:'wrap'}}><div><strong>{nome(p.cliente_id)}</strong><div style={{fontSize:12,color:'#65756b'}}>{p.rif||'Senza riferimento'} · {azienda(p.azienda_id)} · {p.data||'—'} · {Array.isArray(p.righe)?p.righe.length:0} righe</div></div><select aria-label='Approvazione campionatura' disabled={busy} style={{...inp,width:195}} value={p.approvazione_proposta||'in_attesa'} onChange={e=>cambiaCampione(p,e.target.value)}><option value='in_attesa'>In attesa</option><option value='approvata'>Approvata</option><option value='non_approvata'>Non approvata</option></select></div>)}{!campioni.length&&<p>Nessuna campionatura. Creane una nella sezione Preventivi.</p>}</>}
+    {tab==='followup'&&<>{followup.map(f=><div key={f.id} style={{borderBottom:'1px solid #e2e9e4',padding:'12px 0',display:'flex',justifyContent:'space-between',gap:12,alignItems:'center',flexWrap:'wrap'}}><div><strong>{new Date(f.scadenza).toLocaleDateString('it-IT')}</strong> · {f.stato}<div style={{fontSize:12,color:'#65756b'}}>{f.note||'Follow-up preventivo'} · {f.preventivo_id?.slice(0,8)}</div></div>{f.stato==='da_fare'&&<button style={btn} disabled={busy} onClick={()=>completaFollowup(f)}>Segna completato</button>}</div>)}{!followup.length&&<p>Nessun follow-up preventivo registrato.</p>}</>}
+    {tab==='visite'&&<><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:10,marginBottom:12}}>
+      {field('Cliente *',<select style={inp} value={visita.cliente_id} onChange={e=>setVisita(v=>({...v,cliente_id:e.target.value}))}><option value=''>Seleziona...</option>{clienti.map(c=><option key={c.id} value={c.id}>{c.ragione_sociale}</option>)}</select>)}
+      {field('Mandante',<select style={inp} value={visita.azienda_id} onChange={e=>setVisita(v=>({...v,azienda_id:e.target.value}))}><option value=''>Nessuno</option>{mandanti.map(m=><option key={m.id} value={m.id}>{m.nome}</option>)}</select>)}
+      {field('Data *',<input type='date' style={inp} value={visita.data} onChange={e=>setVisita(v=>({...v,data:e.target.value}))}/>)}
+      {field('Ora',<input type='time' style={inp} value={visita.ora} onChange={e=>setVisita(v=>({...v,ora:e.target.value}))}/>)}
+      {field('Titolo',<input style={inp} value={visita.titolo} onChange={e=>setVisita(v=>({...v,titolo:e.target.value}))}/>)}
+      {field('Luogo',<input style={inp} value={visita.luogo} onChange={e=>setVisita(v=>({...v,luogo:e.target.value}))}/>)}
+      {field('Note',<input style={inp} value={visita.note} onChange={e=>setVisita(v=>({...v,note:e.target.value}))}/>)}
+      </div><button disabled={busy} style={btn} onClick={salvaVisita}>Salva visita in agenda</button><h3>Visite programmate</h3>{visite.map(v=><div key={v.id} style={{borderBottom:'1px solid #e2e9e4',padding:9,fontSize:13}}><strong>{new Date(v.inizio).toLocaleString('it-IT')}</strong> · {nome(v.cliente_id)} · {v.titolo} · {v.stato}</div>)}{!visite.length&&<p>Nessuna visita programmata.</p>}</>}
+    {tab==='import'&&<><p style={{fontSize:13}}>Carica un file, associa le colonne e controlla l'anteprima. Il CRM esclude i nomi già presenti e i duplicati nel file. Nessun salvataggio finché non confermi.</p><input type='file' accept='.xlsx,.xls,.csv' onChange={e=>importaFile(e.target.files?.[0])}/>{fileRighe.length>0&&<><p><strong>{fileRighe.length}</strong> righe lette · <strong>{pronti.length}</strong> nuove anagrafiche selezionate · <strong>{valutati.filter(r=>r.duplicato).length}</strong> duplicati per ragione sociale</p><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:9}}>{[['nome','Ragione sociale *'],['email','Email'],['telefono','Telefono'],['indirizzo','Indirizzo / Comune'],['classificazione','Classificazione']].map(([k,label])=>field(label,<select style={inp} value={mappa[k]} onChange={e=>setMappa(old=>({...old,[k]:e.target.value}))}><option value=''>Non importare</option>{colonne.map(c=><option key={c} value={c}>{c}</option>)}</select>))}</div><div style={{overflowX:'auto',maxHeight:350,marginTop:15}}><table style={{width:'100%',fontSize:12,borderCollapse:'collapse'}}><thead><tr>{['Includi','Nome','Email','Telefono','Esito'].map(k=><th key={k} style={{textAlign:'left',padding:8,background:'#eef3ef'}}>{k}</th>)}</tr></thead><tbody>{valutati.slice(0,100).map(r=><tr key={r.i} style={{borderBottom:'1px solid #e3e9e4'}}><td style={{padding:7}}><input type='checkbox' disabled={r.duplicato||!r.nome} checked={selezionati.has(r.i)&&!r.duplicato} onChange={e=>setSelezione(a=>e.target.checked?[...a,r.i]:a.filter(i=>i!==r.i))}/></td><td>{r.nome}</td><td>{r.email}</td><td>{r.telefono}</td><td>{r.duplicato?'Duplicato':!r.nome?'Nome mancante':'Nuovo'}</td></tr>)}</tbody></table></div><p style={{fontSize:12,color:'#64716b'}}>Anteprima: prime 100 righe. Il controllo duplicati confronta il nome normalizzato, non partita IVA o altri identificativi; controlla attentamente prima di importare.</p><button style={btn} disabled={busy||!mappa.nome||!pronti.length} onClick={salvaImport}>{busy?'Importazione...':'Importa '+pronti.length+' clienti in Supabase'}</button>{esitoImport&&<p>{esitoImport.ok} importati; {esitoImport.failed.length} errori.</p>}</>}</>}
+  </section>;
+}
+
+// Nella scheda cliente mostra automaticamente i preventivi marcati Campionatura.
+function CampionatureSchedaCliente({preventivi}) {
+  const campioni=(preventivi||[]).filter(p=>['campionatura','esposizione'].includes(p.tipo_proposta));
+  return <section style={{background:'#fff',border:'1px solid #dce6de',borderRadius:13,padding:16,margin:'16px 0'}}><h3 style={{margin:'0 0 10px'}}>Campionature ({campioni.length})</h3>{!campioni.length&&<p style={{fontSize:13,color:'#64716b'}}>Nessuna campionatura associata. Crea un preventivo di tipo Campionatura.</p>}{campioni.map(p=><div key={p.id} style={{padding:'9px 0',borderBottom:'1px solid #e8eee9',fontSize:13}}><strong>{p.rif||'Preventivo senza riferimento'}</strong> · {p.data||'—'} · {p.approvazione_proposta==='approvata'?'Approvata':p.approvazione_proposta==='non_approvata'?'Non approvata':'In attesa'} · {Array.isArray(p.righe)?p.righe.length:0} articoli</div>)}</section>;
+}
+
+// Fase I: provvigioni e liquidazioni persistenti, separate dal simulatore demo.
+function RegistroProvvigioniSupabase({session}) {
+  const [agenzia,setAgenzia]=useState('');
+  const [clienti,setClienti]=useState([]),[mandanti,setMandanti]=useState([]);
+  const [ordini,setOrdini]=useState([]),[confermati,setConfermati]=useState([]);
+  const [provvigioni,setProvvigioni]=useState([]),[liquidazioni,setLiquidazioni]=useState([]);
+  const [form,setForm]=useState({cliente_id:'',azienda_id:'',origine:'manuale',ordine_id:'',imponibile:'',modalita:'percentuale',percentuale:'',importo_manuale:'',data_ordine:'',note:''});
+  const [pagamenti,setPagamenti]=useState({});
+  const [busy,setBusy]=useState(false),[errore,setErrore]=useState(''),[successo,setSuccesso]=useState('');
+  const headers=()=>({apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+session.access_token,'Content-Type':'application/json'});
+  const api=async (path,method='GET',payload)=>{
+    const r=await fetch(SUPABASE_URL+'/rest/v1/'+path,{method,headers:{...headers(),...(method!=='GET'?{Prefer:'return=representation'}:{})},...(payload===undefined?{}:{body:JSON.stringify(payload)})});
+    const raw=await r.text();let x;try{x=raw?JSON.parse(raw):[]}catch{x=raw}
+    if(!r.ok)throw Error(x?.message||('Errore Supabase '+r.status));return x;
+  };
+  const carica=async()=>{
+    try {
+      const [a,c,m,o,oc]=await Promise.all([
+        api('crm_agenzie?select=id&proprietario_id=eq.'+encodeURIComponent(session.user.id)),
+        api('clienti?select=id,ragione_sociale&order=ragione_sociale.asc'),
+        api('aziende_mandanti?select=id,nome&order=nome.asc'),
+        api('ordini?select=id,cliente_id,azienda_id,numero_ordine,importo_totale,data_ordine&order=created_at.desc'),
+        api('ordini_confermati?select=id,cliente_id,azienda_id,importo,data_ordine&order=created_at.desc')
+      ]);
+      if(!a.length)throw Error('Agenzia non trovata.');
+      const id=a[0].id;setAgenzia(id);setClienti(c);setMandanti(m);setOrdini(o);setConfermati(oc);
+      const [p,l]=await Promise.all([api('crm_provvigioni_ordini?select=*&agenzia_id=eq.'+id+'&order=created_at.desc'),api('crm_liquidazioni_provvigioni?select=*&agenzia_id=eq.'+id+'&order=created_at.desc')]);
+      setProvvigioni(p);setLiquidazioni(l);setErrore('');
+    }catch(e){setErrore(e.message)}
+  };
+  useEffect(()=>{carica()},[session.access_token]);
+  const eur=n=>Number(n||0).toLocaleString('it-IT',{style:'currency',currency:'EUR'});
+  const nome=(arr,id,key)=>arr.find(x=>x.id===id)?.[key]||'—';
+  const inputStyle={width:'100%',padding:10,border:'1px solid #d2ddd5',borderRadius:9,background:'#fff',boxSizing:'border-box'};
+  const buttonStyle={padding:'10px 15px',background:'#344a43',color:'#fff',border:0,borderRadius:9,cursor:'pointer'};
+  const label=(name,child)=><label style={{display:'grid',gap:5,fontSize:13,color:'#344a43'}}>{name}{child}</label>;
+  const scegliOrdine=(origine,id)=>{
+    const o=(origine==='ordini'?ordini:confermati).find(x=>x.id===id);
+    setForm(f=>({...f,origine,ordine_id:id,cliente_id:o?.cliente_id||f.cliente_id,azienda_id:o?.azienda_id||f.azienda_id,imponibile:o?String(origine==='ordini'?o.importo_totale:o.importo):f.imponibile,data_ordine:o?.data_ordine||f.data_ordine}));
+  };
+  const calcola=()=>form.modalita==='manuale'?Number(form.importo_manuale):Number(form.imponibile)*Number(form.percentuale)/100;
+  const salva=async()=>{
+    setErrore('');setSuccesso('');setBusy(true);
+    try{
+      const imponibile=Number(form.imponibile),maturato=calcola();
+      if(!form.cliente_id||!form.azienda_id)throw Error('Seleziona cliente e mandante.');
+      if(form.imponibile===''||!Number.isFinite(imponibile)||imponibile<0)throw Error('Inserisci un imponibile valido.');
+      if(form.modalita==='percentuale'&&(form.percentuale===''||!Number.isFinite(Number(form.percentuale))||Number(form.percentuale)<0||Number(form.percentuale)>100))throw Error('Percentuale non valida (0–100).');
+      if(form.modalita==='manuale'&&(form.importo_manuale===''||!Number.isFinite(maturato)||maturato<0))throw Error('Importo manuale non valido.');
+      if(form.origine!=='manuale'&&!form.ordine_id)throw Error('Seleziona un ordine.');
+      const payload={agenzia_id:agenzia,cliente_id:form.cliente_id,azienda_id:form.azienda_id,ordine_id:form.origine==='ordini'?form.ordine_id:null,ordine_confermato_id:form.origine==='confermati'?form.ordine_id:null,data_ordine:form.data_ordine||null,imponibile,percentuale:form.modalita==='percentuale'?Number(form.percentuale):null,importo_manuale:form.modalita==='manuale'?maturato:null,importo_maturato:Math.round((maturato+Number.EPSILON)*100)/100,stato:'da_liquidare',note:form.note||null};
+      await api('crm_provvigioni_ordini','POST',payload);
+      setSuccesso('Provvigione salvata su Supabase.');setForm({cliente_id:'',azienda_id:'',origine:'manuale',ordine_id:'',imponibile:'',modalita:'percentuale',percentuale:'',importo_manuale:'',data_ordine:'',note:''});await carica();
+    }catch(e){setErrore(e.message)}finally{setBusy(false)}
+  };
+  const liquida=async p=>{
+    setErrore('');setSuccesso('');setBusy(true);
+    try{
+      const importo=Number(pagamenti[p.id]);const gia=liquidazioni.filter(l=>l.provvigione_id===p.id).reduce((a,l)=>a+Number(l.importo),0);
+      const residuo=Math.round((Number(p.importo_maturato)-gia)*100)/100;
+      if(!Number.isFinite(importo)||importo<=0||importo>residuo+0.001)throw Error('Importo non valido o superiore al residuo.');
+      await api('crm_liquidazioni_provvigioni','POST',{agenzia_id:agenzia,provvigione_id:p.id,importo,data_liquidazione:new Date().toISOString().slice(0,10)});
+      // Lo stato riepilogativo viene aggiornato solo dopo la liquidazione.
+      const nuovoResiduo=Math.round((residuo-importo)*100)/100;
+      try{await api('crm_provvigioni_ordini?id=eq.'+p.id+'&agenzia_id=eq.'+agenzia,'PATCH',{stato:nuovoResiduo<=0?'liquidata':'parziale'});}catch(e){setErrore('Liquidazione registrata, ma stato non aggiornato: '+e.message)}
+      setPagamenti(v=>({...v,[p.id]:''}));setSuccesso('Liquidazione registrata.');await carica();
+    }catch(e){setErrore(e.message)}finally{setBusy(false)}
+  };
+  const totale=provvigioni.reduce((a,p)=>a+Number(p.importo_maturato),0);
+  const pagato=liquidazioni.reduce((a,l)=>a+Number(l.importo),0);
+  return <section style={{margin:'20px auto',maxWidth:1050,padding:20,background:'#fff',border:'1px solid #dce4de',borderRadius:16}}>
+    <h2 style={{marginTop:0}}>Provvigioni · Supabase</h2>
+    <p style={{fontSize:13,color:'#617067'}}>Registra una provvigione per ordine o manualmente. La percentuale è indipendente dallo sconto del cliente. Le liquidazioni sono registrate separatamente.</p>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:10,marginBottom:18}}>{[['Maturato',totale],['Liquidato',pagato],['Da liquidare',totale-pagato]].map(([k,v])=><div key={k} style={{background:'#f2f6f3',padding:13,borderRadius:10}}><small>{k}</small><div style={{fontSize:20,fontWeight:750}}>{eur(v)}</div></div>)}</div>
+    {errore&&<p role='alert' style={{color:'#a12a22'}}>{errore}</p>}{successo&&<p style={{color:'#197044'}}>{successo}</p>}
+    <h3>Nuova provvigione</h3>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(210px,1fr))',gap:12}}>
+      {label('Origine',<select style={inputStyle} value={form.origine} onChange={e=>setForm(f=>({...f,origine:e.target.value,ordine_id:''}))}><option value='manuale'>Registrazione manuale</option><option value='ordini'>Ordine</option><option value='confermati'>Ordine confermato</option></select>)}
+      {form.origine!=='manuale'&&label('Ordine',<select style={inputStyle} value={form.ordine_id} onChange={e=>scegliOrdine(form.origine,e.target.value)}><option value=''>Seleziona...</option>{(form.origine==='ordini'?ordini:confermati).map(o=><option key={o.id} value={o.id}>{o.numero_ordine||o.id.slice(0,8)} · {eur(form.origine==='ordini'?o.importo_totale:o.importo)}</option>)}</select>)}
+      {label('Cliente',<select style={inputStyle} value={form.cliente_id} onChange={e=>setForm(f=>({...f,cliente_id:e.target.value}))}><option value=''>Seleziona...</option>{clienti.map(c=><option key={c.id} value={c.id}>{c.ragione_sociale}</option>)}</select>)}
+      {label('Mandante',<select style={inputStyle} value={form.azienda_id} onChange={e=>setForm(f=>({...f,azienda_id:e.target.value}))}><option value=''>Seleziona...</option>{mandanti.map(m=><option key={m.id} value={m.id}>{m.nome}</option>)}</select>)}
+      {label('Data ordine',<input style={inputStyle} type='date' value={form.data_ordine} onChange={e=>setForm(f=>({...f,data_ordine:e.target.value}))}/>)}
+      {label('Imponibile netto (€)',<input style={inputStyle} type='number' min='0' step='0.01' value={form.imponibile} onChange={e=>setForm(f=>({...f,imponibile:e.target.value}))}/>)}
+      {label('Tipo provvigione',<select style={inputStyle} value={form.modalita} onChange={e=>setForm(f=>({...f,modalita:e.target.value}))}><option value='percentuale'>Percentuale</option><option value='manuale'>Importo manuale</option></select>)}
+      {form.modalita==='percentuale'?label('Percentuale (%)',<input style={inputStyle} type='number' min='0' max='100' step='0.01' value={form.percentuale} onChange={e=>setForm(f=>({...f,percentuale:e.target.value}))}/>):label('Importo provvigione (€)',<input style={inputStyle} type='number' min='0' step='0.01' value={form.importo_manuale} onChange={e=>setForm(f=>({...f,importo_manuale:e.target.value}))}/>)}
+      {label('Note',<input style={inputStyle} value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))}/>)}
+    </div>
+    <p style={{fontWeight:700}}>Provvigione prevista: {Number.isFinite(calcola())?eur(calcola()):'—'}</p>
+    <button style={buttonStyle} disabled={busy||!agenzia} onClick={salva}>{busy?'Attendere...':'Salva provvigione'}</button>
+    <h3 style={{marginTop:25}}>Provvigioni registrate ({provvigioni.length})</h3>
+    {!provvigioni.length&&<p style={{color:'#617067'}}>Nessuna provvigione ancora registrata.</p>}
+    {provvigioni.map(p=>{const liquidato=liquidazioni.filter(l=>l.provvigione_id===p.id).reduce((a,l)=>a+Number(l.importo),0);const residuo=Math.max(0,Math.round((Number(p.importo_maturato)-liquidato)*100)/100);return <div key={p.id} style={{padding:'14px 0',borderTop:'1px solid #e2e9e3'}}>
+      <strong>{nome(clienti,p.cliente_id,'ragione_sociale')}</strong> · {nome(mandanti,p.azienda_id,'nome')}
+      <div style={{fontSize:13,color:'#617067'}}>Imponibile {eur(p.imponibile)} · {p.percentuale!==null?p.percentuale+'%':'Importo manuale'} · Maturato {eur(p.importo_maturato)} · Liquidato {eur(liquidato)} · <strong>Residuo {eur(residuo)}</strong></div>
+      {p.note&&<div style={{fontSize:12}}>{p.note}</div>}
+      {residuo>0&&<div style={{display:'flex',alignItems:'center',gap:8,marginTop:8,flexWrap:'wrap'}}><input aria-label='Importo da liquidare' placeholder='Importo liquidato €' type='number' min='0.01' max={residuo} step='0.01' style={{...inputStyle,maxWidth:175}} value={pagamenti[p.id]||''} onChange={e=>setPagamenti(v=>({...v,[p.id]:e.target.value}))}/><button disabled={busy} style={buttonStyle} onClick={()=>liquida(p)}>Registra liquidazione</button></div>}
+    </div>})}
   </section>;
 }
 
@@ -3799,7 +4027,7 @@ function AppShell({ session, onLogout }) {
         {page==="attivita"&&<AttivitaCRM session={session}/>}
         {page==="clienti"&&<ClientiAnagrafica session={session} apriPreventivo={apriPreventivoCliente} apriGruppo={apriGruppoCliente}/>}
         {page==="architetti"&&<ClientiAnagrafica soloArchitetti session={session} apriPreventivo={apriPreventivoCliente} apriGruppo={apriGruppoCliente}/>}
-        {page==="laboratorio"&&<><RegistroCommercialeSupabase session={session}/><details style={{marginTop:20}}><summary style={{cursor:"pointer",fontWeight:650}}>Apri il vecchio Laboratorio dimostrativo</summary><LaboratorioCommercialeCRM/></details></>}
+        {page==="laboratorio"&&<><CRMOperativitaUnificata session={session}/><RegistroCommercialeSupabase session={session}/><RegistroProvvigioniSupabase session={session}/><details style={{marginTop:20}}><summary style={{cursor:"pointer",fontWeight:650}}>Apri il vecchio Laboratorio dimostrativo</summary><LaboratorioCommercialeCRM/></details></>}
         {page==="visite"&&<CalendarioVisite session={session}/>} 
         {page==="storico_visite"&&<StoricoVisiteCRM session={session}/>}
         {page==="note"&&<NoteCRM session={session}/>}
