@@ -2576,6 +2576,7 @@ function PipelineCommerciale({session, preventivoDaConvertire, onPreventivoRicev
   const [saving,setSaving]=useState(false);
   const [error,setError]=useState("");
   const [search,setSearch]=useState("");
+  const [filtroAzioni,setFiltroAzioni]=useState("tutte");
   const headers=()=>({"Content-Type":"application/json",apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+session.access_token});
   async function request(path,opts={}) {
     const r=await fetch(SUPABASE_URL+"/rest/v1/"+path,{...opts,headers:{...headers(),...(opts.headers||{})}});
@@ -2626,8 +2627,24 @@ function PipelineCommerciale({session, preventivoDaConvertire, onPreventivoRicev
     return false;
   };
   const clientiDisponibili=clienti.filter(c=>clienteAbilitato(c,form.azienda_id));
-  const visibili=opportunita.filter(o=>(!aziendaFiltro||o.azienda_id===aziendaFiltro)&&((o.titolo||"")+" "+(clienti.find(c=>c.id===o.cliente_id)?.ragione_sociale||"")).toLowerCase().includes(search.toLowerCase()));
+  const visibiliBase=opportunita.filter(o=>(!aziendaFiltro||o.azienda_id===aziendaFiltro)&&((o.titolo||"")+" "+(clienti.find(c=>c.id===o.cliente_id)?.ragione_sociale||"")).toLowerCase().includes(search.toLowerCase()));
+  const oggiPipeline=new Date().toLocaleDateString("sv-SE");
+  const statoFollowup=o=>{
+    if(["confermata","persa"].includes(o.fase)||!o.data_prossima_azione)return null;
+    const giorno=String(o.data_prossima_azione).slice(0,10);
+    return giorno<oggiPipeline?"scaduta":giorno===oggiPipeline?"oggi":"futura";
+  };
+  const senzaAzione=o=>!["confermata","persa"].includes(o.fase)&&(!o.data_prossima_azione||!String(o.prossima_azione||"").trim());
+  const visibili=visibiliBase.filter(o=>filtroAzioni==="tutte"|| (filtroAzioni==="senza"?senzaAzione(o):statoFollowup(o)===filtroAzioni));
+  const visibiliOrdinate=[...visibili].sort((a,b)=>{
+    const da=a.data_prossima_azione?String(a.data_prossima_azione).slice(0,10):"9999-12-31";
+    const db=b.data_prossima_azione?String(b.data_prossima_azione).slice(0,10):"9999-12-31";
+    return da.localeCompare(db);
+  });
   const aperte=visibili.filter(o=>!["confermata","persa"].includes(o.fase));
+  const scadute=aperte.filter(o=>statoFollowup(o)==="scaduta").length;
+  const daFareOggi=aperte.filter(o=>statoFollowup(o)==="oggi").length;
+  const senzaProssimaAzione=aperte.filter(senzaAzione).length;
   const totale=aperte.reduce((n,o)=>n+Number(o.valore_stimato||0),0);
   const ponderato=aperte.reduce((n,o)=>n+Number(o.valore_stimato||0)*Number(o.probabilita||0)/100,0);
   const input={width:"100%",padding:"10px 12px",border:"1px solid #dce5f1",borderRadius:9,background:"#fff",color:"#17233b"};
@@ -2652,6 +2669,10 @@ function PipelineCommerciale({session, preventivoDaConvertire, onPreventivoRicev
       setShowForm(false);setEditing(null);await load();
     }catch(err){setError(err.message);}finally{setSaving(false);}
   }
+  function pianificaFollowup(o){
+    modifica(o);
+    setError("");
+  }
   async function cambiaFase(o,fase){
     if(o.fase===fase)return;
     try{await request("opportunita_commerciali?id=eq."+o.id,{method:"PATCH",body:JSON.stringify({fase,probabilita:FASI_PIPELINE.find(f=>f.id===fase)?.prob??o.probabilita,updated_at:new Date().toISOString()})});await load();}
@@ -2665,8 +2686,8 @@ function PipelineCommerciale({session, preventivoDaConvertire, onPreventivoRicev
   return <div className="crm-pipeline">
     <div className="matrice-welcome"><div><h1>Pipeline commerciale</h1><p>Trattative per mandante, dal primo contatto alla conferma.</p></div><button className="crm-primary-btn" onClick={()=>apriNuova()}><Plus size={15}/> Nuova opportunità</button></div>
     {error&&<div style={{background:"#fff0f0",color:"#a52121",padding:12,borderRadius:9,marginBottom:14}}>{error}</div>}
-    <div className="crm-pipeline-filters"><label style={label}>Azienda mandante<select style={input} value={aziendaFiltro} onChange={e=>setAziendaFiltro(e.target.value)}><option value="">Tutte le mandanti</option>{aziende.map(a=><option key={a.id} value={a.id}>{a.nome}</option>)}</select></label><label style={label}>Cerca opportunità<input style={input} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Titolo o cliente"/></label></div>
-    <div className="crm-pipeline-stats"><div><small>Opportunità aperte</small><strong>{aperte.length}</strong></div><div><small>Valore trattative aperte</small><strong>{euro(totale)}</strong></div><div><small>Valore ponderato</small><strong>{euro(ponderato)}</strong></div></div>
+    <div className="crm-pipeline-filters"><label style={label}>Azienda mandante<select style={input} value={aziendaFiltro} onChange={e=>setAziendaFiltro(e.target.value)}><option value="">Tutte le mandanti</option>{aziende.map(a=><option key={a.id} value={a.id}>{a.nome}</option>)}</select></label><label style={label}>Cerca opportunità<input style={input} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Titolo o cliente"/></label><label style={label}>Priorità follow-up<select style={input} value={filtroAzioni} onChange={e=>setFiltroAzioni(e.target.value)}><option value="tutte">Tutte le opportunità</option><option value="scaduta">Scaduti</option><option value="oggi">Da contattare oggi</option><option value="futura">Programmato</option><option value="senza">Senza prossima azione completa</option></select></label></div>
+    <div className="crm-pipeline-stats"><div><small>Opportunità aperte</small><strong>{aperte.length}</strong></div><div><small>Valore trattative aperte</small><strong>{euro(totale)}</strong></div><div><small>Valore ponderato</small><strong>{euro(ponderato)}</strong></div><div><small>Follow-up scaduti</small><strong style={{color:scadute?"#b42318":"#17233b"}}>{scadute}</strong></div><div><small>Da contattare oggi</small><strong style={{color:daFareOggi?"#a65d0a":"#17233b"}}>{daFareOggi}</strong></div><div><small>Senza prossima azione completa</small><strong style={{color:senzaProssimaAzione?"#a65d0a":"#17233b"}}>{senzaProssimaAzione}</strong></div></div>
     {showForm&&<form className="crm-pipeline-form" onSubmit={salva}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><h3>{editing?"Modifica opportunità":"Nuova opportunità"}</h3><button type="button" className="crm-secondary-btn" onClick={()=>setShowForm(false)}>Chiudi</button></div>
       <div className="crm-pipeline-fields">
         <label style={label}>Titolo *<input required style={input} value={form.titolo} onChange={e=>setForm({...form,titolo:e.target.value})} placeholder="Es. Fornitura rubinetteria villa"/></label>
@@ -2684,12 +2705,14 @@ function PipelineCommerciale({session, preventivoDaConvertire, onPreventivoRicev
     {loading?<p className="matrice-empty">Caricamento pipeline...</p>:aziende.length===0?<p className="matrice-empty">Crea prima un'azienda mandante nella sezione Mandanti.</p>:
       <div className="crm-pipeline-board">{FASI_PIPELINE.map(f=><section className="crm-pipeline-column" key={f.id}>
         <div className="crm-pipeline-column-head" style={{borderTop:"4px solid "+f.colore}}><strong>{f.nome}</strong><span>{visibili.filter(o=>o.fase===f.id).length}</span><small>{euro(visibili.filter(o=>o.fase===f.id).reduce((n,o)=>n+Number(o.valore_stimato||0),0))}</small></div>
-        {visibili.filter(o=>o.fase===f.id).map(o=><article className="crm-pipeline-card" key={o.id}>
+        {visibiliOrdinate.filter(o=>o.fase===f.id).map(o=><article className="crm-pipeline-card" key={o.id} style={{borderLeft:statoFollowup(o)==="scaduta"?"4px solid #d92d20":statoFollowup(o)==="oggi"?"4px solid #e9a23b":undefined}}>
           <strong>{o.titolo}</strong><small>{aziende.find(a=>idAzienda(a)===o.azienda_id)?.nome||"Mandante"}</small>
           <small>{clienti.find(c=>c.id===o.cliente_id)?.ragione_sociale||"Nessun cliente collegato"}</small>
           <b>{euro(o.valore_stimato)}</b>
-          {o.data_prossima_azione&&<small>Prossima azione: {o.data_prossima_azione}</small>}
+          {o.data_prossima_azione&&<small style={{color:statoFollowup(o)==="scaduta"?"#b42318":statoFollowup(o)==="oggi"?"#a65d0a":"#52749c",fontWeight:statoFollowup(o)==="scaduta"||statoFollowup(o)==="oggi"?700:400}}>{statoFollowup(o)==="scaduta"?"● SCADUTA · ":statoFollowup(o)==="oggi"?"● OGGI · ":"Prossima azione: "}{String(o.data_prossima_azione).slice(0,10).split("-").reverse().join("/")}</small>}
           {o.prossima_azione&&<small>{o.prossima_azione}</small>}
+          {senzaAzione(o)&&<small style={{color:"#a65d0a",fontWeight:700}}>● Da pianificare</small>}
+          {!["confermata","persa"].includes(o.fase)&&<button type="button" onClick={()=>pianificaFollowup(o)} style={{border:"1px solid #c8d9ef",background:"#f4f8ff",color:"#2369d5",borderRadius:7,padding:"7px 9px",fontSize:11,cursor:"pointer"}}>Pianifica follow-up</button>}
           <label style={{...label,fontSize:10}}>Sposta in<select style={{...input,padding:"6px 8px",fontSize:11}} value={o.fase} onChange={e=>cambiaFase(o,e.target.value)}>{FASI_PIPELINE.map(x=><option key={x.id} value={x.id}>{x.nome}</option>)}</select></label>
           <div className="crm-pipeline-card-actions"><button onClick={()=>modifica(o)}>Modifica</button><button onClick={()=>elimina(o)}>Elimina</button></div>
         </article>)}
@@ -2971,6 +2994,104 @@ function StileModuliPremiumCRM() { return <style>{`
   @media(max-width:768px){.crm-anagrafiche-premium>div{gap:14px!important}.crm-anagrafiche-premium>div>div:first-child{max-width:none!important;flex-basis:100%!important}}
 `}</style>; }
 
+
+// Centro operativo: letture in sola consultazione, nessuna nuova tabella o policy richiesta.
+function CentroOperativoCRM({ session, goTo }) {
+  const [dati, setDati] = useState({ aziende: [], clienti: [], opportunita: [], attivita: [], fatturato: [] });
+  const [caricamento, setCaricamento] = useState(true);
+  const [errore, setErrore] = useState("");
+  const [avvisi, setAvvisi] = useState([]);
+  const [filtroMandante, setFiltroMandante] = useState("");
+  const [soloUrgenti, setSoloUrgenti] = useState(false);
+  const carica = async () => {
+    setCaricamento(true); setErrore("");
+    const headers = { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token };
+    const percorsi = {
+      aziende: "aziende_mandanti?select=id,nome,colore&order=nome.asc",
+      clienti: "clienti?select=id,ragione_sociale",
+      opportunita: "opportunita_commerciali?select=*",
+      attivita: "crm_attivita?select=*",
+      fatturato: "fatturato_commerciale?select=azienda_id,anno,importo"
+    };
+    const esito = await Promise.all(Object.entries(percorsi).map(async ([nome, percorso]) => {
+      try {
+        const r = await fetch(SUPABASE_URL + "/rest/v1/" + percorso, { headers });
+        const payload = await r.json().catch(() => null);
+        if (!r.ok || !Array.isArray(payload)) throw new Error(payload?.message || "Lettura non autorizzata");
+        return { nome, payload };
+      } catch (e) { return { nome, payload: [], errore: e.message }; }
+    }));
+    const prossimo = {}; const errori = [];
+    esito.forEach(x => { prossimo[x.nome] = x.payload; if (x.errore) errori.push(x.nome + ": " + x.errore); });
+    setDati(prossimo); setAvvisi(errori); setCaricamento(false);
+  };
+  useEffect(() => { carica(); }, [session.access_token]);
+  const oggi = new Date().toLocaleDateString("sv-SE");
+  const anno = new Date().getFullYear();
+  const mandanti = dati.aziende || [];
+  const opportunita = (dati.opportunita || []).filter(o => !filtroMandante || o.azienda_id === filtroMandante);
+  const aperte = opportunita.filter(o => !["confermata", "persa"].includes(o.fase));
+  const azioni = (dati.attivita || []).filter(a => a.stato !== "completata" && (!filtroMandante || a.azienda_id === filtroMandante));
+  const giorno = v => v ? String(v).slice(0, 10) : "";
+  const urgenti = azioni.filter(a => giorno(a.scadenza) && giorno(a.scadenza) <= oggi);
+  const senzaAzione = aperte.filter(o => !o.data_prossima_azione || !String(o.prossima_azione || "").trim());
+  const scadute = aperte.filter(o => giorno(o.data_prossima_azione) && giorno(o.data_prossima_azione) < oggi);
+  const valore = aperte.reduce((t, o) => t + (Number(o.valore_stimato) || 0), 0);
+  const ponderato = aperte.reduce((t, o) => t + (Number(o.valore_stimato) || 0) * (Number(o.probabilita) || 0) / 100, 0);
+  const fatturato = (dati.fatturato || []).filter(f => Number(f.anno) === anno && (!filtroMandante || f.azienda_id === filtroMandante)).reduce((t,f) => t + (Number(f.importo) || 0), 0);
+  const nomeCliente = id => dati.clienti.find(c => c.id === id)?.ragione_sociale || "Cliente non indicato";
+  const nomeMandante = id => mandanti.find(a => a.id === id)?.nome || "Senza mandante";
+  const elenco = [
+    ...aperte.filter(o => !soloUrgenti || senzaAzione.includes(o) || scadute.includes(o)).map(o => ({
+      id: "o" + o.id, tipo: "opportunita", titolo: o.titolo || "Opportunità", cliente: nomeCliente(o.cliente_id), mandante: nomeMandante(o.azienda_id),
+      data: giorno(o.data_prossima_azione), stato: senzaAzione.includes(o) ? "Da pianificare" : giorno(o.data_prossima_azione) && giorno(o.data_prossima_azione) < oggi ? "Scaduta" : giorno(o.data_prossima_azione) === oggi ? "Oggi" : "Programmata", pagina: "pipeline"
+    })),
+    ...azioni.filter(a => !soloUrgenti || urgenti.includes(a)).map(a => ({
+      id: "a" + a.id, tipo: "attivita", titolo: a.titolo || "Attività", cliente: nomeCliente(a.cliente_id), mandante: nomeMandante(a.azienda_id),
+      data: giorno(a.scadenza), stato: !a.scadenza ? "Da pianificare" : giorno(a.scadenza) < oggi ? "Scaduta" : giorno(a.scadenza) === oggi ? "Oggi" : "Programmata", pagina: "attivita"
+    }))
+  ].sort((a,b) => (a.data || "9999-12-31").localeCompare(b.data || "9999-12-31"));
+  const riquadro = { background: "#fff", border: "1px solid #e4eaf3", borderRadius: 16, padding: 18, minWidth: 0 };
+  return <div style={{ display: "grid", gap: 18, maxWidth: 1200, margin: "0 auto" }}>
+    <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+      <div><h1 style={{ margin: 0, fontSize: 26, color: "#17233b" }}>Centro operativo</h1><p style={{ color: "#78859a", margin: "6px 0 0" }}>Trattative, attività e risultati commerciali in un unico punto</p></div>
+      <button onClick={carica} disabled={caricamento} style={{ padding: "10px 16px", borderRadius: 10, border: "1px solid #d7e1ef", background: "white", cursor: "pointer" }}>{caricamento ? "Caricamento…" : "Aggiorna dati"}</button>
+    </div>
+    {avvisi.length > 0 && <div role="alert" style={{ ...riquadro, borderColor: "#e9bf74", color: "#825a14" }}>Alcuni dati non sono disponibili: {avvisi.join(" · ")}. I totali relativi potrebbero essere incompleti.</div>}
+    {errore && <p role="alert">{errore}</p>}
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+      <label style={{ display: "grid", gap: 5, fontSize: 12, color: "#58677e" }}>Mandante
+        <select value={filtroMandante} onChange={e => setFiltroMandante(e.target.value)} style={{ padding: "10px 12px", border: "1px solid #dce5f1", borderRadius: 9, minWidth: 210, background: "white" }}>
+          <option value="">Tutti i mandanti</option>{mandanti.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
+        </select>
+      </label>
+      <label style={{ display: "flex", gap: 8, alignItems: "center", alignSelf: "end", paddingBottom: 10, color: "#40516a" }}><input type="checkbox" checked={soloUrgenti} onChange={e => setSoloUrgenti(e.target.checked)}/> Solo elementi da gestire</label>
+    </div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 12 }}>
+      {[
+        ["Trattative aperte", aperte.length, "pipeline"],
+        ["Valore trattative", formattaEuro(valore), "pipeline"],
+        ["Valore ponderato", formattaEuro(ponderato), "pipeline"],
+        ["Follow-up scaduti", scadute.length, "pipeline"],
+        ["Senza prossima azione", senzaAzione.length, "pipeline"],
+        ["Attività urgenti", urgenti.length, "attivita"],
+        ["Fatturato registrato " + anno, formattaEuro(fatturato), "controllo"]
+      ].map(([titolo, numero, pagina]) => <button key={titolo} onClick={() => goTo(pagina)} style={{ ...riquadro, textAlign: "left", cursor: "pointer", color: "#17233b" }}><div style={{ color: "#78859a", fontSize: 12, marginBottom: 8 }}>{titolo}</div><strong style={{ fontSize: 23 }}>{numero}</strong></button>)}
+    </div>
+    <div style={riquadro}>
+      <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", alignItems: "center", gap: 10, marginBottom: 12 }}><h2 style={{ margin: 0, fontSize: 18 }}>Lista operativa</h2><span style={{ fontSize: 12, color: "#78859a" }}>{elenco.length} elementi</span></div>
+      {caricamento ? <p>Caricamento dati…</p> : elenco.length === 0 ? <p style={{ color: "#78859a" }}>Nessun elemento per i filtri selezionati.</p> : <div style={{ display: "grid", gap: 8 }}>
+        {elenco.slice(0, 80).map(item => <button key={item.id} onClick={() => goTo(item.pagina)} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", textAlign: "left", gap: 8, padding: 13, background: "#f9fbff", border: "1px solid #e7edf6", borderRadius: 10, cursor: "pointer" }}>
+          <span style={{ display: "grid", gap: 3, minWidth: 180, flex: 1 }}><strong style={{ color: "#17233b" }}>{item.titolo}</strong><span style={{ fontSize: 12, color: "#748299" }}>{item.cliente} · {item.mandante} · {item.tipo === "attivita" ? "Attività" : "Opportunità"}</span></span>
+          <span style={{ fontSize: 12, color: ["Scaduta", "Da pianificare"].includes(item.stato) ? "#b44335" : "#446b9b" }}>{item.stato}{item.data ? " · " + item.data.split("-").reverse().join("/") : ""}</span>
+        </button>)}
+      </div>}
+      {elenco.length > 80 && <p style={{ color: "#78859a", fontSize: 12 }}>Mostrati i primi 80 elementi. Usa le sezioni dedicate per l'elenco completo.</p>}
+    </div>
+    <p style={{ color: "#78859a", fontSize: 12 }}>Il fatturato deriva dai valori registrati in Controllo Commerciale. Le trattative sono stime e non vengono sommate al fatturato.</p>
+  </div>;
+}
+
 function AppShell({ session, onLogout }) {
   const [menuOpen, setMenuOpen] = useState(typeof window === "undefined" ? true : window.innerWidth > 768);
   const [page, setPage] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("appuntamento") ? "visite" : "dashboard");
@@ -2988,7 +3109,7 @@ function AppShell({ session, onLogout }) {
     {id:"mandanti",nome:"Mandanti",icon:Building2,items:[{key:"aziende",label:"Aziende mandanti",icon:Building2}]},
     {id:"opportunita",nome:"Opportunità",icon:Target,items:[{key:"pipeline",label:"Pipeline commerciale",icon:Target},{key:"preventivi",label:"Preventivi e offerte",icon:FileText},{key:"portafoglio",label:"Portafoglio ordini",icon:Briefcase},{key:"ordini",label:"Registro ordini",icon:ClipboardList}]},
     {id:"agenda",nome:"Agenda",icon:CalendarDays,items:[{key:"agenda",label:"Pannello agenda",icon:CalendarDays},{key:"visite",label:"Calendario e appuntamenti",icon:CalendarDays},{key:"attivita",label:"Attività e follow-up",icon:ClipboardList},{key:"storico_visite",label:"Storico visite",icon:ClipboardList}]},
-    {id:"report",nome:"Report",icon:BarChart3,items:[{key:"controllo",label:"Controllo Commerciale",icon:Wallet},{key:"fatturato",label:"Fatturato (ordini CRM)",icon:Wallet},{key:"statistiche",label:"Statistiche",icon:TrendingUp}]},
+    {id:"report",nome:"Report",icon:BarChart3,items:[{key:"centro",label:"Centro operativo",icon:Target},{key:"controllo",label:"Controllo Commerciale",icon:Wallet},{key:"fatturato",label:"Fatturato (ordini CRM)",icon:Wallet},{key:"statistiche",label:"Statistiche",icon:TrendingUp}]},
   ];
   const scegli = key => { setPage(key); if(window.innerWidth<768)setMenuOpen(false); };
   const avatar=(session.user.email||"FG").split("@")[0].slice(0,2).toUpperCase();
@@ -3006,6 +3127,7 @@ function AppShell({ session, onLogout }) {
       <main key={page} className="page-content matrice-main">
         {page==="dashboard"&&<AttivaNotificheCRM session={session}/>}
         {page==="dashboard"&&<Dashboard session={session} goTo={scegli}/>}
+        {page==="centro"&&<CentroOperativoCRM session={session} goTo={scegli}/>} 
         {page==="admin"&&role==="admin"&&<AdminPanel session={session}/>}
         {page==="aziende"&&<AziendeMandanti session={session}/>}
         {page==="agenda"&&<PannelloAgendaCRM session={session} goTo={scegli}/>}
@@ -3026,7 +3148,7 @@ function AppShell({ session, onLogout }) {
         {page==="gruppi"&&<GruppiAcquisto session={session} gruppoIniziale={gruppoAprireId} onGruppoAperto={()=>setGruppoAprireId(null)}/>}
       </main></div>
     <nav className="crm-mobile-bottom-nav" aria-label="Navigazione rapida">
-      {[{key:"dashboard",label:"Home",Icon:LayoutDashboard},{key:"clienti",label:"Clienti",Icon:Users},{key:"agenda",label:"Agenda",Icon:CalendarDays},{key:"pipeline",label:"Pipeline",Icon:Target}].map(item=><button key={item.key} type="button" className={page===item.key?"active":""} onClick={()=>scegli(item.key)}><item.Icon size={20}/><span>{item.label}</span></button>)}
+      {[{key:"dashboard",label:"Home",Icon:LayoutDashboard},{key:"centro",label:"Operativo",Icon:Target},{key:"clienti",label:"Clienti",Icon:Users},{key:"agenda",label:"Agenda",Icon:CalendarDays},{key:"pipeline",label:"Pipeline",Icon:Target}].map(item=><button key={item.key} type="button" className={page===item.key?"active":""} onClick={()=>scegli(item.key)}><item.Icon size={20}/><span>{item.label}</span></button>)}
       <button type="button" className={menuOpen?"active":""} onClick={()=>setMenuOpen(true)}><MenuIcon size={20}/><span>Menu</span></button>
     </nav>
   </div>;
