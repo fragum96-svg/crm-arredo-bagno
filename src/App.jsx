@@ -1068,7 +1068,7 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
     } catch (err) { setError(err.message); }
   };
 
-  const inputStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
+  const inputStyle = { width: "100%", padding: "12px 13px", marginBottom: 12, border: "1px solid #dce7f1", borderRadius: 11, fontSize: 14, boxSizing: "border-box", background: "#fbfdff", color: "#18354e" };
   const elencoSezione = list.filter(c => soloArchitetti ? c.classificazione === "Architetto" : c.classificazione !== "Architetto");
   const filteredList = elencoSezione.filter(c => (!filtroClassificazione || c.classificazione === filtroClassificazione) && (!ricercaAnagrafica.trim() || [c.ragione_sociale, c.indirizzo, c.telefono, c.email, c.classificazione].some(v => String(v || "").toLocaleLowerCase("it").includes(ricercaAnagrafica.trim().toLocaleLowerCase("it")))));
 
@@ -1083,13 +1083,22 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
     <div className="crm-anagrafiche-premium" style={{ fontFamily: "Arial, sans-serif" }}>
       <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}><Users size={20} color={COLORS.primary} /> {soloArchitetti ? "Anagrafica architetti" : "Anagrafica clienti"}</h2>
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 300px", background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, maxWidth: 380 }}>
-          <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>{editingId ? "Modifica" : soloArchitetti ? "Nuovo architetto" : "Nuovo cliente"}</h3>
+        <div style={{ flex: "1 1 300px", background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 22, maxWidth: 440 }}>
+          <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:1.2,color:"#2475b6",fontWeight:750,marginBottom:7}}>Anagrafica · {soloArchitetti ? "Architetti" : "Clienti"}</div>
+          <h3 style={{ fontSize: 21, color: "#17354d", margin:"0 0 6px",letterSpacing:"-.5px" }}>{editingId ? "Modifica anagrafica" : soloArchitetti ? "Nuovo architetto" : "Nuovo cliente"}</h3>
+          <p style={{fontSize:12,color:"#75899b",margin:"0 0 22px"}}>Inserisci i dati principali, poi completa le informazioni commerciali.</p>
+          <div className="crm-form-section-heading">01 · Dati principali</div>
+          <label className="crm-form-label">{soloArchitetti ? "Studio / nominativo *" : "Ragione sociale *"}</label>
           <input placeholder="Ragione sociale *" value={form.ragione_sociale} onChange={(e) => setForm({ ...form, ragione_sociale: e.target.value })} style={inputStyle} />
+          <label className="crm-form-label">Indirizzo principale</label>
           <input placeholder="Indirizzo" value={form.indirizzo} onChange={(e) => setForm({ ...form, indirizzo: e.target.value })} style={inputStyle} />
+          <div className="crm-form-section-heading">02 · Contatti</div>
+          <label className="crm-form-label">Telefono</label>
           <input placeholder="Telefono" value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} style={inputStyle} />
-          <input placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} style={inputStyle} />
-          <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 4 }}>Classificazione</label>
+          <label className="crm-form-label">Email</label>
+          <input type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} style={inputStyle} />
+          <div className="crm-form-section-heading">03 · Profilo commerciale</div>
+          <label className="crm-form-label">Classificazione</label>
           <select value={form.classificazione} onChange={(e) => setForm({ ...form, classificazione: e.target.value })} style={inputStyle}>
             <option value="">-- seleziona --</option>
             {(soloArchitetti ? ["Architetto"] : CLASSIFICAZIONI_ELENCO.filter(c => c !== "Architetto")).map((c) => <option key={c} value={c}>{c}</option>)}
@@ -1111,7 +1120,8 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
           <input placeholder="Competitor (separati da virgola)" value={form.competitor} onChange={(e) => setForm({ ...form, competitor: e.target.value })} style={inputStyle} />
           <textarea placeholder="Note" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} style={{ ...inputStyle, minHeight: 60 }} />
 
-          <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 6 }}>Sedi / Filiali aggiuntive</label>
+          <div className="crm-form-section-heading">04 · Sedi aggiuntive</div>
+          <label className="crm-form-label">Sedi / Filiali aggiuntive</label>
           <div style={{ marginBottom: 10, border: "1px solid " + COLORS.border, borderRadius: 8, padding: 8 }}>
             {editingId ? (
               sediEsistenti.map((s) => (
@@ -1138,7 +1148,7 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
 
           {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 10 }}>{error}</div>}
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={save} disabled={saving} style={{ padding: "9px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>{saving ? "Salvataggio..." : editingId ? "Salva modifiche" : "Aggiungi cliente"}</button>
+            <button onClick={save} disabled={saving} style={{ padding: "9px 16px", background: COLORS.primary, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>{saving ? "Salvataggio..." : editingId ? "Salva modifiche" : soloArchitetti ? "Crea architetto" : "Crea cliente"}</button>
             {editingId && <button onClick={resetForm} style={{ padding: "9px 16px", background: "#fff", color: COLORS.primary, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13, cursor: "pointer" }}>Annulla</button>}
           </div>
         </div>
@@ -1557,7 +1567,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto }) 
   const rigaLabel = { fontSize: 11, color: COLORS.muted, marginBottom: 3, display: "block" };
 
   return (
-    <div style={{ fontFamily: "Arial, sans-serif", overflowX: "hidden", width: "100%" }}>
+    <div className="crm-preventivi-premium" style={{ fontFamily: "inherit", overflowX: "hidden", width: "100%" }}> 
       <h2 style={{ color: COLORS.text, fontSize: 20, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}><FileText size={20} color={COLORS.primary} /> Preventivi / Offerte</h2>
       <div style={{ background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 20, marginBottom: 24, overflowX: "hidden" }}>
         <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>{editingId ? "Modifica preventivo" : "Nuovo preventivo"}</h3>
@@ -2667,15 +2677,17 @@ function AttivaNotificheCRM({ session }) {
   const [stato, setStato] = useState("");
   const [occupato, setOccupato] = useState(false);
   const [attivo, setAttivo] = useState(false);
+  const [mostraGestione, setMostraGestione] = useState(false);
+  const [verificaTerminata, setVerificaTerminata] = useState(false);
 
   useEffect(() => {
     let valido = true;
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.ready
         .then(reg => reg.pushManager?.getSubscription())
-        .then(sub => { if (valido) setAttivo(Boolean(sub)); })
-        .catch(() => {});
-    }
+        .then(sub => { if (valido) { setAttivo(Boolean(sub) && Notification.permission === "granted"); setVerificaTerminata(true); } })
+        .catch(() => { if (valido) setVerificaTerminata(true); });
+    } else { setVerificaTerminata(true); }
     return () => { valido = false; };
   }, []);
 
@@ -2721,6 +2733,7 @@ function AttivaNotificheCRM({ session }) {
         throw new Error(errore.message || errore.details || "Impossibile salvare il dispositivo su Supabase.");
       }
       setAttivo(true);
+      setMostraGestione(false);
       setStato("iPhone registrato correttamente. L'invio automatico dei promemoria sarà attivo dopo la configurazione del servizio di invio.");
     } catch (errore) {
       setStato("Attenzione: " + (errore.message || String(errore)));
@@ -2729,21 +2742,26 @@ function AttivaNotificheCRM({ session }) {
     }
   };
 
+  if (!verificaTerminata) return null;
+  if (attivo && !mostraGestione && !stato.startsWith("Attenzione")) return (
+    <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:8,marginBottom:10}}>
+      <span style={{fontSize:11,color:"#648397"}}>Notifiche attive</span>
+      <button type="button" onClick={()=>setMostraGestione(true)} style={{fontSize:11,border:"none",background:"transparent",color:"#196bb4",cursor:"pointer",padding:5}}>Gestisci</button>
+    </div>
+  );
   return (
     <div style={{ padding: "12px 14px", marginBottom: 14, background: "#fff", border: "1px solid #dce5f1", borderRadius: 12 }}>
       <div style={{ fontWeight: 700, color: "#17233b", marginBottom: 7 }}>Notifiche iPhone</div>
-      <div style={{ fontSize: 12, color: "#65748b", marginBottom: 10 }}>
-        Registra questo dispositivo per ricevere i promemoria degli appuntamenti.
-      </div>
+      <div style={{ fontSize: 12, color: "#65748b", marginBottom: 10 }}>Registra o aggiorna questo dispositivo per ricevere i promemoria degli appuntamenti.</div>
       <button type="button" onClick={attiva} disabled={occupato}
         style={{ background: "#2369d5", color: "#fff", border: 0, borderRadius: 9, padding: "10px 14px", fontWeight: 600, cursor: "pointer" }}>
-        {occupato ? "Attivazione..." : attivo ? "Verifica / aggiorna notifiche" : "Attiva notifiche"}
+        {occupato ? "Attivazione..." : attivo ? "Aggiorna registrazione" : "Attiva notifiche"}
       </button>
+      {attivo && <button type="button" onClick={()=>{setMostraGestione(false);setStato("");}} style={{marginLeft:10,border:0,background:"none",color:"#60778d",cursor:"pointer"}}>Chiudi</button>}
       {stato && <div role="status" style={{ fontSize: 12, marginTop: 10, color: stato.startsWith("Attenzione") ? "#b33a3a" : "#176b40" }}>{stato}</div>}
     </div>
   );
 }
-
 
 function AttivitaCRM({ session }) {
   const vuoto = () => ({ titolo: "", tipo: "richiamare", scadenza: "", priorita: "media", stato: "da_fare", cliente_id: "", azienda_id: "", note: "" });
@@ -2754,6 +2772,7 @@ function AttivitaCRM({ session }) {
   const [editingId, setEditingId] = useState(null);
   const [filtro, setFiltro] = useState("aperte");
   const [ricerca, setRicerca] = useState("");
+  const [messaggioAttivita, setMessaggioAttivita] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errore, setErrore] = useState("");
@@ -2802,6 +2821,7 @@ function AttivitaCRM({ session }) {
       const res = await fetch(endpoint + "?id=eq." + encodeURIComponent(a.id), { method: "PATCH", headers, body: JSON.stringify({ stato }) });
       if (!res.ok) throw new Error("Impossibile aggiornare lo stato");
       setAttivita(prev => prev.map(x => x.id === a.id ? { ...x, stato } : x));
+      setMessaggioAttivita(stato === "completata" ? "Attività completata. Puoi recuperarla dal filtro Completate." : "Attività ripristinata tra quelle da fare.");
     } catch (e) { setErrore(e.message); }
   };
   const elimina = async a => {
@@ -2847,13 +2867,14 @@ function AttivitaCRM({ session }) {
       </form>
       <section style={{ background: "#fff", border: "1px solid #e3ebf3", borderRadius: 16, padding: 18, minWidth: 0 }}>
         <div style={{ display: "flex", gap: 9, flexWrap: "wrap", marginBottom: 14 }}><input aria-label="Cerca attività" placeholder="Cerca attività..." value={ricerca} onChange={e => setRicerca(e.target.value)} style={{ ...campo, flex: "1 1 160px", width: "auto" }} /><select aria-label="Filtra attività" value={filtro} onChange={e => setFiltro(e.target.value)} style={{ ...campo, width: "auto", flex: "0 1 140px" }}><option value="aperte">Aperte</option><option value="scadute">Scadute</option><option value="completate">Completate</option><option value="tutte">Tutte</option></select></div>
+        {messaggioAttivita && <div role="status" style={{padding:10,borderRadius:9,background:"#edf7f2",color:"#236e4e",fontSize:12,marginBottom:10}}>{messaggioAttivita} <button type="button" onClick={()=>{setFiltro("completate");setMessaggioAttivita("");}} style={{border:0,background:"none",color:"#1764aa",cursor:"pointer",fontWeight:700}}>Mostra completate</button></div>}
         {errore && <div role="alert" style={{ color: "#a42a2a", background: "#fff0f0", borderRadius: 9, padding: 12, marginBottom: 12, fontSize: 13 }}>{errore}</div>}
         {loading ? <p>Caricamento...</p> : filtrate.length === 0 ? <p style={{ color: "#78859a", fontSize: 14 }}>Nessuna attività da mostrare.</p> : <div style={{ display: "grid", gap: 10 }}>{filtrate.map(a => {
           const scaduta = a.stato !== "completata" && a.scadenza && new Date(a.scadenza).getTime() < adesso;
           const cliente = clienti.find(c => c.id === a.cliente_id);
           return <article key={a.id} style={{ border: "1px solid #e3ebf3", borderRadius: 12, padding: 13, background: a.stato === "completata" ? "#f8fafc" : "#fff" }}>
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}><input type="checkbox" checked={a.stato === "completata"} onChange={() => completa(a)} aria-label={a.stato === "completata" ? "Riapri attività" : "Completa attività"} style={{ width: 18, height: 18, marginTop: 2, accentColor: "#276be3" }} /><div style={{ flex: 1, minWidth: 0 }}><strong style={{ fontSize: 14, textDecoration: a.stato === "completata" ? "line-through" : "none", overflowWrap: "anywhere" }}>{a.titolo}</strong><div style={{ color: "#72849a", fontSize: 12, marginTop: 4 }}>{etichette[a.tipo] || a.tipo} · Priorità {a.priorita}{a.stato === "in_corso" ? " · In corso" : ""}</div>{cliente && <div style={{ color: "#276be3", fontSize: 12, marginTop: 4 }}>{cliente.ragione_sociale}</div>}{a.scadenza && <div style={{ color: scaduta ? "#b83b3b" : "#62778c", fontSize: 12, marginTop: 5 }}>{scaduta ? "Scaduta · " : "Scadenza · "}{new Date(a.scadenza).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" })}</div>}{a.note && <div style={{ fontSize: 12, color: "#66798b", marginTop: 7, overflowWrap: "anywhere" }}>{a.note}</div>}</div></div>
-            <div style={{ display: "flex", gap: 12, marginTop: 11, paddingLeft: 28 }}><button type="button" onClick={() => modifica(a)} style={{ border: 0, background: "none", color: "#276be3", cursor: "pointer", padding: 0, fontSize: 12 }}>Modifica</button><button type="button" onClick={() => elimina(a)} style={{ border: 0, background: "none", color: "#b83b3b", cursor: "pointer", padding: 0, fontSize: 12 }}>Elimina</button></div>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}><input type="checkbox" checked={a.stato === "completata"} onChange={() => completa(a)} aria-label={a.stato === "completata" ? "Ripristina attività" : "Completa attività"} style={{ width: 18, height: 18, marginTop: 2, accentColor: "#276be3" }} /><div style={{ flex: 1, minWidth: 0 }}><strong style={{ fontSize: 14, textDecoration: a.stato === "completata" ? "line-through" : "none", overflowWrap: "anywhere" }}>{a.titolo}</strong><div style={{ color: "#72849a", fontSize: 12, marginTop: 4 }}>{etichette[a.tipo] || a.tipo} · Priorità {a.priorita}{a.stato === "in_corso" ? " · In corso" : ""}</div>{cliente && <div style={{ color: "#276be3", fontSize: 12, marginTop: 4 }}>{cliente.ragione_sociale}</div>}{a.scadenza && <div style={{ color: scaduta ? "#b83b3b" : "#62778c", fontSize: 12, marginTop: 5 }}>{scaduta ? "Scaduta · " : "Scadenza · "}{new Date(a.scadenza).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" })}</div>}{a.note && <div style={{ fontSize: 12, color: "#66798b", marginTop: 7, overflowWrap: "anywhere" }}>{a.note}</div>}</div></div>
+            <div style={{ display: "flex", gap: 12, marginTop: 11, paddingLeft: 28 }}><button type="button" onClick={() => modifica(a)} style={{ border: 0, background: "none", color: "#276be3", cursor: "pointer", padding: 0, fontSize: 12 }}>Modifica</button>{a.stato === "completata" && <button type="button" onClick={() => completa(a)} style={{border:0,background:"#eaf4ff",color:"#155f9e",borderRadius:7,padding:"5px 8px",cursor:"pointer",fontSize:12,fontWeight:700}}>Ripristina</button>}<button type="button" onClick={() => elimina(a)} style={{ border: 0, background: "none", color: "#b83b3b", cursor: "pointer", padding: 0, fontSize: 12 }}>Elimina</button></div>
           </article>;
         })}</div>}
       </section>
@@ -2895,6 +2916,13 @@ function StileNavigazionePremiumCRM() { return <style>{`
     .matrice-subnav button{min-height:46px!important}
     .matrice-nav-group-title{min-height:48px!important}
   }
+`}</style>; }
+
+function StileModuliPremiumCRM() { return <style>{`
+  .crm-anagrafiche-premium .crm-form-section-heading{font-size:12px;font-weight:800;color:#1d6097;letter-spacing:.35px;margin:21px 0 13px;padding-bottom:9px;border-bottom:1px solid #e5edf5}
+  .crm-anagrafiche-premium .crm-form-label{font-size:12px;font-weight:650;color:#526b82;display:block;margin:0 0 6px}
+  .crm-anagrafiche-premium input:focus,.crm-anagrafiche-premium select:focus,.crm-anagrafiche-premium textarea:focus{outline:2px solid #b5d7f7;outline-offset:1px}
+  @media(max-width:768px){.crm-anagrafiche-premium>div{gap:14px!important}.crm-anagrafiche-premium>div>div:first-child{max-width:none!important;flex-basis:100%!important}}
 `}</style>; }
 
 function AppShell({ session, onLogout }) {
@@ -3024,6 +3052,21 @@ function StileAnagraficheApple() { return <style>{`
 `}</style>; }
 
 function StilePremium2026() { return <style>{`
+
+/* Preventivi: esclusivamente restyling visuale, senza alterare campi, ordine o logica. */
+.crm-preventivi-premium{font-family:inherit!important;color:#23364c}
+.crm-preventivi-premium h2{font-family:inherit!important;font-size:clamp(20px,2.5vw,25px)!important;font-weight:750!important;letter-spacing:-.45px!important;color:#1d344e!important}
+.crm-preventivi-premium h3{font-family:inherit!important;font-size:15px!important;font-weight:730!important;letter-spacing:-.15px!important;color:#24405e!important}
+.crm-preventivi-premium input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.crm-preventivi-premium select,.crm-preventivi-premium textarea{font-family:inherit!important;border-radius:10px!important;border-color:#dbe5f0!important;background-color:#fff!important;color:#263b53!important;transition:border-color .15s ease,box-shadow .15s ease}
+.crm-preventivi-premium input:focus,.crm-preventivi-premium select:focus,.crm-preventivi-premium textarea:focus{outline:2px solid #bcd9fc!important;outline-offset:1px;border-color:#4b91e7!important}
+.crm-preventivi-premium button{font-family:inherit!important;letter-spacing:0!important;transition:filter .15s ease,box-shadow .15s ease}
+.crm-preventivi-premium button:hover{filter:brightness(.97)}
+.crm-preventivi-premium table{font-family:inherit!important}
+.crm-preventivi-premium th{font-weight:700!important;color:#395574!important}
+.crm-preventivi-premium td{color:#34495f}
+@media(max-width:767px){.crm-preventivi-premium h2{font-size:21px!important}.crm-preventivi-premium input,.crm-preventivi-premium select,.crm-preventivi-premium textarea{max-width:100%;box-sizing:border-box}}
+
 .crm-task-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:15px 0}
 .crm-task-count{border:0;border-radius:12px;padding:13px 15px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:5px}
 .crm-task-count span{font-size:12px;font-weight:650}.crm-task-count strong{font-size:25px;font-weight:750}
@@ -3211,6 +3254,7 @@ export default function App() {
       <StilePremium2026 />
       <StileAnagraficheApple />
       <StileNavigazionePremiumCRM />
+      <StileModuliPremiumCRM />
       <StileGlobaleResponsive />
       {verificaAccesso ? (
         <div style={{ padding: 36, textAlign: "center", color: "#17233b" }}>Ripristino accesso al CRM...</div>
