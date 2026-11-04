@@ -3355,7 +3355,7 @@ function StileModuliPremiumCRM() { return <style>{`
 
 // Centro operativo: letture in sola consultazione, nessuna nuova tabella o policy richiesta.
 function CentroOperativoCRM({ session, goTo }) {
-  const [dati, setDati] = useState({ aziende: [], clienti: [], opportunita: [], attivita: [], fatturato: [] });
+  const [dati, setDati] = useState({ aziende: [], clienti: [], opportunita: [], attivita: [], fatturato: [], preventivi: [], visite: [] });
   const [caricamento, setCaricamento] = useState(true);
   const [errore, setErrore] = useState("");
   const [avvisi, setAvvisi] = useState([]);
@@ -3369,7 +3369,9 @@ function CentroOperativoCRM({ session, goTo }) {
       clienti: "clienti?select=id,ragione_sociale",
       opportunita: "opportunita_commerciali?select=*",
       attivita: "crm_attivita?select=*",
-      fatturato: "fatturato_commerciale?select=azienda_id,anno,importo"
+      fatturato: "fatturato_commerciale?select=azienda_id,anno,importo",
+      preventivi: "preventivi?select=id,rif,cliente_id,azienda_id,stato,created_at",
+      visite: "visite?select=id,cliente_id,data_visita"
     };
     const esito = await Promise.all(Object.entries(percorsi).map(async ([nome, percorso]) => {
       try {
@@ -3397,6 +3399,14 @@ function CentroOperativoCRM({ session, goTo }) {
   const valore = aperte.reduce((t, o) => t + (Number(o.valore_stimato) || 0), 0);
   const ponderato = aperte.reduce((t, o) => t + (Number(o.valore_stimato) || 0) * (Number(o.probabilita) || 0) / 100, 0);
   const fatturato = (dati.fatturato || []).filter(f => Number(f.anno) === anno && (!filtroMandante || f.azienda_id === filtroMandante)).reduce((t,f) => t + (Number(f.importo) || 0), 0);
+  // Avvisi derivati dai dati: nessun salvataggio e nessuna notifica push.
+  const oggiMs = new Date(oggi + "T12:00:00").getTime();
+  const giorniPassati = value => { const ms = Date.parse(value || ""); return Number.isFinite(ms) ? Math.floor((oggiMs - ms) / 86400000) : null; };
+  const preventiviDaSollecitare = (dati.preventivi || []).filter(p => p.stato === "inviato" && (!filtroMandante || p.azienda_id === filtroMandante) && giorniPassati(p.created_at) !== null && giorniPassati(p.created_at) >= 14);
+  const sospeseDaRivedere = opportunita.filter(o => ["sospesa", "sospeso", "in_pausa"].includes(String(o.fase || "").toLowerCase()) && giorniPassati(o.updated_at || o.created_at) >= 30);
+  const dataUltimaVisita = new Map();
+  (dati.visite || []).forEach(v => { const data = v.data_visita; if (v.cliente_id && data && (!dataUltimaVisita.has(v.cliente_id) || String(data) > String(dataUltimaVisita.get(v.cliente_id)))) dataUltimaVisita.set(v.cliente_id, data); });
+  const clientiDaVisitare = (dati.clienti || []).filter(c => dataUltimaVisita.has(c.id) && giorniPassati(dataUltimaVisita.get(c.id)) >= 60);
   const nomeCliente = id => dati.clienti.find(c => c.id === id)?.ragione_sociale || "Cliente non indicato";
   const nomeMandante = id => mandanti.find(a => a.id === id)?.nome || "Senza mandante";
   const elenco = [
@@ -3404,6 +3414,15 @@ function CentroOperativoCRM({ session, goTo }) {
       id: "o" + o.id, tipo: "opportunita", titolo: o.titolo || "Opportunità", cliente: nomeCliente(o.cliente_id), mandante: nomeMandante(o.azienda_id),
       data: giorno(o.data_prossima_azione), stato: senzaAzione.includes(o) ? "Da pianificare" : giorno(o.data_prossima_azione) && giorno(o.data_prossima_azione) < oggi ? "Scaduta" : giorno(o.data_prossima_azione) === oggi ? "Oggi" : "Programmata", pagina: "pipeline"
     })),
+    ...preventiviDaSollecitare.map(p => ({
+      id: "p" + p.id, tipo: "preventivo", titolo: "Sollecitare preventivo " + (p.rif || p.id.slice(0, 8)), cliente: nomeCliente(p.cliente_id), mandante: nomeMandante(p.azienda_id), data: giorno(p.created_at), stato: "Inviato da " + giorniPassati(p.created_at) + " giorni", pagina: "preventivi"
+    })),
+    ...sospeseDaRivedere.map(o => ({
+      id: "s" + o.id, tipo: "sospesa", titolo: "Trattativa sospesa: " + (o.titolo || "Opportunità"), cliente: nomeCliente(o.cliente_id), mandante: nomeMandante(o.azienda_id), data: giorno(o.updated_at || o.created_at), stato: "Ferma da " + giorniPassati(o.updated_at || o.created_at) + " giorni", pagina: "pipeline"
+    })),
+    ...(!filtroMandante ? clientiDaVisitare.map(c => ({
+      id: "c" + c.id, tipo: "cliente", titolo: "Ricontattare " + c.ragione_sociale, cliente: c.ragione_sociale, mandante: "Ultima visita", data: giorno(dataUltimaVisita.get(c.id)), stato: "Non visitato da " + giorniPassati(dataUltimaVisita.get(c.id)) + " giorni", pagina: "clienti"
+    })) : []),
     ...azioni.filter(a => !soloUrgenti || urgenti.includes(a)).map(a => ({
       id: "a" + a.id, tipo: "attivita", titolo: a.titolo || "Attività", cliente: nomeCliente(a.cliente_id), mandante: nomeMandante(a.azienda_id),
       data: giorno(a.scadenza), stato: !a.scadenza ? "Da pianificare" : giorno(a.scadenza) < oggi ? "Scaduta" : giorno(a.scadenza) === oggi ? "Oggi" : "Programmata", pagina: "attivita"
@@ -3412,7 +3431,7 @@ function CentroOperativoCRM({ session, goTo }) {
   const riquadro = { background: "#fff", border: "1px solid #e4eaf3", borderRadius: 16, padding: 18, minWidth: 0 };
   return <div style={{ display: "grid", gap: 18, maxWidth: 1200, margin: "0 auto" }}>
     <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-      <div><h1 style={{ margin: 0, fontSize: 26, color: "#17233b" }}>Centro operativo</h1><p style={{ color: "#78859a", margin: "6px 0 0" }}>Trattative, attività e risultati commerciali in un unico punto</p></div>
+      <div><h1 style={{ margin: 0, fontSize: 26, color: "#17233b" }}>Centro operativo</h1><p style={{ color: "#78859a", margin: "6px 0 0" }}>Trattative, solleciti, clienti da ricontattare e risultati commerciali</p></div>
       <button onClick={carica} disabled={caricamento} style={{ padding: "10px 16px", borderRadius: 10, border: "1px solid #d7e1ef", background: "white", cursor: "pointer" }}>{caricamento ? "Caricamento…" : "Aggiorna dati"}</button>
     </div>
     {avvisi.length > 0 && <div role="alert" style={{ ...riquadro, borderColor: "#e9bf74", color: "#825a14" }}>Alcuni dati non sono disponibili: {avvisi.join(" · ")}. I totali relativi potrebbero essere incompleti.</div>}
@@ -3433,6 +3452,9 @@ function CentroOperativoCRM({ session, goTo }) {
         ["Follow-up scaduti", scadute.length, "pipeline"],
         ["Senza prossima azione", senzaAzione.length, "pipeline"],
         ["Attività urgenti", urgenti.length, "attivita"],
+        ["Preventivi da sollecitare (14g)", preventiviDaSollecitare.length, "preventivi"],
+        ["Sospese ferme (30g)", sospeseDaRivedere.length, "pipeline"],
+        ["Clienti senza visite (60g)", filtroMandante ? "—" : clientiDaVisitare.length, "clienti"],
         ["Fatturato registrato " + anno, formattaEuro(fatturato), "controllo"]
       ].map(([titolo, numero, pagina]) => <button key={titolo} onClick={() => goTo(pagina)} style={{ ...riquadro, textAlign: "left", cursor: "pointer", color: "#17233b" }}><div style={{ color: "#78859a", fontSize: 12, marginBottom: 8 }}>{titolo}</div><strong style={{ fontSize: 23 }}>{numero}</strong></button>)}
     </div>
@@ -3446,7 +3468,7 @@ function CentroOperativoCRM({ session, goTo }) {
       </div>}
       {elenco.length > 80 && <p style={{ color: "#78859a", fontSize: 12 }}>Mostrati i primi 80 elementi. Usa le sezioni dedicate per l'elenco completo.</p>}
     </div>
-    <p style={{ color: "#78859a", fontSize: 12 }}>Il fatturato deriva dai valori registrati in Controllo Commerciale. Le trattative sono stime e non vengono sommate al fatturato.</p>
+    <p style={{ color: "#78859a", fontSize: 12 }}>Gli avvisi sono calcolati quando apri o aggiorni questa pagina; non sono notifiche push. I preventivi inviati si basano sulla data di creazione (non sulla data effettiva di invio). Il promemoria visite considera solo clienti già visitati. Il fatturato non comprende le stime delle trattative.</p>
   </div>;
 }
 
