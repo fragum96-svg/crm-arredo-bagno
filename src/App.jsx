@@ -44,13 +44,13 @@ function makeSupabaseClient(url, key) {
   return {
     auth: {
       async signInWithPassword({ email, password }) {
-        const res = await fetch(url + "/auth/v1/token?grant_type=password", { method: "POST", headers: authHeaders(), body: JSON.stringify({ email, password }) });
+        const res = await crmFetch(url + "/auth/v1/token?grant_type=password", { method: "POST", headers: authHeaders(), body: JSON.stringify({ email, password }) });
         const data = await res.json();
         if (!res.ok) return { data: null, error: data };
         return { data, error: null };
       },
       async signUp({ email, password }) {
-        const res = await fetch(url + "/auth/v1/signup", { method: "POST", headers: authHeaders(), body: JSON.stringify({ email, password }) });
+        const res = await crmFetch(url + "/auth/v1/signup", { method: "POST", headers: authHeaders(), body: JSON.stringify({ email, password }) });
         const data = await res.json();
         if (!res.ok) return { data: null, error: data };
         return { data, error: null };
@@ -59,9 +59,58 @@ function makeSupabaseClient(url, key) {
   };
 }
 
+// Fase Sicurezza: tutte le scritture REST sulle tabelle commerciali ereditano
+// l'agenzia del proprietario autenticato. Non si usano mai ID hardcoded.
+const CRM_AGENCY_TABLES = new Set([
+  'appuntamenti','attivita_cliente','aziende_mandanti','clienti',
+  'crm_attivita','crm_campionature','crm_followup_preventivi',
+  'crm_liquidazioni_provvigioni','crm_provvigioni_ordini','crm_relazioni_mandanti',
+  'documenti_cliente','opportunita_commerciali','ordini','ordini_confermati',
+  'preventivi','visite'
+]);
+const crmAgencyCache = new Map();
+async function crmAgencyId(token) {
+  if (!token) throw new Error('Sessione non disponibile: impossibile associare l’agenzia.');
+  if (!crmAgencyCache.has(token)) {
+    const pending = (async () => {
+      const r = await fetch(SUPABASE_URL + '/rest/v1/crm_agenzie?select=id&limit=2', {
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + token }
+      });
+      if (!r.ok) throw new Error('Impossibile verificare l’agenzia dell’utente (' + r.status + ').');
+      const rows = await r.json();
+      if (rows.length !== 1) throw new Error('È necessaria una sola agenzia di proprietà per questo account.');
+      return rows[0].id;
+    })();
+    crmAgencyCache.set(token, pending);
+    pending.catch(() => crmAgencyCache.delete(token));
+  }
+  return crmAgencyCache.get(token);
+}
+async function crmFetch(url, options = {}) {
+  const method = String(options.method || 'GET').toUpperCase();
+  if (method !== 'POST' || !options.body || typeof url !== 'string' ||
+      !url.startsWith(SUPABASE_URL + '/rest/v1/')) return fetch(url, options);
+  const table = url.slice((SUPABASE_URL + '/rest/v1/').length).split(/[?/#]/)[0];
+  if (!CRM_AGENCY_TABLES.has(table)) return fetch(url, options);
+  const auth = options.headers?.Authorization || options.headers?.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  let body;
+  try { body = JSON.parse(options.body); } catch { return fetch(url, options); }
+  if (!body || typeof body !== 'object') return fetch(url, options);
+  const agencyId = await crmAgencyId(token);
+  const addAgency = row => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
+    if (row.agenzia_id && row.agenzia_id !== agencyId)
+      throw new Error('L’agenzia del record non corrisponde all’utente autenticato.');
+    return { ...row, agenzia_id: agencyId };
+  };
+  body = Array.isArray(body) ? body.map(addAgency) : addAgency(body);
+  return fetch(url, { ...options, body: JSON.stringify(body) });
+}
+
 async function geocodificaIndirizzo(indirizzo) {
   try {
-    const res = await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(indirizzo));
+    const res = await crmFetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(indirizzo));
     const data = await res.json();
     if (data && data[0]) return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
   } catch (e) {}
@@ -84,7 +133,7 @@ function caricaLeaflet() {
 
 async function registraAttivita(session, clienteId, tipo, descrizione) {
   try {
-    await fetch(SUPABASE_URL + "/rest/v1/attivita_cliente", {
+    await crmFetch(SUPABASE_URL + "/rest/v1/attivita_cliente", {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token },
       body: JSON.stringify({ cliente_id: clienteId, tipo, descrizione }),
@@ -93,7 +142,7 @@ async function registraAttivita(session, clienteId, tipo, descrizione) {
 }
 
 async function caricaFileStorage(session, bucket, path, file) {
-  const res = await fetch(SUPABASE_URL + "/storage/v1/object/" + bucket + "/" + path, {
+  const res = await crmFetch(SUPABASE_URL + "/storage/v1/object/" + bucket + "/" + path, {
     method: "POST",
     headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token },
     body: file,
@@ -116,7 +165,7 @@ async function urlImmagineAutorizzata(session, value) {
   const path = percorsoImmaginePrivata(value);
   if (!path) return value;
   if (!session?.access_token) throw new Error("Sessione scaduta: accedi nuovamente al CRM");
-  const res = await fetch(SUPABASE_URL + "/storage/v1/object/sign/documenti-clienti/" + path.split("/").map(encodeURIComponent).join("/"), {
+  const res = await crmFetch(SUPABASE_URL + "/storage/v1/object/sign/documenti-clienti/" + path.split("/").map(encodeURIComponent).join("/"), {
     method: "POST",
     headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token, "Content-Type": "application/json" },
     body: JSON.stringify({ expiresIn: 3600 }),
@@ -504,7 +553,7 @@ function AdminPanel({ session }) {
   const loadUsers = async () => {
     setLoadingUsers(true);
     try {
-      const res = await fetch(SUPABASE_URL + "/rest/v1/profiles?select=email,role,created_at&order=created_at.desc", {
+      const res = await crmFetch(SUPABASE_URL + "/rest/v1/profiles?select=email,role,created_at&order=created_at.desc", {
         headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token },
       });
       const data = await res.json();
@@ -563,7 +612,7 @@ function Dashboard({ session, goTo }) {
     (async () => {
       try {
         const percorsi = ["clienti?select=id,ragione_sociale", "aziende_mandanti?select=id,nome,colore", "appuntamenti?select=id,titolo,inizio,fine,tipo,stato,cliente_id,azienda_id&order=inizio.asc", "preventivi?select=*", "ordini_confermati?select=*", "note_crm?select=id,titolo,contenuto,created_at&order=created_at.desc&limit=3", "fatturato_commerciale?select=azienda_id,cliente_id,anno,periodicita,periodo,importo", "portafoglio_ordini?select=azienda_id,cliente_id,data_rilevazione,importo", "crm_attivita?select=*&order=scadenza.asc.nullslast,created_at.desc"];
-        const risposte = await Promise.all(percorsi.map(x => fetch(SUPABASE_URL + "/rest/v1/" + x, { headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token } })));
+        const risposte = await Promise.all(percorsi.map(x => crmFetch(SUPABASE_URL + "/rest/v1/" + x, { headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token } })));
         const valori = await Promise.all(risposte.map(r => r.json()));
         const obbligatori = [0,1,2,3];
         for (const i of obbligatori) if (!risposte[i].ok) throw new Error(valori[i]?.message || "Impossibile caricare la dashboard");
@@ -579,7 +628,7 @@ function Dashboard({ session, goTo }) {
     if (azioneAttivita) return;
     setAzioneAttivita(attivita.id); setErroreAttivita("");
     try {
-      const r = await fetch(SUPABASE_URL + "/rest/v1/crm_attivita?id=eq." + encodeURIComponent(attivita.id), {
+      const r = await crmFetch(SUPABASE_URL + "/rest/v1/crm_attivita?id=eq." + encodeURIComponent(attivita.id), {
         method: "PATCH", headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token, "Content-Type": "application/json", Prefer: "return=minimal" },
         body: JSON.stringify({ stato: "completata" })
       });
@@ -684,7 +733,7 @@ function AziendeMandanti({ session }) {
   const load = async () => {
     setLoading(true); setError("");
     try {
-      const res = await fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=*&order=nome.asc", { headers: headers() });
+      const res = await crmFetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=*&order=nome.asc", { headers: headers() });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Errore nel caricamento");
       setList(data);
@@ -721,8 +770,8 @@ function AziendeMandanti({ session }) {
         prezzo_unitario: Number(String(trovaColonna(r, ["prezzo", "listino", "importo"])).replace(",", ".").replace(/[^\d.-]/g, "")) || 0,
       })).filter((v) => v.codice_articolo);
       if (voci.length === 0) { setUploadMsg({ type: "error", text: "Nessuna riga valida trovata." }); setUploadingId(null); return; }
-      await fetch(SUPABASE_URL + "/rest/v1/listini?azienda_id=eq." + aziendaId, { method: "DELETE", headers: headers() });
-      const res = await fetch(SUPABASE_URL + "/rest/v1/listini", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(voci) });
+      await crmFetch(SUPABASE_URL + "/rest/v1/listini?azienda_id=eq." + aziendaId, { method: "DELETE", headers: headers() });
+      const res = await crmFetch(SUPABASE_URL + "/rest/v1/listini", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(voci) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Errore nel salvataggio del listino");
       setUploadMsg({ type: "success", text: "Listino caricato: " + voci.length + " articoli." });
@@ -745,8 +794,8 @@ function AziendeMandanti({ session }) {
         colore: form.colore || "#0b7bc4",
       };
       const res = editingId
-        ? await fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?id=eq." + editingId, { method: "PATCH", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) })
-        : await fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
+        ? await crmFetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?id=eq." + editingId, { method: "PATCH", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) })
+        : await crmFetch(SUPABASE_URL + "/rest/v1/aziende_mandanti", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Errore nel salvataggio");
       resetForm(); load();
@@ -763,7 +812,7 @@ function AziendeMandanti({ session }) {
   const remove = async (id) => {
     if (!window.confirm("Eliminare questa azienda?")) return;
     try {
-      const res = await fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?id=eq." + id, { method: "DELETE", headers: headers() });
+      const res = await crmFetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?id=eq." + id, { method: "DELETE", headers: headers() });
       if (!res.ok) throw new Error("Errore nell'eliminazione");
       load();
     } catch (err) { setError(err.message); }
@@ -896,16 +945,16 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
     setLoading(true); setError("");
     try {
       const results = await Promise.all([
-        fetch(SUPABASE_URL + "/rest/v1/clienti?id=eq." + clienteId + "&select=*", { headers: headers() }),
-        fetch(SUPABASE_URL + "/rest/v1/visite?cliente_id=eq." + clienteId + "&select=*&order=data_visita.desc", { headers: headers() }),
-        fetch(SUPABASE_URL + "/rest/v1/preventivi?cliente_id=eq." + clienteId + "&select=*&order=data.desc", { headers: headers() }),
-        fetch(SUPABASE_URL + "/rest/v1/documenti_cliente?cliente_id=eq." + clienteId + "&select=*&order=created_at.desc", { headers: headers() }),
-        fetch(SUPABASE_URL + "/rest/v1/ordini_confermati?cliente_id=eq." + clienteId + "&select=*&order=data_ordine.desc", { headers: headers() }),
-        fetch(SUPABASE_URL + "/rest/v1/attivita_cliente?cliente_id=eq." + clienteId + "&select=*&order=data.desc", { headers: headers() }),
-        fetch(SUPABASE_URL + "/rest/v1/sedi_cliente?cliente_id=eq." + clienteId + "&select=*&order=created_at.asc", { headers: headers() }),
-        fetch(SUPABASE_URL + "/rest/v1/fatturato_commerciale?cliente_id=eq." + clienteId + "&select=*&order=anno.desc", { headers: headers() }),
-        fetch(SUPABASE_URL + "/rest/v1/portafoglio_ordini?cliente_id=eq." + clienteId + "&select=*&order=data_rilevazione.desc", { headers: headers() }),
-        fetch(SUPABASE_URL + "/rest/v1/opportunita_commerciali?cliente_id=eq." + clienteId + "&select=*&order=created_at.desc", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/clienti?id=eq." + clienteId + "&select=*", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/visite?cliente_id=eq." + clienteId + "&select=*&order=data_visita.desc", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/preventivi?cliente_id=eq." + clienteId + "&select=*&order=data.desc", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/documenti_cliente?cliente_id=eq." + clienteId + "&select=*&order=created_at.desc", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/ordini_confermati?cliente_id=eq." + clienteId + "&select=*&order=data_ordine.desc", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/attivita_cliente?cliente_id=eq." + clienteId + "&select=*&order=data.desc", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/sedi_cliente?cliente_id=eq." + clienteId + "&select=*&order=created_at.asc", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/fatturato_commerciale?cliente_id=eq." + clienteId + "&select=*&order=anno.desc", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/portafoglio_ordini?cliente_id=eq." + clienteId + "&select=*&order=data_rilevazione.desc", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/opportunita_commerciali?cliente_id=eq." + clienteId + "&select=*&order=created_at.desc", { headers: headers() }),
       ]);
       const [dCliente, dVisite, dPreventivi, dDocumenti, dOrdini, dAttivita, dSedi, dFatturato, dPortafoglio, dOpportunita] = await Promise.all(results.map((r) => r.json()));
       const erroriExtra=results.slice(7).map((r,i)=>!r.ok?(["Fatturato","Portafoglio","Opportunità"][i]+": "+([dFatturato,dPortafoglio,dOpportunita][i]?.message||r.status)):null).filter(Boolean);
@@ -922,7 +971,7 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
       setSedi(Array.isArray(dSedi) ? dSedi : []);
       if (dCliente && dCliente[0] && dCliente[0].gruppo_id) {
         try {
-          const rGruppo = await fetch(SUPABASE_URL + "/rest/v1/gruppi_acquisto?id=eq." + dCliente[0].gruppo_id + "&select=*", { headers: headers() });
+          const rGruppo = await crmFetch(SUPABASE_URL + "/rest/v1/gruppi_acquisto?id=eq." + dCliente[0].gruppo_id + "&select=*", { headers: headers() });
           const dGruppo = await rGruppo.json();
           setGruppo(dGruppo && dGruppo[0]);
         } catch (e) { setGruppo(null); }
@@ -941,7 +990,7 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
     try {
       const path = clienteId + "/" + Date.now() + "_" + file.name;
       await caricaFileStorage(session, "documenti-clienti", path, file);
-      await fetch(SUPABASE_URL + "/rest/v1/documenti_cliente", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: clienteId, nome_file: file.name, tipo_documento: "documento", storage_path: path }) });
+      await crmFetch(SUPABASE_URL + "/rest/v1/documenti_cliente", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: clienteId, nome_file: file.name, tipo_documento: "documento", storage_path: path }) });
       await registraAttivita(session, clienteId, "documento", "Caricato documento: " + file.name);
       load();
     } catch (err) { setError(err.message); } finally { setUploadingDoc(false); }
@@ -952,7 +1001,7 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
     try {
       let path = null;
       if (fileOrdine) { path = clienteId + "/ordini/" + Date.now() + "_" + fileOrdine.name; await caricaFileStorage(session, "documenti-clienti", path, fileOrdine); }
-      await fetch(SUPABASE_URL + "/rest/v1/ordini_confermati", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: clienteId, azienda_id: formOrdine.azienda_id, importo: Number(formOrdine.importo) || 0, data_ordine: formOrdine.data_ordine, note: formOrdine.note || null, storage_path: path }) });
+      await crmFetch(SUPABASE_URL + "/rest/v1/ordini_confermati", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: clienteId, azienda_id: formOrdine.azienda_id, importo: Number(formOrdine.importo) || 0, data_ordine: formOrdine.data_ordine, note: formOrdine.note || null, storage_path: path }) });
       await registraAttivita(session, clienteId, "ordine", "Registrato ordine confermato di " + formattaEuro(formOrdine.importo));
       setFormOrdine({ azienda_id: "", importo: "", data_ordine: new Date().toISOString().slice(0, 10), note: "" });
       setFileOrdine(null); load();
@@ -961,7 +1010,7 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
   const rimuoviOrdine = async (id) => {
     if (!window.confirm("Eliminare questo ordine confermato?")) return;
     try {
-      await fetch(SUPABASE_URL + "/rest/v1/ordini_confermati?id=eq." + id, { method: "DELETE", headers: headers() });
+      await crmFetch(SUPABASE_URL + "/rest/v1/ordini_confermati?id=eq." + id, { method: "DELETE", headers: headers() });
       await registraAttivita(session, clienteId, "ordine", "Ordine confermato eliminato");
       load();
     } catch (err) { setError(err.message); }
@@ -971,14 +1020,14 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
     setSalvandoSede(true); setError("");
     try {
       const coords = await geocodificaIndirizzo(nuovaSede.indirizzo);
-      await fetch(SUPABASE_URL + "/rest/v1/sedi_cliente", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: clienteId, nome_sede: nuovaSede.nome_sede || null, indirizzo: nuovaSede.indirizzo, latitudine: coords ? coords.lat : null, longitudine: coords ? coords.lon : null }) });
+      await crmFetch(SUPABASE_URL + "/rest/v1/sedi_cliente", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: clienteId, nome_sede: nuovaSede.nome_sede || null, indirizzo: nuovaSede.indirizzo, latitudine: coords ? coords.lat : null, longitudine: coords ? coords.lon : null }) });
       await registraAttivita(session, clienteId, "sede", "Aggiunta sede: " + (nuovaSede.nome_sede || nuovaSede.indirizzo));
       setNuovaSede({ nome_sede: "", indirizzo: "" }); load();
     } catch (err) { setError(err.message); } finally { setSalvandoSede(false); }
   };
   const rimuoviSede = async (id) => {
     if (!window.confirm("Eliminare questa sede?")) return;
-    try { await fetch(SUPABASE_URL + "/rest/v1/sedi_cliente?id=eq." + id, { method: "DELETE", headers: headers() }); load(); } catch (err) { setError(err.message); }
+    try { await crmFetch(SUPABASE_URL + "/rest/v1/sedi_cliente?id=eq." + id, { method: "DELETE", headers: headers() }); load(); } catch (err) { setError(err.message); }
   };
 
   const fatturatoAnno=fatturatoCliente.filter(f=>Number(f.anno)===Number(annoEconomico));
@@ -1208,8 +1257,8 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
     setLoading(true); setError("");
     try {
       const results = await Promise.all([
-        fetch(SUPABASE_URL + "/rest/v1/clienti?select=*&order=ragione_sociale.asc", { headers: headers() }),
-        fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome&order=nome.asc", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/clienti?select=*&order=ragione_sociale.asc", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome&order=nome.asc", { headers: headers() }),
       ]);
       const dataClienti = await results[0].json();
       const dataAziende = await results[1].json();
@@ -1232,15 +1281,15 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
     if (!nuovaSedeForm.indirizzo.trim() || !editingId) return;
     try {
       const coords = await geocodificaIndirizzo(nuovaSedeForm.indirizzo);
-      await fetch(SUPABASE_URL + "/rest/v1/sedi_cliente", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: editingId, nome_sede: nuovaSedeForm.nome_sede || null, indirizzo: nuovaSedeForm.indirizzo, latitudine: coords ? coords.lat : null, longitudine: coords ? coords.lon : null }) });
+      await crmFetch(SUPABASE_URL + "/rest/v1/sedi_cliente", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: editingId, nome_sede: nuovaSedeForm.nome_sede || null, indirizzo: nuovaSedeForm.indirizzo, latitudine: coords ? coords.lat : null, longitudine: coords ? coords.lon : null }) });
       setNuovaSedeForm({ nome_sede: "", indirizzo: "" });
-      const res = await fetch(SUPABASE_URL + "/rest/v1/sedi_cliente?cliente_id=eq." + editingId + "&select=*", { headers: headers() });
+      const res = await crmFetch(SUPABASE_URL + "/rest/v1/sedi_cliente?cliente_id=eq." + editingId + "&select=*", { headers: headers() });
       const data = await res.json();
       if (res.ok) setSediEsistenti(data);
     } catch (err) { setError(err.message); }
   };
   const rimuoviSedeEsistente = async (id) => {
-    try { await fetch(SUPABASE_URL + "/rest/v1/sedi_cliente?id=eq." + id, { method: "DELETE", headers: headers() }); setSediEsistenti((s) => s.filter((x) => x.id !== id)); } catch (err) { setError(err.message); }
+    try { await crmFetch(SUPABASE_URL + "/rest/v1/sedi_cliente?id=eq." + id, { method: "DELETE", headers: headers() }); setSediEsistenti((s) => s.filter((x) => x.id !== id)); } catch (err) { setError(err.message); }
   };
 
   const toggleAzienda = (nome) => {
@@ -1269,8 +1318,8 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
         ...(coords ? { latitudine: coords.lat, longitudine: coords.lon } : {}),
       };
       const res = editingId
-        ? await fetch(SUPABASE_URL + "/rest/v1/clienti?id=eq." + editingId, { method: "PATCH", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) })
-        : await fetch(SUPABASE_URL + "/rest/v1/clienti", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
+        ? await crmFetch(SUPABASE_URL + "/rest/v1/clienti?id=eq." + editingId, { method: "PATCH", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) })
+        : await crmFetch(SUPABASE_URL + "/rest/v1/clienti", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Errore nel salvataggio");
       const idSalvato = editingId || (data && data[0] && data[0].id);
@@ -1279,7 +1328,7 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
         for (const sede of sediForm) {
           try {
             const coordsSede = await geocodificaIndirizzo(sede.indirizzo);
-            await fetch(SUPABASE_URL + "/rest/v1/sedi_cliente", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: idSalvato, nome_sede: sede.nome_sede || null, indirizzo: sede.indirizzo, latitudine: coordsSede ? coordsSede.lat : null, longitudine: coordsSede ? coordsSede.lon : null }) });
+            await crmFetch(SUPABASE_URL + "/rest/v1/sedi_cliente", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: idSalvato, nome_sede: sede.nome_sede || null, indirizzo: sede.indirizzo, latitudine: coordsSede ? coordsSede.lat : null, longitudine: coordsSede ? coordsSede.lon : null }) });
           } catch (e) {}
         }
       }
@@ -1296,7 +1345,7 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
       competitor: (cliente.competitor || []).join(", "), note: cliente.note || "",
     });
     try {
-      const res = await fetch(SUPABASE_URL + "/rest/v1/sedi_cliente?cliente_id=eq." + cliente.id + "&select=*", { headers: headers() });
+      const res = await crmFetch(SUPABASE_URL + "/rest/v1/sedi_cliente?cliente_id=eq." + cliente.id + "&select=*", { headers: headers() });
       const data = await res.json();
       if (res.ok) setSediEsistenti(data);
     } catch (e) {}
@@ -1305,7 +1354,7 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
   const remove = async (id) => {
     if (!window.confirm("Eliminare questo cliente?")) return;
     try {
-      const res = await fetch(SUPABASE_URL + "/rest/v1/clienti?id=eq." + id, { method: "DELETE", headers: headers() });
+      const res = await crmFetch(SUPABASE_URL + "/rest/v1/clienti?id=eq." + id, { method: "DELETE", headers: headers() });
       if (!res.ok) throw new Error("Errore nell'eliminazione");
       load();
     } catch (err) { setError(err.message); }
@@ -1448,7 +1497,7 @@ function CalendarioVisite({ session }) {
     setLoading(true); setError("");
     try {
       const urls = ["clienti?select=id,ragione_sociale&order=ragione_sociale.asc", "aziende_mandanti?select=id,nome,colore&order=nome.asc", "sedi_cliente?select=id,cliente_id,nome_sede,indirizzo", "appuntamenti?select=*&order=inizio.asc", "crm_attivita?select=*&order=scadenza.asc.nullslast"];
-      const results = await Promise.all(urls.map(u => fetch(SUPABASE_URL + "/rest/v1/" + u, { headers: headers() })));
+      const results = await Promise.all(urls.map(u => crmFetch(SUPABASE_URL + "/rest/v1/" + u, { headers: headers() })));
       const values = await Promise.all(results.map(r => r.json()));
       results.forEach((r,i) => { if (!r.ok) throw new Error(values[i].message || "Errore nel caricamento dell'agenda"); });
       setClienti(values[0]); setAziende(values[1]); setSedi(values[2]); setAppuntamenti(values[3]); setAttivitaAgenda(Array.isArray(values[4]) ? values[4] : []);
@@ -1477,14 +1526,14 @@ function CalendarioVisite({ session }) {
     try {
       const body = { titolo: form.titolo.trim(), tipo: form.tipo, inizio: inizio.toISOString(), fine: fine.toISOString(), stato: form.stato, cliente_id: form.cliente_id || null, sede_id: form.sede_id || null, azienda_id: form.azienda_id || null, luogo: form.luogo || null, descrizione: form.descrizione || null, note: form.note || null, promemoria_minuti: Number(form.promemoria_minuti), ...(!editingId ? {user_id:session.user.id} : {}) };
       const endpoint = SUPABASE_URL + "/rest/v1/appuntamenti" + (editingId ? "?id=eq." + editingId : "");
-      const res = await fetch(endpoint, { method: editingId ? "PATCH" : "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
+      const res = await crmFetch(endpoint, { method: editingId ? "PATCH" : "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
       if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.message || "Errore nel salvataggio"); }
       setMostraForm(false); setEditingId(null); await load();
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   };
   const remove = async (id) => {
     if (!window.confirm("Eliminare questo appuntamento?")) return;
-    try { const res = await fetch(SUPABASE_URL + "/rest/v1/appuntamenti?id=eq." + id, { method: "DELETE", headers: headers() }); if (!res.ok) throw new Error("Eliminazione non riuscita"); setMostraForm(false); await load(); } catch (e) { setError(e.message); }
+    try { const res = await crmFetch(SUPABASE_URL + "/rest/v1/appuntamenti?id=eq." + id, { method: "DELETE", headers: headers() }); if (!res.ok) throw new Error("Eliminazione non riuscita"); setMostraForm(false); await load(); } catch (e) { setError(e.message); }
   };
   const cambiaPeriodo = (n) => { const d = new Date(currentDate); if (viewMode === "mese") d.setMonth(d.getMonth()+n); else d.setDate(d.getDate() + n*(viewMode === "settimana" ? 7 : 1)); setCurrentDate(d); };
   const eventiGiorno = (d) => appuntamenti.filter(e => isoLocale(new Date(e.inizio)) === isoLocale(d)).sort((a,b) => new Date(a.inizio)-new Date(b.inizio));
@@ -1692,9 +1741,9 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
     setLoading(true); setError("");
     try {
       const results = await Promise.all([
-        fetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale&order=ragione_sociale.asc", { headers: headers() }),
-        fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome&order=nome.asc", { headers: headers() }),
-        fetch(SUPABASE_URL + "/rest/v1/preventivi?select=*&order=created_at.desc", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale&order=ragione_sociale.asc", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome&order=nome.asc", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/preventivi?select=*&order=created_at.desc", { headers: headers() }),
       ]);
       const dataClienti = await results[0].json();
       const dataAziende = await results[1].json();
@@ -1715,7 +1764,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
   const cercaSuggerimenti = async (rigaId, testo) => {
     if (!header.azienda_id || !testo || testo.length < 2) { setSuggerimenti((s) => ({ ...s, [rigaId]: [] })); return; }
     try {
-      const res = await fetch(SUPABASE_URL + "/rest/v1/listini?azienda_id=eq." + header.azienda_id + "&codice_articolo=ilike.*" + encodeURIComponent(testo) + "*&select=*&limit=6", { headers: headers() });
+      const res = await crmFetch(SUPABASE_URL + "/rest/v1/listini?azienda_id=eq." + header.azienda_id + "&codice_articolo=ilike.*" + encodeURIComponent(testo) + "*&select=*&limit=6", { headers: headers() });
       const data = await res.json();
       if (res.ok) setSuggerimenti((s) => ({ ...s, [rigaId]: data }));
     } catch (e) {}
@@ -1753,8 +1802,8 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
       };
       // Non richiedere il record di ritorno: la tabella preventivi potrebbe non avere una policy SELECT.
       const res = editingId
-        ? await fetch(SUPABASE_URL + "/rest/v1/preventivi?id=eq." + editingId, { method: "PATCH", headers: { ...headers(), Prefer: "return=minimal" }, body: JSON.stringify(body) })
-        : await fetch(SUPABASE_URL + "/rest/v1/preventivi", { method: "POST", headers: { ...headers(), Prefer: "return=minimal" }, body: JSON.stringify(body) });
+        ? await crmFetch(SUPABASE_URL + "/rest/v1/preventivi?id=eq." + editingId, { method: "PATCH", headers: { ...headers(), Prefer: "return=minimal" }, body: JSON.stringify(body) })
+        : await crmFetch(SUPABASE_URL + "/rest/v1/preventivi", { method: "POST", headers: { ...headers(), Prefer: "return=minimal" }, body: JSON.stringify(body) });
       if (!res.ok) {
         const errore = await res.json().catch(() => null);
         throw new Error(errore?.message || "Errore nel salvataggio (HTTP " + res.status + ")");
@@ -1780,7 +1829,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
     if (!preventivoIniziale) return;
     (async () => {
       try {
-        const res = await fetch(SUPABASE_URL + "/rest/v1/preventivi?id=eq." + preventivoIniziale + "&select=*", { headers: headers() });
+        const res = await crmFetch(SUPABASE_URL + "/rest/v1/preventivi?id=eq." + preventivoIniziale + "&select=*", { headers: headers() });
         const data = await res.json();
         if (res.ok && data && data[0]) modifica(data[0]);
       } catch (e) {}
@@ -1791,15 +1840,15 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
 
   const elimina = async (id) => {
     if (!window.confirm("Eliminare questo preventivo?")) return;
-    try { const res = await fetch(SUPABASE_URL + "/rest/v1/preventivi?id=eq." + id, { method: "DELETE", headers: headers() }); if (!res.ok) throw new Error("Errore nell'eliminazione"); load(); } catch (err) { setError(err.message); }
+    try { const res = await crmFetch(SUPABASE_URL + "/rest/v1/preventivi?id=eq." + id, { method: "DELETE", headers: headers() }); if (!res.ok) throw new Error("Errore nell'eliminazione"); load(); } catch (err) { setError(err.message); }
   };
 
   const segnaComeFatturato = async (p) => {
     if (!window.confirm("Creare un ordine confermato da questo preventivo?")) return;
     try {
       const totCalc = calcolaTotaliPreventivo(p, p.righe || []);
-      await fetch(SUPABASE_URL + "/rest/v1/ordini_confermati", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: p.cliente_id, azienda_id: p.azienda_id, importo: totCalc.totaleFinale, data_ordine: new Date().toISOString().slice(0, 10), note: p.rif ? "Da preventivo " + p.rif : "Da preventivo" }) });
-      await fetch(SUPABASE_URL + "/rest/v1/preventivi?id=eq." + p.id, { method: "PATCH", headers: headers(), body: JSON.stringify({ fatturato: true }) });
+      await crmFetch(SUPABASE_URL + "/rest/v1/ordini_confermati", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: p.cliente_id, azienda_id: p.azienda_id, importo: totCalc.totaleFinale, data_ordine: new Date().toISOString().slice(0, 10), note: p.rif ? "Da preventivo " + p.rif : "Da preventivo" }) });
+      await crmFetch(SUPABASE_URL + "/rest/v1/preventivi?id=eq." + p.id, { method: "PATCH", headers: headers(), body: JSON.stringify({ fatturato: true }) });
       load();
     } catch (err) { setError(err.message); }
   };
@@ -2064,8 +2113,8 @@ function MappaClienti({ session }) {
       setLoading(true); setError("");
       try {
         const results = await Promise.all([
-          fetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale,indirizzo,classificazione,latitudine,longitudine", { headers: headers() }),
-          fetch(SUPABASE_URL + "/rest/v1/sedi_cliente?select=*", { headers: headers() }),
+          crmFetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale,indirizzo,classificazione,latitudine,longitudine", { headers: headers() }),
+          crmFetch(SUPABASE_URL + "/rest/v1/sedi_cliente?select=*", { headers: headers() }),
         ]);
         const data = await results[0].json();
         const dataSedi = await results[1].json();
@@ -2131,10 +2180,10 @@ function Statistiche({ session }) {
       setLoading(true); setError("");
       try {
         const results = await Promise.all([
-          fetch(SUPABASE_URL + "/rest/v1/ordini_confermati?select=*", { headers: headers() }),
-          fetch(SUPABASE_URL + "/rest/v1/preventivi?select=id,cliente_id,azienda_id,data,stato,righe,imballo_modalita,imballo_percentuale,imballo_valore,trasporto_modalita,trasporto_percentuale,trasporto_valore,iva_modalita,iva_percentuale,iva_valore", { headers: headers() }),
-          fetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale", { headers: headers() }),
-          fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome", { headers: headers() }),
+          crmFetch(SUPABASE_URL + "/rest/v1/ordini_confermati?select=*", { headers: headers() }),
+          crmFetch(SUPABASE_URL + "/rest/v1/preventivi?select=id,cliente_id,azienda_id,data,stato,righe,imballo_modalita,imballo_percentuale,imballo_valore,trasporto_modalita,trasporto_percentuale,trasporto_valore,iva_modalita,iva_percentuale,iva_valore", { headers: headers() }),
+          crmFetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale", { headers: headers() }),
+          crmFetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome", { headers: headers() }),
         ]);
         const [dOrdini, dPreventivi, dClienti, dAziende] = await Promise.all(results.map((r) => r.json()));
         setOrdini(Array.isArray(dOrdini) ? dOrdini : []);
@@ -2216,10 +2265,10 @@ function Fatturato({ session }) {
       setLoading(true); setError("");
       try {
         const results = await Promise.all([
-          fetch(SUPABASE_URL + "/rest/v1/ordini_confermati?select=*", { headers: headers() }),
-          fetch(SUPABASE_URL + "/rest/v1/preventivi?select=id,cliente_id,azienda_id,data,stato,righe,imballo_modalita,imballo_percentuale,imballo_valore,trasporto_modalita,trasporto_percentuale,trasporto_valore,iva_modalita,iva_percentuale,iva_valore", { headers: headers() }),
-          fetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale", { headers: headers() }),
-          fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome", { headers: headers() }),
+          crmFetch(SUPABASE_URL + "/rest/v1/ordini_confermati?select=*", { headers: headers() }),
+          crmFetch(SUPABASE_URL + "/rest/v1/preventivi?select=id,cliente_id,azienda_id,data,stato,righe,imballo_modalita,imballo_percentuale,imballo_valore,trasporto_modalita,trasporto_percentuale,trasporto_valore,iva_modalita,iva_percentuale,iva_valore", { headers: headers() }),
+          crmFetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale", { headers: headers() }),
+          crmFetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome", { headers: headers() }),
         ]);
         const [dOrdini, dPreventivi, dClienti, dAziende] = await Promise.all(results.map((r) => r.json()));
         setOrdini(Array.isArray(dOrdini) ? dOrdini : []);
@@ -2325,10 +2374,10 @@ function RegistroOrdini({ session, apriPreventivo }) {
     setLoading(true); setError("");
     try {
       const results = await Promise.all([
-        fetch(SUPABASE_URL + "/rest/v1/ordini_confermati?select=*", { headers: headers() }),
-        fetch(SUPABASE_URL + "/rest/v1/preventivi?select=*", { headers: headers() }),
-        fetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale", { headers: headers() }),
-        fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/ordini_confermati?select=*", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/preventivi?select=*", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome", { headers: headers() }),
       ]);
       const [dOrdini, dPreventivi, dClienti, dAziende] = await Promise.all(results.map((r) => r.json()));
       setOrdini(Array.isArray(dOrdini) ? dOrdini : []);
@@ -2357,13 +2406,13 @@ function RegistroOrdini({ session, apriPreventivo }) {
   const salvaModificaOrdine = async () => {
     setSalvandoOrdine(true); setError("");
     try {
-      await fetch(SUPABASE_URL + "/rest/v1/ordini_confermati?id=eq." + ordineInModifica, { method: "PATCH", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ azienda_id: formOrdine.azienda_id, importo: Number(formOrdine.importo) || 0, data_ordine: formOrdine.data_ordine, note: formOrdine.note || null }) });
+      await crmFetch(SUPABASE_URL + "/rest/v1/ordini_confermati?id=eq." + ordineInModifica, { method: "PATCH", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ azienda_id: formOrdine.azienda_id, importo: Number(formOrdine.importo) || 0, data_ordine: formOrdine.data_ordine, note: formOrdine.note || null }) });
       setOrdineInModifica(null); load();
     } catch (err) { setError(err.message); } finally { setSalvandoOrdine(false); }
   };
   const eliminaOrdine = async (idOrdine) => {
     if (!window.confirm("Eliminare questo ordine confermato?")) return;
-    try { await fetch(SUPABASE_URL + "/rest/v1/ordini_confermati?id=eq." + idOrdine, { method: "DELETE", headers: headers() }); load(); } catch (err) { setError(err.message); }
+    try { await crmFetch(SUPABASE_URL + "/rest/v1/ordini_confermati?id=eq." + idOrdine, { method: "DELETE", headers: headers() }); load(); } catch (err) { setError(err.message); }
   };
 
   const tutteLeRighe = [...righeOrdini, ...righePreventivi]
@@ -2450,9 +2499,9 @@ function PortafoglioOrdini({ session }) {
     setLoading(true); setError("");
     try {
       const results = await Promise.all([
-        fetch(SUPABASE_URL + "/rest/v1/preventivi?stato=eq.accettato&fatturato=eq.false&select=*", { headers: headers() }),
-        fetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale", { headers: headers() }),
-        fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/preventivi?stato=eq.accettato&fatturato=eq.false&select=*", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome", { headers: headers() }),
       ]);
       const [dPreventivi, dClienti, dAziende] = await Promise.all(results.map((r) => r.json()));
       setPreventivi(Array.isArray(dPreventivi) ? dPreventivi : []);
@@ -2469,8 +2518,8 @@ function PortafoglioOrdini({ session }) {
     if (!window.confirm("Creare un ordine confermato da questo preventivo?")) return;
     try {
       const tot = calcolaTotaliPreventivo(pv, pv.righe || []);
-      await fetch(SUPABASE_URL + "/rest/v1/ordini_confermati", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: pv.cliente_id, azienda_id: pv.azienda_id, importo: tot.totaleFinale, data_ordine: new Date().toISOString().slice(0, 10), note: pv.rif ? "Da preventivo " + pv.rif : "Da preventivo" }) });
-      await fetch(SUPABASE_URL + "/rest/v1/preventivi?id=eq." + pv.id, { method: "PATCH", headers: headers(), body: JSON.stringify({ fatturato: true }) });
+      await crmFetch(SUPABASE_URL + "/rest/v1/ordini_confermati", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify({ cliente_id: pv.cliente_id, azienda_id: pv.azienda_id, importo: tot.totaleFinale, data_ordine: new Date().toISOString().slice(0, 10), note: pv.rif ? "Da preventivo " + pv.rif : "Da preventivo" }) });
+      await crmFetch(SUPABASE_URL + "/rest/v1/preventivi?id=eq." + pv.id, { method: "PATCH", headers: headers(), body: JSON.stringify({ fatturato: true }) });
       load();
     } catch (err) { setError(err.message); }
   };
@@ -2526,9 +2575,9 @@ function GruppiAcquisto({ session, gruppoIniziale, onGruppoAperto }) {
     setLoading(true); setError("");
     try {
       const results = await Promise.all([
-        fetch(SUPABASE_URL + "/rest/v1/gruppi_acquisto?select=*&order=nome.asc", { headers: headers() }),
-        fetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale,gruppo_id&order=ragione_sociale.asc", { headers: headers() }),
-        fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome&order=nome.asc", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/gruppi_acquisto?select=*&order=nome.asc", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale,gruppo_id&order=ragione_sociale.asc", { headers: headers() }),
+        crmFetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome&order=nome.asc", { headers: headers() }),
       ]);
       const [dGruppi, dClienti, dAziende] = await Promise.all(results.map((r) => r.json()));
       setLista(Array.isArray(dGruppi) ? dGruppi : []);
@@ -2567,8 +2616,8 @@ function GruppiAcquisto({ session, gruppoIniziale, onGruppoAperto }) {
     try {
       const body = { nome: form.nome, note: form.note || null, condizioni_per_azienda: form.condizioni_per_azienda };
       const res = editingId
-        ? await fetch(SUPABASE_URL + "/rest/v1/gruppi_acquisto?id=eq." + editingId, { method: "PATCH", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) })
-        : await fetch(SUPABASE_URL + "/rest/v1/gruppi_acquisto", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
+        ? await crmFetch(SUPABASE_URL + "/rest/v1/gruppi_acquisto?id=eq." + editingId, { method: "PATCH", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) })
+        : await crmFetch(SUPABASE_URL + "/rest/v1/gruppi_acquisto", { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Errore nel salvataggio");
       resetForm(); load();
@@ -2576,10 +2625,10 @@ function GruppiAcquisto({ session, gruppoIniziale, onGruppoAperto }) {
   };
   const elimina = async (id) => {
     if (!window.confirm("Eliminare questo gruppo d'acquisto? I clienti resteranno ma perderanno il collegamento al gruppo.")) return;
-    try { const res = await fetch(SUPABASE_URL + "/rest/v1/gruppi_acquisto?id=eq." + id, { method: "DELETE", headers: headers() }); if (!res.ok) throw new Error("Errore nell'eliminazione"); load(); } catch (err) { setError(err.message); }
+    try { const res = await crmFetch(SUPABASE_URL + "/rest/v1/gruppi_acquisto?id=eq." + id, { method: "DELETE", headers: headers() }); if (!res.ok) throw new Error("Errore nell'eliminazione"); load(); } catch (err) { setError(err.message); }
   };
   const toggleClienteNelGruppo = async (clienteId, gruppoId, attualmenteDentro) => {
-    try { await fetch(SUPABASE_URL + "/rest/v1/clienti?id=eq." + clienteId, { method: "PATCH", headers: headers(), body: JSON.stringify({ gruppo_id: attualmenteDentro ? null : gruppoId }) }); load(); } catch (err) { setError(err.message); }
+    try { await crmFetch(SUPABASE_URL + "/rest/v1/clienti?id=eq." + clienteId, { method: "PATCH", headers: headers(), body: JSON.stringify({ gruppo_id: attualmenteDentro ? null : gruppoId }) }); load(); } catch (err) { setError(err.message); }
   };
 
   const inputStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
@@ -2661,7 +2710,7 @@ function StoricoVisiteCRM({ session }) {
   const [visite,setVisite]=useState([]);
   const [clienti,setClienti]=useState([]);
   const [errore,setErrore]=useState("");
-  useEffect(()=>{let active=true;(async()=>{try{const h={apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+session.access_token};const [rv,rc]=await Promise.all([fetch(SUPABASE_URL+"/rest/v1/visite?select=*&order=data_visita.desc",{headers:h}),fetch(SUPABASE_URL+"/rest/v1/clienti?select=id,ragione_sociale",{headers:h})]);const [v,c]=await Promise.all([rv.json(),rc.json()]);if(!rv.ok||!rc.ok)throw new Error(v?.message||c?.message||"Errore nel caricamento");if(active){setVisite(v);setClienti(c)}}catch(e){if(active)setErrore(e.message)}})();return()=>{active=false}},[session]);
+  useEffect(()=>{let active=true;(async()=>{try{const h={apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+session.access_token};const [rv,rc]=await Promise.all([crmFetch(SUPABASE_URL+"/rest/v1/visite?select=*&order=data_visita.desc",{headers:h}),crmFetch(SUPABASE_URL+"/rest/v1/clienti?select=id,ragione_sociale",{headers:h})]);const [v,c]=await Promise.all([rv.json(),rc.json()]);if(!rv.ok||!rc.ok)throw new Error(v?.message||c?.message||"Errore nel caricamento");if(active){setVisite(v);setClienti(c)}}catch(e){if(active)setErrore(e.message)}})();return()=>{active=false}},[session]);
   return <div><div className="matrice-welcome"><div><h1>Storico visite</h1><p>Registro delle visite commerciali salvate in precedenza.</p></div></div>{errore&&<p style={{color:"#b42318"}}>{errore}</p>}<div style={{background:"#fff",padding:20,borderRadius:14,border:"1px solid #dce5f3"}}>{visite.length===0?<p className="matrice-empty">Nessuna visita storica registrata.</p>:visite.map(v=><article key={v.id} style={{padding:"15px 4px",borderBottom:"1px solid #edf1f7"}}><strong>{clienti.find(c=>c.id===v.cliente_id)?.ragione_sociale||"Cliente non specificato"}</strong><span style={{marginLeft:12,fontSize:12,color:"#66758d"}}>{v.data_visita?new Date(v.data_visita+"T12:00:00").toLocaleDateString("it-IT"):""}</span>{v.argomenti_trattati&&<p style={{fontSize:12,margin:"8px 0"}}>Argomenti: {v.argomenti_trattati}</p>}{v.cataloghi_lasciati&&<p style={{fontSize:12,margin:"8px 0"}}>Cataloghi: {v.cataloghi_lasciati}</p>}{v.note&&<p style={{fontSize:12,margin:"8px 0"}}>Note: {v.note}</p>}</article>)}</div></div>;
 }
 
@@ -2674,7 +2723,7 @@ function NoteCRM({ session }) {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const headers = () => ({ "Content-Type":"application/json", apikey:SUPABASE_ANON_KEY, Authorization:"Bearer "+session.access_token });
-  const fetchJson = async (url, options={}) => { const res=await fetch(SUPABASE_URL+"/rest/v1/"+url,{...options,headers:headers()}); const raw=await res.text(); const json=raw?JSON.parse(raw):null; if(!res.ok)throw new Error(json?.message||"Errore di connessione");return json; };
+  const fetchJson = async (url, options={}) => { const res=await crmFetch(SUPABASE_URL+"/rest/v1/"+url,{...options,headers:headers()}); const raw=await res.text(); const json=raw?JSON.parse(raw):null; if(!res.ok)throw new Error(json?.message||"Errore di connessione");return json; };
   const load = async () => { try { setError(""); const [n,c]=await Promise.all([fetchJson("note_crm?select=*&order=updated_at.desc"),fetchJson("clienti?select=id,ragione_sociale&order=ragione_sociale.asc")]);setNote(n||[]);setClienti(c||[]); }catch(e){setError(e.message+". Verifica di aver creato la tabella note_crm in Supabase sviluppo.");} };
   useEffect(()=>{load();},[]);
   const reset = () => {setEditing(null);setForm({titolo:"",contenuto:"",cliente_id:""});};
@@ -2710,7 +2759,7 @@ function ControlloCommerciale({ session }) {
   const [form,setForm] = useState(vuoto);
   const headers = () => ({ "Content-Type":"application/json", apikey:SUPABASE_ANON_KEY, Authorization:"Bearer "+session.access_token });
   const request = async (path, options={}) => {
-    const response = await fetch(SUPABASE_URL+"/rest/v1/"+path,{...options,headers:{...headers(),...(options.headers||{})}});
+    const response = await crmFetch(SUPABASE_URL+"/rest/v1/"+path,{...options,headers:{...headers(),...(options.headers||{})}});
     const raw = await response.text();
     let result = null;
     try {result=raw?JSON.parse(raw):null;} catch {result=raw;}
@@ -2833,7 +2882,7 @@ function PipelineCommerciale({session, preventivoDaConvertire, onPreventivoRicev
   const [filtroAzioni,setFiltroAzioni]=useState("tutte");
   const headers=()=>({"Content-Type":"application/json",apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+session.access_token});
   async function request(path,opts={}) {
-    const r=await fetch(SUPABASE_URL+"/rest/v1/"+path,{...opts,headers:{...headers(),...(opts.headers||{})}});
+    const r=await crmFetch(SUPABASE_URL+"/rest/v1/"+path,{...opts,headers:{...headers(),...(opts.headers||{})}});
     const raw=await r.text();
     let data=null;try{data=raw?JSON.parse(raw):null;}catch{data=raw;}
     if(!r.ok)throw new Error(data?.message||String(data)||"Errore Supabase");
@@ -3051,7 +3100,7 @@ function AttivaNotificheCRM({ session }) {
       const p256dh = sub.getKey("p256dh");
       const auth = sub.getKey("auth");
       if (!p256dh || !auth) throw new Error("Il dispositivo non ha restituito le chiavi push.");
-      const risposta = await fetch(SUPABASE_URL + "/rest/v1/push_subscriptions?on_conflict=endpoint", {
+      const risposta = await crmFetch(SUPABASE_URL + "/rest/v1/push_subscriptions?on_conflict=endpoint", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -3122,9 +3171,9 @@ function AttivitaCRM({ session }) {
     setLoading(true); setErrore("");
     try {
       const [ra, rc, rm] = await Promise.all([
-        fetch(endpoint + "?select=*&order=scadenza.asc.nullslast,created_at.desc", { headers }),
-        fetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale,classificazione&order=ragione_sociale.asc", { headers }),
-        fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome&order=nome.asc", { headers }),
+        crmFetch(endpoint + "?select=*&order=scadenza.asc.nullslast,created_at.desc", { headers }),
+        crmFetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale,classificazione&order=ragione_sociale.asc", { headers }),
+        crmFetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome&order=nome.asc", { headers }),
       ]);
       if (!ra.ok) throw new Error("Impossibile leggere le attività. Verifica di aver eseguito lo script SQL della nuova sezione.");
       const [a, c, m] = await Promise.all([ra.json(), rc.ok ? rc.json() : [], rm.ok ? rm.json() : []]);
@@ -3141,7 +3190,7 @@ function AttivitaCRM({ session }) {
     setSaving(true); setErrore("");
     try {
       const payload = { titolo: form.titolo.trim(), tipo: form.tipo, scadenza: form.scadenza ? new Date(form.scadenza.length === 10 ? form.scadenza + "T00:00" : form.scadenza).toISOString() : null, priorita: form.priorita, stato: form.stato, cliente_id: form.cliente_id || null, azienda_id: form.azienda_id || null, note: form.note.trim(), user_id: session.user.id };
-      const res = await fetch(endpoint + (editingId ? "?id=eq." + encodeURIComponent(editingId) : ""), { method: editingId ? "PATCH" : "POST", headers: { ...headers, Prefer: "return=minimal" }, body: JSON.stringify(payload) });
+      const res = await crmFetch(endpoint + (editingId ? "?id=eq." + encodeURIComponent(editingId) : ""), { method: editingId ? "PATCH" : "POST", headers: { ...headers, Prefer: "return=minimal" }, body: JSON.stringify(payload) });
       if (!res.ok) { const info = await res.json().catch(() => ({})); throw new Error(info.message || "Salvataggio non riuscito"); }
       reset(); await carica();
     } catch (e) { setErrore(e.message || "Errore di salvataggio"); }
@@ -3159,7 +3208,7 @@ function AttivitaCRM({ session }) {
     setErrore("");
     const stato = a.stato === "completata" ? "da_fare" : "completata";
     try {
-      const res = await fetch(endpoint + "?id=eq." + encodeURIComponent(a.id), { method: "PATCH", headers, body: JSON.stringify({ stato }) });
+      const res = await crmFetch(endpoint + "?id=eq." + encodeURIComponent(a.id), { method: "PATCH", headers, body: JSON.stringify({ stato }) });
       if (!res.ok) throw new Error("Impossibile aggiornare lo stato");
       setAttivita(prev => prev.map(x => x.id === a.id ? { ...x, stato } : x));
       setMessaggioAttivita(stato === "completata" ? "Attività completata. Puoi recuperarla dal filtro Completate." : "Attività ripristinata tra quelle da fare.");
@@ -3168,7 +3217,7 @@ function AttivitaCRM({ session }) {
   const elimina = async a => {
     if (!window.confirm("Eliminare definitivamente questa attività?")) return;
     try {
-      const res = await fetch(endpoint + "?id=eq." + encodeURIComponent(a.id), { method: "DELETE", headers });
+      const res = await crmFetch(endpoint + "?id=eq." + encodeURIComponent(a.id), { method: "DELETE", headers });
       if (!res.ok) throw new Error("Impossibile eliminare l'attività");
       setAttivita(prev => prev.filter(x => x.id !== a.id));
       if (editingId === a.id) reset();
@@ -3289,7 +3338,7 @@ function CentroOperativoCRM({ session, goTo }) {
     };
     const esito = await Promise.all(Object.entries(percorsi).map(async ([nome, percorso]) => {
       try {
-        const r = await fetch(SUPABASE_URL + "/rest/v1/" + percorso, { headers });
+        const r = await crmFetch(SUPABASE_URL + "/rest/v1/" + percorso, { headers });
         const payload = await r.json().catch(() => null);
         if (!r.ok || !Array.isArray(payload)) throw new Error(payload?.message || "Lettura non autorizzata");
         return { nome, payload };
@@ -3382,7 +3431,7 @@ function RicercaGlobaleCRM({session, chiudi, naviga}) {
       ["note_crm?select=id,titolo,contenuto", "Nota", "note", x=>x.titolo],
     ];
     Promise.all(fonti.map(async ([path,tipo,pagina,label])=>{
-      const r=await fetch(SUPABASE_URL+"/rest/v1/"+path,{headers:{apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+session.access_token}});
+      const r=await crmFetch(SUPABASE_URL+"/rest/v1/"+path,{headers:{apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+session.access_token}});
       if(!r.ok)throw Error(tipo+": accesso non disponibile");
       const data=await r.json();return (Array.isArray(data)?data:[]).map(x=>({id:x.id,tipo,pagina,nome:String(label(x)||""),dettaglio:tipo==="Cliente"?x.classificazione||"":""}));
     })).then(parts=>{if(alive){setRisultati(parts.flat());setLoading(false);}}).catch(e=>{if(alive){setErrore(e.message);setLoading(false);}});
@@ -3404,7 +3453,7 @@ function ClientiDaRiattivareCRM({session,naviga}) {
     let alive=true;
     const headers={apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+session.access_token};
     Promise.all(["clienti?select=id,ragione_sociale,classificazione", "visite?select=cliente_id,data_visita", "attivita_cliente?select=cliente_id,data,tipo,descrizione", "crm_attivita?select=cliente_id,scadenza,stato"].map(async path=>{
-      const r=await fetch(SUPABASE_URL+"/rest/v1/"+path,{headers});const d=await r.json();if(!r.ok)throw Error(d.message||"Impossibile caricare i contatti");return d;
+      const r=await crmFetch(SUPABASE_URL+"/rest/v1/"+path,{headers});const d=await r.json();if(!r.ok)throw Error(d.message||"Impossibile caricare i contatti");return d;
     })).then(([c,v,a,p])=>{if(alive){setClienti(c);setVisite(v);setContatti(a);setPromemoria(p);setLoading(false);}}).catch(e=>{if(alive){setErrore(e.message);setLoading(false);}});
     return ()=>{alive=false};
   },[session.access_token]);
@@ -3437,8 +3486,8 @@ function AzioniRapideCRM({session,chiudi,naviga}) {
   useEffect(()=>{
     let mounted=true;
     Promise.all([
-      fetch(SUPABASE_URL+"/rest/v1/clienti?select=id,ragione_sociale,classificazione&order=ragione_sociale.asc",{headers}).then(async r=>{if(!r.ok)throw Error("Clienti non disponibili");return r.json()}),
-      fetch(SUPABASE_URL+"/rest/v1/aziende_mandanti?select=id,nome&order=nome.asc",{headers}).then(async r=>{if(!r.ok)throw Error("Mandanti non disponibili");return r.json()})
+      crmFetch(SUPABASE_URL+"/rest/v1/clienti?select=id,ragione_sociale,classificazione&order=ragione_sociale.asc",{headers}).then(async r=>{if(!r.ok)throw Error("Clienti non disponibili");return r.json()}),
+      crmFetch(SUPABASE_URL+"/rest/v1/aziende_mandanti?select=id,nome&order=nome.asc",{headers}).then(async r=>{if(!r.ok)throw Error("Mandanti non disponibili");return r.json()})
     ]).then(([c,m])=>{if(mounted){setClienti(Array.isArray(c)?c:[]);setMandanti(Array.isArray(m)?m:[])}}).catch(e=>{if(mounted)setErrore(e.message)});
     return ()=>{mounted=false};
   },[session.access_token]);
@@ -3451,7 +3500,7 @@ function AzioniRapideCRM({session,chiudi,naviga}) {
     setBusy(true);setErrore("");
     try{
       const inserisci=async (tabella,payload)=>{
-        const r=await fetch(SUPABASE_URL+"/rest/v1/"+tabella,{method:"POST",headers:{...headers,Prefer:"return=minimal"},body:JSON.stringify(payload)});
+        const r=await crmFetch(SUPABASE_URL+"/rest/v1/"+tabella,{method:"POST",headers:{...headers,Prefer:"return=minimal"},body:JSON.stringify(payload)});
         if(!r.ok){const x=await r.json().catch(()=>({}));throw Error(x.message||"Errore nel salvataggio su "+tabella)};
       };
       if(azione==="contatto"){
@@ -3518,7 +3567,7 @@ function RegistroCommercialeSupabase({session}) {
   const tabelle={relazioni:'crm_relazioni_mandanti',followup:'crm_followup_preventivi',campioni:'crm_campionature'};
   const headers=()=>({apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+session.access_token,'Content-Type':'application/json'});
   const richiesta=async (path,method='GET',payload)=>{
-    const response=await fetch(SUPABASE_URL+'/rest/v1/'+path,{method,headers:{...headers(),...(method!=='GET'?{Prefer:'return=representation'}:{})},...(payload===undefined?{}:{body:JSON.stringify(payload)})});
+    const response=await crmFetch(SUPABASE_URL+'/rest/v1/'+path,{method,headers:{...headers(),...(method!=='GET'?{Prefer:'return=representation'}:{})},...(payload===undefined?{}:{body:JSON.stringify(payload)})});
     const raw=await response.text();let data;try{data=raw?JSON.parse(raw):[]}catch{data=raw}
     if(!response.ok)throw new Error((data&&data.message)||('Errore '+response.status));
     return data;
@@ -3612,7 +3661,7 @@ function CRMOperativitaUnificata({session}) {
   const [ricerca,setRicerca]=useState('');
   const h=()=>({apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+session.access_token,'Content-Type':'application/json'});
   const api=async(path,method='GET',payload)=>{
-    const res=await fetch(SUPABASE_URL+'/rest/v1/'+path,{method,headers:{...h(),...(method!=='GET'?{Prefer:'return=representation'}:{})},...(payload===undefined?{}:{body:JSON.stringify(payload)})});
+    const res=await crmFetch(SUPABASE_URL+'/rest/v1/'+path,{method,headers:{...h(),...(method!=='GET'?{Prefer:'return=representation'}:{})},...(payload===undefined?{}:{body:JSON.stringify(payload)})});
     const raw=await res.text();let data;try{data=raw?JSON.parse(raw):[]}catch{data=raw}
     if(!res.ok)throw Error(data?.message||('Errore HTTP '+res.status));return data;
   };
@@ -3724,7 +3773,7 @@ function RegistroProvvigioniSupabase({session}) {
   const [busy,setBusy]=useState(false),[errore,setErrore]=useState(''),[successo,setSuccesso]=useState('');
   const headers=()=>({apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+session.access_token,'Content-Type':'application/json'});
   const api=async (path,method='GET',payload)=>{
-    const r=await fetch(SUPABASE_URL+'/rest/v1/'+path,{method,headers:{...headers(),...(method!=='GET'?{Prefer:'return=representation'}:{})},...(payload===undefined?{}:{body:JSON.stringify(payload)})});
+    const r=await crmFetch(SUPABASE_URL+'/rest/v1/'+path,{method,headers:{...headers(),...(method!=='GET'?{Prefer:'return=representation'}:{})},...(payload===undefined?{}:{body:JSON.stringify(payload)})});
     const raw=await r.text();let x;try{x=raw?JSON.parse(raw):[]}catch{x=raw}
     if(!r.ok)throw Error(x?.message||('Errore Supabase '+r.status));return x;
   };
@@ -3977,7 +4026,7 @@ function ReportDirezionaleCRM({session, goTo}) {
     const paths={aziende:'aziende_mandanti?select=id,nome&order=nome.asc',clienti:'clienti?select=id,ragione_sociale',fatturato:'fatturato_commerciale?select=azienda_id,cliente_id,anno,importo',opportunita:'opportunita_commerciali?select=id,titolo,cliente_id,azienda_id,fase,valore_stimato,probabilita,data_prossima_azione',provvigioni:'crm_provvigioni_ordini?select=id,azienda_id,cliente_id,importo_maturato,data_ordine',liquidazioni:'crm_liquidazioni_provvigioni?select=provvigione_id,importo',attivita:'crm_attivita?select=id,azienda_id,cliente_id,titolo,scadenza,stato'};
     try{
       const entries=await Promise.all(Object.entries(paths).map(async([key,path])=>{
-        const r=await fetch(SUPABASE_URL+'/rest/v1/'+path,{headers:h});
+        const r=await crmFetch(SUPABASE_URL+'/rest/v1/'+path,{headers:h});
         const d=await r.json().catch(()=>null);
         if(!r.ok||!Array.isArray(d))throw Error(key+': '+(d?.message||'lettura non riuscita'));
         return [key,d];
@@ -4027,7 +4076,7 @@ function AppShell({ session, onLogout }) {
   const [aperti, setAperti] = useState({ clienti:true, architetti:true, mandanti:true, opportunita:true, agenda:true, report:true });
   const apriPreventivoCliente = id => { setPreventivoAprireId(id); setPage("preventivi"); };
   const apriGruppoCliente = id => { setGruppoAprireId(id); setPage("gruppi"); };
-  useEffect(() => { (async () => { try { const r=await fetch(SUPABASE_URL+"/rest/v1/profiles?id=eq."+session.user.id+"&select=role",{headers:{apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+session.access_token}}); const d=await r.json(); if(d&&d[0])setRole(d[0].role); } catch(e){} })(); },[session]);
+  useEffect(() => { (async () => { try { const r=await crmFetch(SUPABASE_URL+"/rest/v1/profiles?id=eq."+session.user.id+"&select=role",{headers:{apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+session.access_token}}); const d=await r.json(); if(d&&d[0])setRole(d[0].role); } catch(e){} })(); },[session]);
   const sezioni = [
     {id:"clienti",nome:"Clienti",icon:Users,items:[{key:"clienti",label:"Anagrafica clienti",icon:Users},{key:"gruppi",label:"Gruppi d'acquisto",icon:Users2},{key:"mappa",label:"Mappa clienti",icon:MapIcon}]},
     {id:"architetti",nome:"Architetti",icon:Users2,items:[{key:"architetti",label:"Studi e architetti",icon:Users2}]},
@@ -4241,7 +4290,7 @@ function StilePremium2026() { return <style>{`
 
 async function rinnovaSessione(refreshToken) {
   try {
-    const res = await fetch(SUPABASE_URL + "/auth/v1/token?grant_type=refresh_token", {
+    const res = await crmFetch(SUPABASE_URL + "/auth/v1/token?grant_type=refresh_token", {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY },
       body: JSON.stringify({ refresh_token: refreshToken }),
