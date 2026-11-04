@@ -2712,6 +2712,123 @@ function AttivaNotificheCRM({ session }) {
   );
 }
 
+
+function AttivitaCRM({ session }) {
+  const vuoto = () => ({ titolo: "", tipo: "richiamare", scadenza: "", priorita: "media", stato: "da_fare", cliente_id: "", azienda_id: "", note: "" });
+  const [attivita, setAttivita] = useState([]);
+  const [clienti, setClienti] = useState([]);
+  const [aziende, setAziende] = useState([]);
+  const [form, setForm] = useState(vuoto);
+  const [editingId, setEditingId] = useState(null);
+  const [filtro, setFiltro] = useState("aperte");
+  const [ricerca, setRicerca] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [errore, setErrore] = useState("");
+  const headers = { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token, "Content-Type": "application/json" };
+  const endpoint = SUPABASE_URL + "/rest/v1/crm_attivita";
+  const carica = async () => {
+    setLoading(true); setErrore("");
+    try {
+      const [ra, rc, rm] = await Promise.all([
+        fetch(endpoint + "?select=*&order=scadenza.asc.nullslast,created_at.desc", { headers }),
+        fetch(SUPABASE_URL + "/rest/v1/clienti?select=id,ragione_sociale,classificazione&order=ragione_sociale.asc", { headers }),
+        fetch(SUPABASE_URL + "/rest/v1/aziende_mandanti?select=id,nome&order=nome.asc", { headers }),
+      ]);
+      if (!ra.ok) throw new Error("Impossibile leggere le attività. Verifica di aver eseguito lo script SQL della nuova sezione.");
+      const [a, c, m] = await Promise.all([ra.json(), rc.ok ? rc.json() : [], rm.ok ? rm.json() : []]);
+      setAttivita(Array.isArray(a) ? a : []);
+      setClienti(Array.isArray(c) ? c : []);
+      setAziende(Array.isArray(m) ? m : []);
+    } catch (e) { setErrore(e.message || "Errore di caricamento"); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { carica(); }, [session.access_token]);
+  const reset = () => { setForm(vuoto()); setEditingId(null); setErrore(""); };
+  const salva = async e => {
+    e.preventDefault(); if (!form.titolo.trim() || saving) return;
+    setSaving(true); setErrore("");
+    try {
+      const payload = { titolo: form.titolo.trim(), tipo: form.tipo, scadenza: form.scadenza ? new Date(form.scadenza).toISOString() : null, priorita: form.priorita, stato: form.stato, cliente_id: form.cliente_id || null, azienda_id: form.azienda_id || null, note: form.note.trim(), user_id: session.user.id };
+      const res = await fetch(endpoint + (editingId ? "?id=eq." + encodeURIComponent(editingId) : ""), { method: editingId ? "PATCH" : "POST", headers: { ...headers, Prefer: "return=minimal" }, body: JSON.stringify(payload) });
+      if (!res.ok) { const info = await res.json().catch(() => ({})); throw new Error(info.message || "Salvataggio non riuscito"); }
+      reset(); await carica();
+    } catch (e) { setErrore(e.message || "Errore di salvataggio"); }
+    finally { setSaving(false); }
+  };
+  const modifica = a => {
+    const d = a.scadenza ? new Date(a.scadenza) : null;
+    const locale = d ? new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0,16) : "";
+    setEditingId(a.id);
+    setForm({ titolo: a.titolo || "", tipo: a.tipo || "richiamare", scadenza: locale, priorita: a.priorita || "media", stato: a.stato || "da_fare", cliente_id: a.cliente_id || "", azienda_id: a.azienda_id || "", note: a.note || "" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const completa = async a => {
+    setErrore("");
+    const stato = a.stato === "completata" ? "da_fare" : "completata";
+    try {
+      const res = await fetch(endpoint + "?id=eq." + encodeURIComponent(a.id), { method: "PATCH", headers, body: JSON.stringify({ stato }) });
+      if (!res.ok) throw new Error("Impossibile aggiornare lo stato");
+      setAttivita(prev => prev.map(x => x.id === a.id ? { ...x, stato } : x));
+    } catch (e) { setErrore(e.message); }
+  };
+  const elimina = async a => {
+    if (!window.confirm("Eliminare definitivamente questa attività?")) return;
+    try {
+      const res = await fetch(endpoint + "?id=eq." + encodeURIComponent(a.id), { method: "DELETE", headers });
+      if (!res.ok) throw new Error("Impossibile eliminare l'attività");
+      setAttivita(prev => prev.filter(x => x.id !== a.id));
+      if (editingId === a.id) reset();
+    } catch (e) { setErrore(e.message); }
+  };
+  const adesso = Date.now();
+  const aperte = attivita.filter(a => a.stato !== "completata");
+  const scadute = aperte.filter(a => a.scadenza && new Date(a.scadenza).getTime() < adesso);
+  const filtrate = attivita.filter(a => {
+    if (filtro === "aperte" && a.stato === "completata") return false;
+    if (filtro === "completate" && a.stato !== "completata") return false;
+    if (filtro === "scadute" && !(a.stato !== "completata" && a.scadenza && new Date(a.scadenza).getTime() < adesso)) return false;
+    const nomeCliente = clienti.find(c => c.id === a.cliente_id)?.ragione_sociale || "";
+    return (a.titolo + " " + a.note + " " + nomeCliente).toLowerCase().includes(ricerca.toLowerCase());
+  });
+  const campo = { width: "100%", padding: "11px 12px", border: "1px solid #dce5f0", borderRadius: 10, background: "white", color: "#18354e", fontSize: 14, boxSizing: "border-box" };
+  const etichette = { richiamare: "Richiamare", preventivo: "Preventivo", architetto: "Architetto", campionatura: "Campionatura", visita: "Visita da organizzare", altro: "Altro" };
+  return <div style={{ maxWidth: 1180, margin: "0 auto", color: "#18354e" }}>
+    <div style={{ marginBottom: 20 }}><h2 style={{ margin: "0 0 5px", fontSize: 26 }}>Attività e follow-up</h2><p style={{ margin: 0, color: "#71839a", fontSize: 14 }}>Organizza le prossime azioni commerciali e tieni sotto controllo le scadenze.</p></div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12, marginBottom: 20 }}>
+      {[["Da fare", aperte.length], ["Scadute", scadute.length], ["Completate", attivita.length - aperte.length]].map(([nome, n]) => <div key={nome} style={{ background: "#fff", border: "1px solid #e3ebf3", borderRadius: 15, padding: 16 }}><div style={{ color: "#70839a", fontSize: 12 }}>{nome}</div><strong style={{ fontSize: 28 }}>{n}</strong></div>)}
+    </div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,350px),1fr))", gap: 18, alignItems: "start" }}>
+      <form onSubmit={salva} style={{ background: "#fff", border: "1px solid #e3ebf3", borderRadius: 16, padding: 18, display: "grid", gap: 12 }}>
+        <strong style={{ fontSize: 17 }}>{editingId ? "Modifica attività" : "Nuova attività"}</strong>
+        <label style={{ fontSize: 12 }}>Titolo *<input required maxLength={180} value={form.titolo} onChange={e => setForm(f => ({ ...f, titolo: e.target.value }))} placeholder="Es. Richiamare showroom per preventivo" style={{ ...campo, marginTop: 5 }} /></label>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <label style={{ fontSize: 12 }}>Tipologia<select value={form.tipo} onChange={e => setForm(f => ({ ...f, tipo: e.target.value }))} style={{ ...campo, marginTop: 5 }}>{Object.entries(etichette).map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select></label>
+          <label style={{ fontSize: 12 }}>Priorità<select value={form.priorita} onChange={e => setForm(f => ({ ...f, priorita: e.target.value }))} style={{ ...campo, marginTop: 5 }}><option value="bassa">Bassa</option><option value="media">Media</option><option value="alta">Alta</option></select></label>
+        </div>
+        <label style={{ fontSize: 12 }}>Scadenza (facoltativa)<input type="datetime-local" value={form.scadenza} onChange={e => setForm(f => ({ ...f, scadenza: e.target.value }))} style={{ ...campo, marginTop: 5 }} /></label>
+        <label style={{ fontSize: 12 }}>Cliente o architetto<select value={form.cliente_id} onChange={e => setForm(f => ({ ...f, cliente_id: e.target.value }))} style={{ ...campo, marginTop: 5 }}><option value="">Nessun collegamento</option>{clienti.map(c => <option key={c.id} value={c.id}>{c.ragione_sociale}{c.classificazione === "Architetto" ? " · Architetto" : ""}</option>)}</select></label>
+        <label style={{ fontSize: 12 }}>Azienda mandante<select value={form.azienda_id} onChange={e => setForm(f => ({ ...f, azienda_id: e.target.value }))} style={{ ...campo, marginTop: 5 }}><option value="">Nessuna</option>{aziende.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}</select></label>
+        <label style={{ fontSize: 12 }}>Stato<select value={form.stato} onChange={e => setForm(f => ({ ...f, stato: e.target.value }))} style={{ ...campo, marginTop: 5 }}><option value="da_fare">Da fare</option><option value="in_corso">In corso</option><option value="completata">Completata</option></select></label>
+        <label style={{ fontSize: 12 }}>Note<textarea rows={3} value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} style={{ ...campo, marginTop: 5, resize: "vertical" }} /></label>
+        <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}><button type="submit" disabled={saving} style={{ border: 0, background: "#276be3", color: "white", borderRadius: 10, padding: "11px 16px", fontWeight: 700, cursor: "pointer" }}>{saving ? "Salvataggio..." : editingId ? "Salva modifiche" : "Aggiungi attività"}</button>{editingId && <button type="button" onClick={reset} style={{ border: "1px solid #dce5f0", background: "white", borderRadius: 10, padding: "11px 14px" }}>Annulla</button>}</div>
+      </form>
+      <section style={{ background: "#fff", border: "1px solid #e3ebf3", borderRadius: 16, padding: 18, minWidth: 0 }}>
+        <div style={{ display: "flex", gap: 9, flexWrap: "wrap", marginBottom: 14 }}><input aria-label="Cerca attività" placeholder="Cerca attività..." value={ricerca} onChange={e => setRicerca(e.target.value)} style={{ ...campo, flex: "1 1 160px", width: "auto" }} /><select aria-label="Filtra attività" value={filtro} onChange={e => setFiltro(e.target.value)} style={{ ...campo, width: "auto", flex: "0 1 140px" }}><option value="aperte">Aperte</option><option value="scadute">Scadute</option><option value="completate">Completate</option><option value="tutte">Tutte</option></select></div>
+        {errore && <div role="alert" style={{ color: "#a42a2a", background: "#fff0f0", borderRadius: 9, padding: 12, marginBottom: 12, fontSize: 13 }}>{errore}</div>}
+        {loading ? <p>Caricamento...</p> : filtrate.length === 0 ? <p style={{ color: "#78859a", fontSize: 14 }}>Nessuna attività da mostrare.</p> : <div style={{ display: "grid", gap: 10 }}>{filtrate.map(a => {
+          const scaduta = a.stato !== "completata" && a.scadenza && new Date(a.scadenza).getTime() < adesso;
+          const cliente = clienti.find(c => c.id === a.cliente_id);
+          return <article key={a.id} style={{ border: "1px solid #e3ebf3", borderRadius: 12, padding: 13, background: a.stato === "completata" ? "#f8fafc" : "#fff" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}><input type="checkbox" checked={a.stato === "completata"} onChange={() => completa(a)} aria-label={a.stato === "completata" ? "Riapri attività" : "Completa attività"} style={{ width: 18, height: 18, marginTop: 2, accentColor: "#276be3" }} /><div style={{ flex: 1, minWidth: 0 }}><strong style={{ fontSize: 14, textDecoration: a.stato === "completata" ? "line-through" : "none", overflowWrap: "anywhere" }}>{a.titolo}</strong><div style={{ color: "#72849a", fontSize: 12, marginTop: 4 }}>{etichette[a.tipo] || a.tipo} · Priorità {a.priorita}{a.stato === "in_corso" ? " · In corso" : ""}</div>{cliente && <div style={{ color: "#276be3", fontSize: 12, marginTop: 4 }}>{cliente.ragione_sociale}</div>}{a.scadenza && <div style={{ color: scaduta ? "#b83b3b" : "#62778c", fontSize: 12, marginTop: 5 }}>{scaduta ? "Scaduta · " : "Scadenza · "}{new Date(a.scadenza).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" })}</div>}{a.note && <div style={{ fontSize: 12, color: "#66798b", marginTop: 7, overflowWrap: "anywhere" }}>{a.note}</div>}</div></div>
+            <div style={{ display: "flex", gap: 12, marginTop: 11, paddingLeft: 28 }}><button type="button" onClick={() => modifica(a)} style={{ border: 0, background: "none", color: "#276be3", cursor: "pointer", padding: 0, fontSize: 12 }}>Modifica</button><button type="button" onClick={() => elimina(a)} style={{ border: 0, background: "none", color: "#b83b3b", cursor: "pointer", padding: 0, fontSize: 12 }}>Elimina</button></div>
+          </article>;
+        })}</div>}
+      </section>
+    </div>
+  </div>;
+}
+
 function AppShell({ session, onLogout }) {
   const [menuOpen, setMenuOpen] = useState(typeof window === "undefined" ? true : window.innerWidth > 768);
   const [page, setPage] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("appuntamento") ? "visite" : "dashboard");
@@ -2726,6 +2843,7 @@ function AppShell({ session, onLogout }) {
     {id:"clienti",nome:"Clienti",icon:Users,items:[{key:"clienti",label:"Anagrafica clienti",icon:Users},{key:"architetti",label:"Architetti",icon:Users2},{key:"gruppi",label:"Gruppi d'acquisto",icon:Users2},{key:"mappa",label:"Mappa clienti",icon:MapIcon}]},
     {id:"mandanti",nome:"Mandanti",icon:Building2,items:[{key:"aziende",label:"Aziende mandanti",icon:Building2}]},
     {id:"opportunita",nome:"Opportunità",icon:Target,items:[{key:"pipeline",label:"Pipeline commerciale",icon:Target},{key:"preventivi",label:"Preventivi e offerte",icon:FileText},{key:"portafoglio",label:"Portafoglio ordini",icon:Briefcase},{key:"ordini",label:"Registro ordini",icon:ClipboardList}]},
+    {id:"attivita",nome:"Organizzazione",icon:ClipboardList,items:[{key:"attivita",label:"Attività e follow-up",icon:ClipboardList}]},
     {id:"agenda",nome:"Agenda",icon:CalendarDays,items:[{key:"visite",label:"Calendario e appuntamenti",icon:CalendarDays},{key:"storico_visite",label:"Storico visite",icon:ClipboardList}]},
     {id:"report",nome:"Report",icon:BarChart3,items:[{key:"controllo",label:"Controllo Commerciale",icon:Wallet},{key:"fatturato",label:"Fatturato (ordini CRM)",icon:Wallet},{key:"statistiche",label:"Statistiche",icon:TrendingUp}]},
   ];
@@ -2747,6 +2865,7 @@ function AppShell({ session, onLogout }) {
         {page==="dashboard"&&<Dashboard session={session} goTo={scegli}/>}
         {page==="admin"&&role==="admin"&&<AdminPanel session={session}/>}
         {page==="aziende"&&<AziendeMandanti session={session}/>}
+        {page==="attivita"&&<AttivitaCRM session={session}/>}
         {page==="clienti"&&<ClientiAnagrafica session={session} apriPreventivo={apriPreventivoCliente} apriGruppo={apriGruppoCliente}/>}
         {page==="architetti"&&<ClientiAnagrafica soloArchitetti session={session} apriPreventivo={apriPreventivoCliente} apriGruppo={apriGruppoCliente}/>}
         {page==="visite"&&<CalendarioVisite session={session}/>}
