@@ -232,17 +232,37 @@ async function stampaPreventivo(preventivo, clienti, aziende) {
   // Generazione PDF diretta: niente window.open, che blocca le PWA iOS.
   const html = generaStampaHTML(preventivo, clienti, aziende);
   const nomeFile = "Preventivo_" + String(preventivo.rif || preventivo.id || "CRM").replace(/[^a-z0-9_-]/gi, "_") + ".pdf";
+  // html2canvas su iOS può produrre pagine bianche se il contenuto è fuori schermo.
+  // Il documento è quindi renderizzato in un contenitore temporaneo VISIBILE.
+  const overlay = document.createElement("div");
+  Object.assign(overlay.style, {
+    position: "fixed", inset: "0", zIndex: "2147483647", background: "#fff",
+    overflow: "auto", WebkitOverflowScrolling: "touch"
+  });
   const host = document.createElement("div");
-  host.setAttribute("aria-hidden", "true");
-  Object.assign(host.style, { position:"fixed", left:"-12000px", top:"0", width:"794px", background:"white", zIndex:"-1" });
+  Object.assign(host.style, {
+    position: "relative", left: "0", top: "0", width: "794px",
+    minHeight: "1123px", background: "#ffffff", color: "#1a1a1a",
+    boxSizing: "border-box", overflow: "visible"
+  });
   const doc = new DOMParser().parseFromString(html, "text/html");
   host.innerHTML = doc.body.innerHTML;
   const css = doc.querySelector("style");
   if (css) host.prepend(css.cloneNode(true));
-  document.body.appendChild(host);
+  overlay.appendChild(host);
+  document.body.appendChild(overlay);
+  // Lascia completare il layout prima della cattura.
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  if (document.fonts?.ready) await document.fonts.ready;
+  await Promise.all(Array.from(host.querySelectorAll("img")).map(img => {
+    if (img.complete) return Promise.resolve();
+    return new Promise(resolve => { img.onload = resolve; img.onerror = resolve; setTimeout(resolve, 4000); });
+  }));
   try {
     const pdf = await caricaHtml2Pdf();
-    const blob = await pdf().set({ margin:8, filename:nomeFile, image:{type:"jpeg",quality:0.98}, html2canvas:{scale:2,backgroundColor:"#ffffff",useCORS:true}, jsPDF:{unit:"mm",format:"a4",orientation:"portrait"}, pagebreak:{mode:["css","legacy"]} }).from(host).outputPdf("blob");
+    const blob = await pdf().set({ margin:8, filename:nomeFile, image:{type:"jpeg",quality:0.98}, html2canvas:{scale:2,backgroundColor:"#ffffff",useCORS:true,scrollX:0,scrollY:0,windowWidth:794}, jsPDF:{unit:"mm",format:"a4",orientation:"portrait"}, pagebreak:{mode:["css","legacy"]} }).from(host).outputPdf("blob");
+    if (!blob || blob.size < 1500) throw new Error("PDF generato non valido o vuoto");
+    overlay.remove();
     const file = new File([blob], nomeFile, { type:"application/pdf" });
     if (navigator.share && navigator.canShare && navigator.canShare({files:[file]})) {
       try { await navigator.share({files:[file],title:nomeFile}); return; }
@@ -253,7 +273,7 @@ async function stampaPreventivo(preventivo, clienti, aziende) {
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=>URL.revokeObjectURL(url),60000);
   } catch(err) { alert("Esportazione PDF non riuscita: " + (err.message || err) + ". Apri temporaneamente il CRM da Safari per esportare."); }
-  finally { host.remove(); }
+  finally { overlay.remove(); }
 }
 
 function LoginScreen({ onLogin }) {
