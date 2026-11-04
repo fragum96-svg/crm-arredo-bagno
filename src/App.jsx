@@ -6,7 +6,7 @@ import {
 } from "recharts";
 import {
   Users, Building2, CalendarDays, FileText, LogOut, Menu as MenuIcon, LayoutDashboard, ShieldCheck,
-  Printer, Map as MapIcon, Upload, TrendingUp, Wallet, ClipboardList, Briefcase, Users2, ChevronDown, ChevronRight, Search, Bell, Plus, Clock3, Target, ArrowUpRight, StickyNote, Settings, BarChart3,
+  Printer, Map as MapIcon, Upload, TrendingUp, Wallet, ClipboardList, Briefcase, Users2, ChevronDown, ChevronRight, Search, Bell, Plus, Clock3, Target, ArrowUpRight, StickyNote, Settings, BarChart3, CheckSquare, Check,
 } from "lucide-react";
 
 
@@ -342,24 +342,39 @@ function AdminPanel({ session }) {
 }
 
 function Dashboard({ session, goTo }) {
-  const [data, setData] = useState({ clienti: [], aziende: [], appuntamenti: [], preventivi: [], ordini: [], note: [], fatturatoManuale: [], portafoglioManuale: [] });
+  const [data, setData] = useState({ clienti: [], aziende: [], appuntamenti: [], preventivi: [], ordini: [], note: [], fatturatoManuale: [], portafoglioManuale: [], attivita: [] });
   const [loading, setLoading] = useState(true);
   const [errore, setErrore] = useState("");
   useEffect(() => {
     let attivo = true;
     (async () => {
       try {
-        const percorsi = ["clienti?select=id,ragione_sociale", "aziende_mandanti?select=id,nome,colore", "appuntamenti?select=id,titolo,inizio,fine,tipo,stato,cliente_id,azienda_id&order=inizio.asc", "preventivi?select=*", "ordini_confermati?select=*", "note_crm?select=id,titolo,contenuto,created_at&order=created_at.desc&limit=3", "fatturato_commerciale?select=azienda_id,cliente_id,anno,periodicita,periodo,importo", "portafoglio_ordini?select=azienda_id,cliente_id,data_rilevazione,importo"];
+        const percorsi = ["clienti?select=id,ragione_sociale", "aziende_mandanti?select=id,nome,colore", "appuntamenti?select=id,titolo,inizio,fine,tipo,stato,cliente_id,azienda_id&order=inizio.asc", "preventivi?select=*", "ordini_confermati?select=*", "note_crm?select=id,titolo,contenuto,created_at&order=created_at.desc&limit=3", "fatturato_commerciale?select=azienda_id,cliente_id,anno,periodicita,periodo,importo", "portafoglio_ordini?select=azienda_id,cliente_id,data_rilevazione,importo", "crm_attivita?select=*&order=scadenza.asc.nullslast,created_at.desc"];
         const risposte = await Promise.all(percorsi.map(x => fetch(SUPABASE_URL + "/rest/v1/" + x, { headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token } })));
         const valori = await Promise.all(risposte.map(r => r.json()));
         const obbligatori = [0,1,2,3];
         for (const i of obbligatori) if (!risposte[i].ok) throw new Error(valori[i]?.message || "Impossibile caricare la dashboard");
-        if (attivo) setData({ clienti: valori[0], aziende: valori[1], appuntamenti: valori[2], preventivi: valori[3], ordini: risposte[4].ok ? valori[4] : [], note: risposte[5].ok ? valori[5] : [], fatturatoManuale: risposte[6].ok ? valori[6] : [], portafoglioManuale: risposte[7].ok ? valori[7] : [] });
+        if (attivo) setData({ clienti: valori[0], aziende: valori[1], appuntamenti: valori[2], preventivi: valori[3], ordini: risposte[4].ok ? valori[4] : [], note: risposte[5].ok ? valori[5] : [], fatturatoManuale: risposte[6].ok ? valori[6] : [], portafoglioManuale: risposte[7].ok ? valori[7] : [], attivita: risposte[8].ok && Array.isArray(valori[8]) ? valori[8] : [] });
       } catch (e) { if (attivo) setErrore(e.message); }
       finally { if (attivo) setLoading(false); }
     })();
     return () => { attivo = false; };
   }, [session]);
+  const [azioneAttivita, setAzioneAttivita] = useState(null);
+  const [erroreAttivita, setErroreAttivita] = useState("");
+  const completaDaDashboard = async (attivita) => {
+    if (azioneAttivita) return;
+    setAzioneAttivita(attivita.id); setErroreAttivita("");
+    try {
+      const r = await fetch(SUPABASE_URL + "/rest/v1/crm_attivita?id=eq." + encodeURIComponent(attivita.id), {
+        method: "PATCH", headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token, "Content-Type": "application/json", Prefer: "return=minimal" },
+        body: JSON.stringify({ stato: "completata" })
+      });
+      if (!r.ok) { const info = await r.json().catch(() => ({})); throw new Error(info.message || "Impossibile completare l'attività"); }
+      setData(prev => ({ ...prev, attivita: prev.attivita.map(a => a.id === attivita.id ? { ...a, stato: "completata" } : a) }));
+    } catch (e) { setErroreAttivita(e.message); }
+    finally { setAzioneAttivita(null); }
+  };
   const oggi = new Date();
   const anno = oggi.getFullYear();
   const giorno = d => { const x = new Date(d); return x.getFullYear() === oggi.getFullYear() && x.getMonth() === oggi.getMonth() && x.getDate() === oggi.getDate(); };
@@ -396,6 +411,15 @@ function Dashboard({ session, goTo }) {
   })).sort((a,b)=>b.valore-a.valore);
   const euro = n => (Number(n)||0).toLocaleString("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:0});
   const panel = { background:"#fff",border:"1px solid #e6eaf1",borderRadius:14,padding:18,minWidth:0,boxShadow:"0 2px 8px rgba(20,38,70,.025)" };
+  const attivitaAperte = data.attivita.filter(a => a.stato !== "completata");
+  const dataLocale = d => { const x = new Date(d); return [x.getFullYear(), String(x.getMonth()+1).padStart(2,"0"), String(x.getDate()).padStart(2,"0")].join("-"); };
+  const dataOggi = dataLocale(oggi);
+  const attivitaScadute = attivitaAperte.filter(a => a.scadenza && dataLocale(a.scadenza) < dataOggi);
+  const attivitaOggi = attivitaAperte.filter(a => a.scadenza && dataLocale(a.scadenza) === dataOggi);
+  const attivitaFuture = attivitaAperte.filter(a => a.scadenza && dataLocale(a.scadenza) > dataOggi).sort((a,b)=>new Date(a.scadenza)-new Date(b.scadenza));
+  const attivitaPrioritarie = attivitaAperte.filter(a => a.priorita === "alta");
+  const listaDashboard = [...attivitaScadute, ...attivitaOggi, ...attivitaFuture].slice(0,6);
+  const etichettaAttivita = a => data.clienti.find(c => c.id === a.cliente_id)?.ragione_sociale || data.aziende.find(m => m.id === a.azienda_id)?.nome || "";
   const metriche = [
     { nome:"Fatturato YTD",valore:euro(fatturatoYTD),icona:TrendingUp,pagina:"controllo",colore:"#3679f5",nota:"Registrazioni anno " + anno },
     { nome:"Portafoglio ordini",valore:euro(portafoglioAttuale),icona:Wallet,pagina:"controllo",colore:"#4b70f5",nota:"Ultima rilevazione per cliente" },
@@ -406,6 +430,14 @@ function Dashboard({ session, goTo }) {
     <div className="matrice-welcome"><div><h1>Ciao Francesco <span aria-hidden="true">👋</span></h1><p>Oggi è {oggi.toLocaleDateString("it-IT",{weekday:"long",day:"numeric",month:"long"})}. Ecco il riepilogo della tua attività.</p></div><div className="crm-dashboard-quick"><button className="matrice-add" onClick={()=>goTo("clienti")}><Users size={16}/> Clienti</button><button className="matrice-add" onClick={()=>goTo("architetti")}><Users2 size={16}/> Architetti</button><button className="matrice-add" onClick={()=>goTo("visite")}><Plus size={16}/> Apri agenda</button></div></div>
     {errore && <p style={{color:"#c0392b"}}>{errore}</p>}
     <div className="matrice-metrics">{metriche.map(m=>{const I=m.icona;return <button key={m.nome} className="matrice-metric" onClick={()=>goTo(m.pagina)}><span className="matrice-metric-icon"><I size={19}/></span><span><small>{m.nome}</small><strong>{loading?"…":m.valore}</strong><em>{m.nota}</em></span></button>})}</div>
+    <section className="crm-task-dashboard" style={{...panel, marginBottom:18}}>
+      <div className="matrice-section-head"><h3><CheckSquare size={18} style={{verticalAlign:"middle",marginRight:8,color:"#1267e9"}}/>Attività e follow-up</h3><button onClick={()=>goTo("attivita")}>Apri attività <ArrowUpRight size={14}/></button></div>
+      <div className="crm-task-summary">
+        {[["Oggi",attivitaOggi.length,"#eaf3ff","#145fbc"],["Scadute",attivitaScadute.length,"#fff0ee","#bc4537"],["Prossime",attivitaFuture.length,"#f1f5fa","#405a73"],["Priorità alta",attivitaPrioritarie.length,"#fff6e6","#94610b"]].map(([titolo,numero,sfondo,colore])=><button type="button" key={titolo} onClick={()=>goTo("attivita")} className="crm-task-count" style={{background:sfondo,color}}><span>{titolo}</span><strong>{loading?"…":numero}</strong></button>)}
+      </div>
+      {erroreAttivita && <p style={{color:"#b83232",fontSize:12}}>{erroreAttivita}</p>}
+      {listaDashboard.length === 0 ? <p className="matrice-empty">Nessuna attività con scadenza da completare. <button type="button" onClick={()=>goTo("attivita")} style={{border:0,background:"none",color:"#1267e9",cursor:"pointer",fontWeight:650}}>Crea un'attività</button></p> : <div className="crm-task-list">{listaDashboard.map(a => <div key={a.id} className="crm-task-row"><button type="button" className="crm-task-check" disabled={!!azioneAttivita} onClick={()=>completaDaDashboard(a)} title="Segna come completata" aria-label={"Completa " + a.titolo}><Check size={15}/></button><div className="crm-task-info"><strong>{a.titolo}</strong><small>{etichettaAttivita(a)}{etichettaAttivita(a) ? " · " : ""}{a.scadenza ? new Date(a.scadenza).toLocaleString("it-IT",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}) : "Senza scadenza"}</small></div><span className="crm-task-priority" style={{color:a.priorita==="alta"?"#b56b0d":"#718094"}}>{a.priorita==="alta"?"Alta":a.priorita==="media"?"Media":"Bassa"}</span></div>)}</div>}
+    </section>
     <div className="matrice-two">
       <section style={panel}><div className="matrice-section-head"><h3>Fatturato per mandante</h3><button onClick={()=>goTo("controllo")}>Dettagli <ArrowUpRight size={13}/></button></div><div className="matrice-total">Totale: <strong>{loading?"…":euro(fatturatoYTD)}</strong></div>{fatturatoMandanti.length===0?<p className="matrice-empty">Nessuna azienda mandante presente.</p>:fatturatoMandanti.map((a,i)=><div className="matrice-pipeline-row" key={a.id}><span className="matrice-dot" style={{background:a.colore||["#3478ed","#6c63db","#22a98b","#e4a34e"][i%4]}}/><span className="matrice-pipeline-name" title={a.nome}>{a.nome}</span><div className="matrice-track"><div style={{width:(fatturatoYTD>0?100*a.valore/fatturatoYTD:0)+"%",background:a.colore||"#3d79ed"}}/></div><strong>{euro(a.valore)}</strong><span className="matrice-percent">{fatturatoYTD?Math.round(a.valore/fatturatoYTD*100):0}%</span></div>)}</section>
       <section style={panel}><div className="matrice-section-head"><h3>Andamento fatturato</h3><button onClick={()=>goTo("controllo")}>Dettagli <ArrowUpRight size={13}/></button></div><p className="matrice-chart-sub">Anno {anno} · Registrazioni manuali aggregate per trimestre</p><div style={{height:215,width:"100%"}}><ResponsiveContainer width="100%" height="100%"><AreaChart data={trimestri} margin={{top:12,right:5,left:-16,bottom:0}}><defs><linearGradient id="matriceTrend" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4686f6" stopOpacity={0.22}/><stop offset="100%" stopColor="#4686f6" stopOpacity={0.01}/></linearGradient></defs><CartesianGrid stroke="#eef1f7" vertical={false}/><XAxis dataKey="periodo" tick={{fontSize:10,fill:"#8792a5"}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:"#8792a5"}} axisLine={false} tickLine={false} tickFormatter={v=>v>=1000?Math.round(v/1000)+"k":v}/><Tooltip formatter={v=>euro(v)}/><Area type="monotone" dataKey="valore" stroke="#367bf3" strokeWidth={2.5} fill="url(#matriceTrend)"/></AreaChart></ResponsiveContainer></div></section>
@@ -2939,6 +2971,14 @@ function StileGlobaleResponsive() {
 
 
 function StilePremium2026() { return <style>{`
+.crm-task-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:15px 0}
+.crm-task-count{border:0;border-radius:12px;padding:13px 15px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:5px}
+.crm-task-count span{font-size:12px;font-weight:650}.crm-task-count strong{font-size:25px;font-weight:750}
+.crm-task-list{display:flex;flex-direction:column}.crm-task-row{display:flex;align-items:center;gap:12px;padding:12px 2px;border-top:1px solid #edf1f6}
+.crm-task-check{border:1px solid #b7cbe1;background:white;color:#1267e9;border-radius:8px;min-width:29px;height:29px;display:grid;place-items:center;cursor:pointer}
+.crm-task-check:disabled{opacity:.45;cursor:wait}.crm-task-info{min-width:0;flex:1;display:flex;flex-direction:column;gap:3px}.crm-task-info strong{font-size:13px;color:#203348;overflow-wrap:anywhere}.crm-task-info small{font-size:11px;color:#718094}.crm-task-priority{font-size:11px;font-weight:650}
+@media(max-width:600px){.crm-task-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.crm-task-count{padding:11px}.crm-task-count strong{font-size:22px}}
+
 /* CRM sviluppo — interfaccia chiara 2026, solo presentazione */
 .matrice-shell{background:#f7f9fd!important;color:#17253b!important}
 .matrice-sidebar{background:#fff!important;border-right:1px solid #e8edf5!important;color:#27364e!important;box-shadow:none!important}
