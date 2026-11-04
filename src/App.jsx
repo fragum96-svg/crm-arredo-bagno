@@ -4436,6 +4436,73 @@ function StileRiferimentoFotoCRM() { return <style>{`
   }
 `}</style>; }
 
+
+function StilePremiumBiancoDefinitivoCRM(){return <style>{`
+/* Restyling premium bianco - esclusivamente presentazionale */
+:root{--crm-ink:#152338;--crm-muted:#69788f;--crm-border:#e7ebf1;--crm-blue:#2265ca;--crm-canvas:#f7f9fc;--crm-radius:16px}
+html,body,#root{min-height:100%;background:var(--crm-canvas)}
+body{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+.matrice-shell,.matrice-workspace{background:var(--crm-canvas)!important;color:var(--crm-ink)!important}
+.matrice-sidebar{background:#fff!important;border-right:1px solid var(--crm-border)!important;color:var(--crm-ink)!important;box-shadow:none!important;width:274px!important;flex-basis:274px!important}
+.matrice-brand{min-height:79px!important;padding:18px 22px!important;border-bottom:1px solid var(--crm-border)!important;background:#fff!important;gap:11px!important}
+.matrice-brand strong{color:#14243b!important;font-size:26px!important;font-weight:800!important;letter-spacing:-1px!important}
+.matrice-brand-icon{color:#2563bc!important;background:#eff5fd!important;border-radius:12px!important;padding:7px!important;display:flex!important;align-items:center!important;justify-content:center!important}
+.matrice-nav-scroll{padding:17px 12px 22px!important;overflow-y:auto!important}
+.matrice-nav-main,.matrice-nav-group-title{color:#44546b!important;font-size:13px!important;line-height:1.4!important;min-height:43px!important;border-radius:10px!important;padding:10px 13px!important;font-weight:650!important}
+.matrice-nav-group-title span,.matrice-subnav button span{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;line-height:1.35!important}
+.matrice-nav-group-title svg:last-child{margin-left:auto!important;flex-shrink:0}
+.matrice-nav-main svg,.matrice-nav-group-title svg,.matrice-subnav button svg{flex-shrink:0!important}
+.matrice-subnav{margin:3px 0 12px 19px!important;padding-left:9px!important;border-left:1px solid #e8edf4!important}
+.matrice-subnav button{width:100%!important;text-align:left!important;color:#6d788b!important;font-size:12px!important;min-height:37px!important;padding:9px 12px!important;display:flex!important;align-items:center!important;gap:10px!important;border-radius:9px!important;font-weight:520!important}
+.matrice-sidebar .matrice-nav-main:hover,.matrice-sidebar .matrice-nav-group-title:hover,.matrice-sidebar .matrice-subnav button:hover{background:#f2f6fb!important;color:#245596!important}
+.matrice-sidebar .matrice-nav-main.active,.matrice-sidebar .matrice-subnav button.active{background:#eaf2fd!important;color:#1b5ab6!important;box-shadow:inset 3px 0 0 #2467c7!important;font-weight:730!important}
+.matrice-sidebar-foot{background:#fff!important;border-top:1px solid var(--crm-border)!important;padding:18px 22px!important;color:#637288!important}
+.matrice-topbar{height:72px!important;background:rgba(255,255,255,.96)!important;border-bottom:1px solid var(--crm-border)!important;padding:0 30px!important;backdrop-filter:blur(12px)}
+.matrice-topbar-label{color:#28374e!important;font-size:14px!important;font-weight:720!important}
+.matrice-topbar-actions{gap:12px!important}
+.matrice-topbar-actions button{width:35px;height:35px;justify-content:center;border-radius:9px!important;color:#65758b!important}
+.matrice-topbar-actions button:hover{background:#edf3fb!important;color:#245da8!important}
+.matrice-avatar{background:#ecf3fb!important;color:#2460ad!important;border:1px solid #dce9f7!important;font-weight:800!important}
+.matrice-main{max-width:1600px!important;padding:28px 32px 60px!important}
+.matrice-welcome h1{font-size:clamp(23px,2vw,30px)!important;letter-spacing:-.95px!important;color:#192942!important}
+.matrice-welcome p{font-size:13px!important;color:#758197!important}
+.matrice-metrics{gap:16px!important}
+.matrice-dashboard .matrice-metrics .matrice-metric{border:1px solid #e6ebf3!important;border-radius:16px!important;box-shadow:0 3px 14px rgba(21,42,78,.035)!important;padding:19px!important}
+.matrice-dashboard .matrice-metrics .matrice-metric:hover{border-color:#cbdbee!important;box-shadow:0 9px 25px rgba(21,42,78,.07)!important}
+.matrice-metric-icon{background:#eff5fd!important;color:#316cbb!important;border-radius:11px!important}
+.matrice-metric strong{color:#1d2e48!important;letter-spacing:-.65px!important}
+.matrice-dashboard .matrice-two>section,.matrice-dashboard .crm-recent-notes,.matrice-dashboard .crm-task-dashboard,.matrice-dashboard .crm-today-priority>section{background:#fff!important;border:1px solid #e6ebf3!important;border-radius:17px!important;box-shadow:0 3px 16px rgba(21,42,78,.035)!important}
+.matrice-dashboard .matrice-section-head{border-bottom:1px solid #edf0f5!important}
+.matrice-section-head h3{font-size:15px!important;color:#26364d!important}
+.matrice-main button:not(:disabled){transition:background .16s ease,border-color .16s ease,box-shadow .16s ease!important}
+.matrice-main input,.matrice-main select,.matrice-main textarea{border-radius:9px;max-width:100%}
+.matrice-main input:focus-visible,.matrice-main select:focus-visible,.matrice-main textarea:focus-visible,.matrice-sidebar button:focus-visible{outline:2px solid #7ca9e9!important;outline-offset:2px!important}
+.matrice-main table{border-color:#e9eef5!important}
+.matrice-main table thead{background:#f7f9fc!important}
+.matrice-main table tbody tr:hover{background:#f8fbff!important}
+.crm-pipeline-column{background:#f1f4f9!important;border:1px solid #e6ebf2!important;border-radius:14px!important}
+.crm-pipeline-column-head,.crm-pipeline-card{border-radius:12px!important;box-shadow:0 2px 9px rgba(24,42,72,.035)!important}
+.crm-pipeline-card{border-color:#e6ebf2!important}
+.crm-pipeline-card:hover{border-color:#cad9ed!important;box-shadow:0 5px 13px rgba(24,42,72,.075)!important}
+@media(max-width:1100px){.matrice-main{padding:24px 21px 44px!important}.matrice-metrics{gap:11px!important}}
+@media(max-width:768px){
+ .matrice-sidebar{position:fixed!important;z-index:1200!important;top:0!important;bottom:0!important;left:0!important;width:min(86vw,310px)!important;max-width:310px!important;transform:translateX(-105%);transition:transform .2s ease!important;box-shadow:9px 0 36px rgba(23,40,68,.17)!important}
+ .matrice-sidebar.is-open{transform:translateX(0)!important}
+ .matrice-topbar{height:61px!important;padding:0 13px!important;gap:8px!important}
+ .matrice-topbar-label{font-size:12px!important;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .matrice-topbar-actions{gap:2px!important}
+ .matrice-topbar-actions button{width:33px;height:35px}
+ .matrice-main{padding:17px 13px 34px!important}
+ .matrice-welcome{align-items:flex-start!important}.matrice-welcome h1{font-size:22px!important}
+ .matrice-metrics{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}
+ .matrice-dashboard .matrice-metrics .matrice-metric{padding:13px!important;min-width:0!important}
+ .matrice-dashboard .matrice-two{grid-template-columns:1fr!important}
+ .crm-pipeline-board{overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+ .matrice-main input,.matrice-main select,.matrice-main textarea{font-size:16px!important}
+}
+@media(max-width:390px){.matrice-avatar{display:none!important}.matrice-metric strong{font-size:15px!important}}
+@media(prefers-reduced-motion:reduce){.matrice-main button,.matrice-sidebar{transition:none!important}}
+`}</style>;}
 export default function App() {
   const [session, setSession] = useState(() => leggiSessioneSalvata());
   const [verificaAccesso, setVerificaAccesso] = useState(true);
@@ -4530,6 +4597,7 @@ export default function App() {
       <StileNavigazionePremiumCRM />
       <StileModuliPremiumCRM />
       <StileGlobaleResponsive />
+      <StilePremiumBiancoDefinitivoCRM />
       {verificaAccesso ? (
         <div style={{ padding: 36, textAlign: "center", color: "#17233b" }}>Ripristino accesso al CRM...</div>
       ) : !session ? (
