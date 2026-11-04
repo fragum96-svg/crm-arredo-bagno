@@ -1748,7 +1748,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
         trasporto_modalita: header.trasporto_modalita, trasporto_percentuale: Number(header.trasporto_percentuale) || 0, trasporto_valore: Number(header.trasporto_valore) || 0,
         iva_modalita: header.iva_modalita, iva_percentuale: Number(header.iva_percentuale) || 0, iva_valore: Number(header.iva_valore) || 0,
         modalita_pagamento: header.modalita_pagamento || null, modalita_prezzi_pdf: header.modalita_prezzi_pdf || "dettagliato",
-        stato: header.stato || "bozza", note: header.note || null, tipo_proposta: header.tipo_proposta || "commerciale", approvazione_proposta: header.approvazione_proposta || "in_attesa",
+        stato: header.stato || "bozza", note: header.note || null, tipo_proposta: header.tipo_proposta === "esposizione" ? "campionatura" : (header.tipo_proposta || "commerciale"), approvazione_proposta: header.approvazione_proposta || "in_attesa",
       };
       // Non richiedere il record di ritorno: la tabella preventivi potrebbe non avere una policy SELECT.
       const res = editingId
@@ -1770,7 +1770,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
       trasporto_modalita: p.trasporto_modalita || "escluso", trasporto_percentuale: p.trasporto_percentuale || 0, trasporto_valore: p.trasporto_valore || 0,
       iva_modalita: p.iva_modalita || "escluso", iva_percentuale: p.iva_percentuale ?? 22, iva_valore: p.iva_valore || 0,
       modalita_pagamento: p.modalita_pagamento || "", modalita_prezzi_pdf: p.modalita_prezzi_pdf || "dettagliato",
-      stato: p.stato || "bozza", note: p.note || "", tipo_proposta: p.tipo_proposta || "commerciale", approvazione_proposta: p.approvazione_proposta || "in_attesa",
+      stato: p.stato || "bozza", note: p.note || "", tipo_proposta: p.tipo_proposta === "esposizione" ? "campionatura" : (p.tipo_proposta || "commerciale"), approvazione_proposta: p.approvazione_proposta || "in_attesa",
     });
     setRighe(p.righe && p.righe.length ? p.righe : [nuovaRiga()]);
   };
@@ -1843,7 +1843,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
         </div>
 
         <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center",background:"#f5f8fc",padding:12,borderRadius:10,marginBottom:14}}>
-          <label style={{fontSize:12,fontWeight:650}}>Tipologia proposta <select style={fieldStyle} value={header.tipo_proposta} onChange={e=>setHeader({...header,tipo_proposta:e.target.value})}><option value="commerciale">Preventivo commerciale</option><option value="campionatura">Campionatura</option><option value="esposizione">Esposizione showroom</option></select></label>
+          <label style={{fontSize:12,fontWeight:650}}>Tipologia proposta <select style={fieldStyle} value={header.tipo_proposta} onChange={e=>setHeader({...header,tipo_proposta:e.target.value})}><option value="commerciale">Preventivo commerciale</option><option value="campionatura">Campionatura</option></select></label>
           {header.tipo_proposta!=="commerciale"&&<label style={{fontSize:12,fontWeight:650}}>Approvazione <select style={fieldStyle} value={header.approvazione_proposta} onChange={e=>setHeader({...header,approvazione_proposta:e.target.value})}><option value="in_attesa">In attesa di approvazione</option><option value="approvata">Approvata</option><option value="non_approvata">Non approvata</option></select></label>}
           {header.tipo_proposta!=="commerciale"&&<span style={{fontSize:11,color:"#64748b"}}>Articoli, sconti e omaggi si compilano normalmente nelle righe del preventivo.</span>}
         </div>
@@ -2011,19 +2011,19 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
         <div style={{ color: "white", fontSize: 11, padding: 6 }}>Se iOS non mostra il PDF nell'anteprima, premi Scarica.</div>
       </div>}
       <h3 style={{ fontSize: 14, color: "#333", marginBottom: 12 }}>Preventivi salvati e registro campionature / esposizioni</h3>
-      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>{[{id:"tutti",label:"Tutti"},{id:"commerciale",label:"Commerciali"},{id:"campionatura",label:"Campionature"},{id:"esposizione",label:"Esposizioni"}].map(x=><button key={x.id} type="button" onClick={()=>setFiltroTipoProposta(x.id)} style={{border:"1px solid #c8d9ef",background:filtroTipoProposta===x.id?"#344a43":"white",color:filtroTipoProposta===x.id?"white":"#344a43",padding:"7px 11px",borderRadius:9,cursor:"pointer"}}>{x.label}</button>)}</div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>{[{id:"tutti",label:"Tutti"},{id:"commerciale",label:"Commerciali"},{id:"campionatura",label:"Campionature"}].map(x=><button key={x.id} type="button" onClick={()=>setFiltroTipoProposta(x.id)} style={{border:"1px solid #c8d9ef",background:filtroTipoProposta===x.id?"#344a43":"white",color:filtroTipoProposta===x.id?"white":"#344a43",padding:"7px 11px",borderRadius:9,cursor:"pointer"}}>{x.label}</button>)}</div>
       {loading ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Caricamento...</p> : lista.length === 0 ? <p style={{ color: COLORS.muted, fontSize: 13 }}>Nessun preventivo salvato.</p> : (
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }} className="tabella-responsive">
           <thead><tr style={{ textAlign: "left", borderBottom: "2px solid " + COLORS.border }}>
             <th style={{ padding: "8px 6px" }}>Stato</th><th style={{ padding: "8px 6px" }}>Tipo / approvazione</th><th style={{ padding: "8px 6px" }}>RIF</th><th style={{ padding: "8px 6px" }}>Data</th><th style={{ padding: "8px 6px" }}>Cliente</th><th style={{ padding: "8px 6px" }}>Azienda</th><th style={{ padding: "8px 6px" }}></th>
           </tr></thead>
           <tbody>
-            {lista.filter(p=>filtroTipoProposta==="tutti"||(p.tipo_proposta||"commerciale")===filtroTipoProposta).map((preventivoSalvato) => {
+            {lista.filter(p=>filtroTipoProposta==="tutti"||(filtroTipoProposta==="campionatura"?["campionatura","esposizione"].includes(p.tipo_proposta):(p.tipo_proposta||"commerciale")===filtroTipoProposta)).map((preventivoSalvato) => {
               const infoStato = STATI_PREVENTIVO.find((s) => s.valore === preventivoSalvato.stato) || STATI_PREVENTIVO[0];
               return (
                 <tr key={preventivoSalvato.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
                   <td style={{ padding: "8px 6px" }} data-label="Stato"><span style={{ color: infoStato.colore, fontSize: 12, fontWeight: 700 }}>● {infoStato.label}</span></td>
-                  <td style={{ padding: "8px 6px" }} data-label="Tipo">{preventivoSalvato.tipo_proposta==="campionatura"?"Campionatura":preventivoSalvato.tipo_proposta==="esposizione"?"Esposizione":"Commerciale"}{preventivoSalvato.tipo_proposta&&preventivoSalvato.tipo_proposta!=="commerciale"?" · "+(preventivoSalvato.approvazione_proposta==="approvata"?"Approvata":preventivoSalvato.approvazione_proposta==="non_approvata"?"Non approvata":"In attesa"):""}</td><td style={{ padding: "8px 6px" }} data-label="RIF">{preventivoSalvato.rif || "-"}</td>
+                  <td style={{ padding: "8px 6px" }} data-label="Tipo">{["campionatura","esposizione"].includes(preventivoSalvato.tipo_proposta)?"Campionatura":"Commerciale"}{preventivoSalvato.tipo_proposta&&preventivoSalvato.tipo_proposta!=="commerciale"?" · "+(preventivoSalvato.approvazione_proposta==="approvata"?"Approvata":preventivoSalvato.approvazione_proposta==="non_approvata"?"Non approvata":"In attesa"):""}</td><td style={{ padding: "8px 6px" }} data-label="RIF">{preventivoSalvato.rif || "-"}</td>
                   <td style={{ padding: "8px 6px" }} data-label="Data">{preventivoSalvato.data ? new Date(preventivoSalvato.data).toLocaleDateString("it-IT") : "-"}</td>
                   <td style={{ padding: "8px 6px" }} data-label="Cliente">{nomeClientePreventivo(preventivoSalvato)}</td>
                   <td style={{ padding: "8px 6px" }} data-label="Azienda">{nomeAzienda(preventivoSalvato.azienda_id)}</td>
