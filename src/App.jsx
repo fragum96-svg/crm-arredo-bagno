@@ -1080,6 +1080,7 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
         {cliente.classificazione && <span style={{ fontSize: 12, color: COLORS.muted, background: COLORS.bg, padding: "3px 10px", borderRadius: 12 }}>{cliente.classificazione}</span>}
       </div>
       {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 14 }}>{error}</div>}
+      {cliente.classificazione!=='Architetto'&&cliente.cliente_importanza!=null&&sezione('Importanza commerciale',<strong>{cliente.cliente_importanza}/100</strong>)}
       {cliente.classificazione==='Architetto'&&cliente.architetto_profilo&&sezione('Profilo studio · Dati importati',<div style={{display:'flex',flexDirection:'column',gap:9,fontSize:13}}><div><strong>Categoria:</strong> {cliente.architetto_profilo.categoria||'—'} · <strong>Priorità:</strong> {cliente.architetto_profilo.priorita??'—'} · <strong>Importanza:</strong> {cliente.architetto_profilo.importanza??'—'}</div><div><strong>Località:</strong> {[cliente.architetto_profilo.citta,cliente.architetto_profilo.provincia].filter(Boolean).join(' · ')||'—'}</div><div><strong>Lavora con:</strong> {cliente.architetto_profilo.lavora_con||'—'}</div><div><strong>Marchi di interesse:</strong> {(cliente.architetto_profilo.marchi_interesse||[]).join(', ')||'—'}</div><small style={{color:COLORS.muted}}>Marchi di interesse e collaborazioni effettive sono informazioni distinte.</small></div>)}
 
       {sezione("Panoramica commerciale", (
@@ -1416,7 +1417,7 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
             <option value="">-- seleziona --</option>
             {(soloArchitetti ? ["Architetto"] : CLASSIFICAZIONI_ELENCO.filter(c => c !== "Architetto")).map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
-          {!soloArchitetti && <label style={{fontSize:12,display:'block'}}>Importanza cliente (facoltativa, 0–100)<input style={inputStyle} type='number' min='0' max='100' value={form.cliente_importanza??''} onChange={e=>setForm(f=>({...f,cliente_importanza:e.target.value}))}/></label>}
+          {!soloArchitetti && <label style={{fontSize:12,fontWeight:700,display:'block'}}>Importanza commerciale del cliente (0–100, facoltativo)<input style={inputStyle} type='number' min='0' max='100' value={form.cliente_importanza??''} onChange={e=>setForm(f=>({...f,cliente_importanza:e.target.value}))}/></label>}
           {soloArchitetti && <div style={{padding:13,background:'#f1f7f4',border:'1px solid #d7e6dc',borderRadius:12,marginBottom:14}}>
             <strong style={{fontSize:13,color:'#246143'}}>Valutazione studio e interessi</strong>
             <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:8,marginTop:10}}>
@@ -1747,6 +1748,8 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
   const [filtroTipoProposta,setFiltroTipoProposta]=useState("tutti");
   const [ricercaPreventivo,setRicercaPreventivo]=useState("");
   const [tipoRicercaPreventivo,setTipoRicercaPreventivo]=useState("tutti");
+  const [tipoIntestatarioPreventivo,setTipoIntestatarioPreventivo]=useState("clienti");
+  const [ricercaIntestatarioPreventivo,setRicercaIntestatarioPreventivo]=useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -1790,7 +1793,8 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
   };
   useEffect(() => { load(); }, []);
 
-  const resetForm = () => { setHeader(emptyHeader); setRighe([nuovaRiga()]); setEditingId(null); };
+  const resetForm = () => { setTipoIntestatarioPreventivo("clienti"); setRicercaIntestatarioPreventivo(""); setHeader(emptyHeader); setRighe([nuovaRiga()]); setEditingId(null); };
+  const intestatariFiltrati=clienti.filter(c=>(tipoIntestatarioPreventivo==="architetti"?c.classificazione==="Architetto":c.classificazione!=="Architetto")&&(!ricercaIntestatarioPreventivo.trim()||String(c.ragione_sociale||"").toLowerCase().includes(ricercaIntestatarioPreventivo.trim().toLowerCase())));
   const aggiungiRiga = () => setRighe((r) => [...r, nuovaRiga()]);
   const rimuoviRiga = (id) => setRighe((r) => r.filter((x) => x.id !== id));
   const aggiornaRiga = (id, campo, valore) => setRighe((r) => r.map((x) => (x.id === id ? { ...x, [campo]: valore } : x)));
@@ -1848,6 +1852,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
   };
 
   const modifica = (p) => {
+    setTipoIntestatarioPreventivo(clienti.find(c=>c.id===p.cliente_id)?.classificazione==="Architetto"?"architetti":"clienti"); setRicercaIntestatarioPreventivo("");
     setEditingId(p.id);
     setHeader({
       cliente_id: p.cliente_id || "", cliente_manuale: p.cliente_manuale || "", azienda_id: p.azienda_id || "", rif: p.rif || "", data: p.data || new Date().toISOString().slice(0, 10),
@@ -1915,10 +1920,16 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
             <option value="">-- Azienda --</option>
             {aziende.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
           </select>
-          <select value={header.cliente_id} onChange={(e) => setHeader({ ...header, cliente_id: e.target.value })} style={{ ...fieldStyle, maxWidth: isMobile ? "100%" : 220 }}>
-            <option value="">-- Cliente (Spettabile) --</option>
-            {clienti.map((c) => <option key={c.id} value={c.id}>{c.ragione_sociale}</option>)}
-          </select>
+          <div style={{display:"grid",gap:5,minWidth:isMobile?"100%":260,flex:"1 1 260px"}}>
+            <label style={{fontWeight:700,fontSize:12,color:"#40526e"}}>Intestatario del preventivo</label>
+            <select aria-label="Tipo intestatario" style={fieldStyle} value={tipoIntestatarioPreventivo} onChange={e=>{setTipoIntestatarioPreventivo(e.target.value);setRicercaIntestatarioPreventivo("");setHeader(h=>({...h,cliente_id:"",cliente_manuale:""}));}}><option value="clienti">Clienti · rivenditori e showroom</option><option value="architetti">Architetti · studi e professionisti</option></select>
+            <input aria-label="Cerca intestatario" style={fieldStyle} value={ricercaIntestatarioPreventivo} onChange={e=>setRicercaIntestatarioPreventivo(e.target.value)} placeholder={tipoIntestatarioPreventivo==="architetti"?"Cerca architetto o studio...":"Cerca cliente o showroom..."}/>
+            <select aria-label="Seleziona intestatario" value={header.cliente_id} onChange={(e) => setHeader(h=>({...h,cliente_id:e.target.value,cliente_manuale:e.target.value?"":h.cliente_manuale}))} style={fieldStyle}>
+              <option value="">-- Seleziona {tipoIntestatarioPreventivo==="architetti"?"architetto":"cliente"} --</option>
+              {intestatariFiltrati.map(c=><option key={c.id} value={c.id}>{c.ragione_sociale}</option>)}
+              {header.cliente_id&&!intestatariFiltrati.some(c=>c.id===header.cliente_id)&&<option value={header.cliente_id}>{clienti.find(c=>c.id===header.cliente_id)?.ragione_sociale||"Intestatario attuale"}</option>}
+            </select>
+          </div>
           {!header.cliente_id && (
             <input placeholder="...oppure scrivi il nome cliente manualmente" value={header.cliente_manuale} onChange={(e) => setHeader({ ...header, cliente_manuale: e.target.value })} style={{ ...fieldStyle, maxWidth: isMobile ? "100%" : 260 }} />
           )}
@@ -2885,7 +2896,9 @@ function ControlloCommerciale({ session }) {
       {aziende.length===0&&<div style={box}>Inserisci prima un'azienda mandante nella sezione Mandanti.</div>}
       {azienda&&clientiAmmessi.length===0&&<div style={{...box,color:"#8a641b",background:"#fffaf0"}}>Nessun cliente associato a {azienda.nome}. Crea un cliente di prova e seleziona questa mandante nella sua scheda.</div>}
       <div style={{...box,display:"grid",gap:13}}>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{[{id:"fatturato",label:"Fatturato"},{id:"portafoglio",label:"Portafoglio ordini"}].map(t=><button key={t.id} onClick={()=>nuovo(t.id)} style={{...btn,background:tab===t.id?"#3479ee":"#eef3fb",color:tab===t.id?"#fff":"#40526e"}}>{t.label}</button>)}</div>
+        <h3 style={{margin:0,fontSize:17,color:"#20334b"}}>Fatturato e portafoglio ordini</h3>
+        <p style={{fontSize:12,color:"#64748b",margin:0}}>Un’unica scheda per inserimenti e modifiche: le due registrazioni restano distinte.</p>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button type="button" onClick={()=>nuovo("fatturato")} style={{...btn,background:tab==="fatturato"?"#3479ee":"#eef3fb",color:tab==="fatturato"?"#fff":"#40526e"}}>+ Fatturato</button><button type="button" onClick={()=>nuovo("portafoglio")} style={{...btn,background:tab==="portafoglio"?"#3479ee":"#eef3fb",color:tab==="portafoglio"?"#fff":"#40526e"}}>+ Portafoglio ordini</button></div>
         <h3 style={{margin:0,fontSize:15}}>{editing?"Modifica registrazione":"Nuova registrazione"} · {tab==="fatturato"?"Fatturato":"Portafoglio ordini"}</h3>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:12}}>
           <div><label style={label}>Cliente *</label><select style={input} value={form.cliente_id} onChange={e=>setForm(f=>({...f,cliente_id:e.target.value}))}><option value="">Seleziona cliente</option>{clientiAmmessi.map(c=><option key={c.id} value={c.id}>{c.ragione_sociale}</option>)}</select></div>
@@ -2909,14 +2922,10 @@ function ControlloCommerciale({ session }) {
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button style={btn} onClick={salva} disabled={saving||!aziendaId||clientiAmmessi.length===0}>{saving?"Salvataggio…":editing?"Salva modifiche":"Registra importo"}</button>{editing&&<button style={{...btn,background:"#edf1f7",color:"#475569"}} onClick={()=>nuovo(tab)}>Annulla modifica</button>}</div>
         <p style={{fontSize:11,color:"#8995a8",margin:0}}>{tab==="fatturato"?"Non è possibile inserire un trimestre se esistono già mesi dello stesso trimestre (e viceversa).":"Il portafoglio è una fotografia: i valori di date diverse non vengono sommati tra loro."}</p>
       </div>
-      <div style={box}>
-        <h3 style={{margin:"0 0 13px",fontSize:15}}>Storico {tab==="fatturato"?"fatturato · "+anno:"portafoglio"}</h3>
-        <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:580}}><thead><tr style={{background:"#f5f7fb",textAlign:"left"}}><th style={{padding:10}}>Cliente</th><th style={{padding:10}}>Periodo / data</th><th style={{padding:10,textAlign:"right"}}>Importo</th><th style={{padding:10}}>Note</th><th style={{padding:10}}>Azioni</th></tr></thead><tbody>{cercaRighe(righe).map(r=><tr key={r.id} style={{borderBottom:"1px solid #eef1f6"}}><td style={{padding:10}}>{nomeCliente(r.cliente_id)}</td><td style={{padding:10}}>{tab==="fatturato"?(r.periodicita==="mensile"?MESI[r.periodo-1]:"T"+r.periodo)+" "+r.anno:r.data_rilevazione.split("-").reverse().join("/")}</td><td style={{padding:10,textAlign:"right",fontWeight:700}}>{euro(r.importo)}</td><td style={{padding:10,color:"#78869b"}}>{r.note||"—"}</td><td style={{padding:10,whiteSpace:"nowrap"}}><button onClick={()=>modifica(r,tab)} style={{border:0,background:"transparent",color:"#2c70e2",cursor:"pointer",marginRight:8}}>Modifica</button><button onClick={()=>elimina(r,tab)} style={{border:0,background:"transparent",color:"#bd3e3e",cursor:"pointer"}}>Elimina</button></td></tr>)}</tbody></table>{righe.length===0&&<p style={{fontSize:12,color:"#8895a8"}}>Nessuna registrazione per questa selezione.</p>}</div>
-      </div>
-      <div style={box}>
-        <h3 style={{margin:'0 0 10px',fontSize:15}}>Storico {tab==='fatturato'?'portafoglio ordini':'fatturato · '+anno} (sempre visibile)</h3>
-        <div style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:550,borderCollapse:'collapse',fontSize:12}}><thead><tr><th>Cliente / studio</th><th>Periodo</th><th>Importo</th><th>Azioni</th></tr></thead><tbody>{cercaRighe(tab==='fatturato'?portafogli.filter(p=>p.azienda_id===aziendaId):fAnno).map(r=><tr key={r.id} style={{borderTop:'1px solid #edf0f5'}}><td style={{padding:10}}>{nomeCliente(r.cliente_id)}</td><td style={{padding:10}}>{r.data_rilevazione||((r.periodicita==='mensile'?'M':'T')+r.periodo+' / '+r.anno)}</td><td style={{padding:10}}>{euro(r.importo)}</td><td style={{padding:10}}><button onClick={()=>modifica(r,tab==='fatturato'?'portafoglio':'fatturato')}>Modifica</button> <button onClick={()=>elimina(r,tab==='fatturato'?'portafoglio':'fatturato')}>Elimina</button></td></tr>)}</tbody></table></div>
-      </div>
+      {[{tipo:"fatturato",titolo:"Fatturato",records:fAnno},{tipo:"portafoglio",titolo:"Portafoglio ordini",records:portafogli.filter(p=>p.azienda_id===aziendaId).sort((a,b)=>String(b.data_rilevazione).localeCompare(String(a.data_rilevazione)))}].map(section=><div key={section.tipo} style={box}>
+        <h3 style={{margin:"0 0 13px",fontSize:16,color:"#20334b"}}>{section.titolo} · storico e modifiche</h3>
+        <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:570}}><thead><tr style={{background:"#f5f7fb",textAlign:"left"}}><th style={{padding:10}}>Cliente / studio</th><th style={{padding:10}}>Periodo / data</th><th style={{padding:10,textAlign:"right"}}>Importo</th><th style={{padding:10}}>Note</th><th style={{padding:10}}>Azioni</th></tr></thead><tbody>{cercaRighe(section.records).map(r=><tr key={r.id} style={{borderBottom:"1px solid #eef1f6"}}><td style={{padding:10}}>{nomeCliente(r.cliente_id)}</td><td style={{padding:10}}>{section.tipo==="fatturato"?(r.periodicita==="mensile"?MESI[r.periodo-1]:"T"+r.periodo)+" "+r.anno:String(r.data_rilevazione||"").split("-").reverse().join("/")}</td><td style={{padding:10,textAlign:"right",fontWeight:700}}>{euro(r.importo)}</td><td style={{padding:10,color:"#78869b"}}>{r.note||"—"}</td><td style={{padding:10,whiteSpace:"nowrap"}}><button onClick={()=>modifica(r,section.tipo)} style={{border:0,background:"transparent",color:"#2c70e2",cursor:"pointer",marginRight:8}}>Modifica</button><button onClick={()=>elimina(r,section.tipo)} style={{border:0,background:"transparent",color:"#bd3e3e",cursor:"pointer"}}>Elimina</button></td></tr>)}</tbody></table>{section.records.length===0&&<p style={{fontSize:12,color:"#8895a8"}}>Nessuna registrazione per questa selezione.</p>}</div>
+      </div>)}
     </>}
   </div>;
 }
@@ -4240,7 +4249,7 @@ function AppShell({ session, onLogout }) {
   const sezioni = [
     {id:"clienti",nome:"Clienti",icon:Users,items:[{key:"clienti",label:"Anagrafica clienti",icon:Users},{key:"import_clienti",label:"Importa clienti Excel",icon:FileText},{key:"gruppi",label:"Gruppi d'acquisto",icon:Users2},{key:"mappa",label:"Mappa clienti",icon:MapIcon}]},
     {id:"architetti",nome:"Architetti",icon:Users2,items:[{key:"architetti",label:"Studi e architetti",icon:Users2},{key:"import_architetti",label:"Importa studi Excel",icon:FileText}]},
-    {id:"opportunita",nome:"Opportunità",icon:Target,items:[{key:"pipeline",label:"Pipeline commerciale",icon:Target},{key:"preventivi",label:"Preventivi e offerte",icon:FileText},{key:"ordini",label:"Ordini confermati",icon:ClipboardList}]},
+    {id:"opportunita",nome:"Preventivi e offerte",icon:Target,items:[{key:"preventivi",label:"Creazione preventivi e offerte",icon:FileText},{key:"pipeline",label:"Pipeline",icon:Target},{key:"ordini",label:"Ordini confermati",icon:ClipboardList}]},
     {id:"agenda",nome:"Agenda",icon:CalendarDays,items:[{key:"agenda",label:"Pannello agenda",icon:CalendarDays},{key:"visite",label:"Calendario e appuntamenti",icon:CalendarDays},{key:"attivita",label:"Attività e follow-up",icon:ClipboardList},{key:"storico_visite",label:"Storico visite",icon:ClipboardList}]},
     {id:"report",nome:"Analisi e fatturato",icon:BarChart3,items:[{key:"direzionale",label:"Report direzionale",icon:BarChart3},{key:"centro",label:"Da fare e priorità",icon:Target},{key:"controllo",label:"Fatturato e portafoglio ordini",icon:Wallet},{key:"fatturato",label:"Fatturato (ordini CRM)",icon:Wallet},{key:"statistiche",label:"Statistiche",icon:TrendingUp}]},
     {id:"mandanti",nome:"Mandanti",icon:Building2,items:[{key:"aziende",label:"Aziende mandanti",icon:Building2},{key:"provvigioni",label:"Gestore provvigioni",icon:Wallet},{key:"listini_import",label:"Importa listini Excel",icon:FileText}]},
