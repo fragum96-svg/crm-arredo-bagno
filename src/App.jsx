@@ -2779,157 +2779,58 @@ function NoteCRM({ session }) {
   </div>;
 }
 
-function ControlloCommerciale({ session }) {
-  const annoCorrente = new Date().getFullYear();
-  const [anno, setAnno] = useState(annoCorrente);
-  const [aziendaId, setAziendaId] = useState("");
-  const [aziende, setAziende] = useState([]);
-  const [clienti, setClienti] = useState([]);
-  const [fatturati, setFatturati] = useState([]);
-  const [portafogli, setPortafogli] = useState([]);
-  const [tab, setTab] = useState("fatturato");
-  const [ricercaEconomica,setRicercaEconomica]=useState("");
-  const [tipoDestinatario,setTipoDestinatario]=useState("tutti");
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [editing, setEditing] = useState(null);
-  const [registraPortafoglioInsieme,setRegistraPortafoglioInsieme] = useState(false);
-  const [importoPortafoglioInsieme,setImportoPortafoglioInsieme] = useState("");
-  const [dataPortafoglioInsieme,setDataPortafoglioInsieme] = useState(() => new Date().toLocaleDateString("en-CA"));
-  const oggi = new Date();
-  const dataOggi = [oggi.getFullYear(),String(oggi.getMonth()+1).padStart(2,"0"),String(oggi.getDate()).padStart(2,"0")].join("-");
-  const vuoto = {cliente_id:"", periodicita:"mensile",periodo:String(oggi.getMonth()+1),anno:String(annoCorrente),importo:"",data_rilevazione:dataOggi,note:""};
-  const [form,setForm] = useState(vuoto);
-  const headers = () => ({ "Content-Type":"application/json", apikey:SUPABASE_ANON_KEY, Authorization:"Bearer "+session.access_token });
-  const request = async (path, options={}) => {
-    const response = await crmFetch(SUPABASE_URL+"/rest/v1/"+path,{...options,headers:{...headers(),...(options.headers||{})}});
-    const raw = await response.text();
-    let result = null;
-    try {result=raw?JSON.parse(raw):null;} catch {result=raw;}
-    if(!response.ok) throw new Error(result?.message || result?.details || "Errore durante la comunicazione con Supabase");
-    return result;
-  };
-  const load = async () => {
-    setLoading(true);setError("");
-    try {
-      const [a,c,f,p]=await Promise.all([
-        request("aziende_mandanti?select=id,nome,colore&order=nome.asc"),
-        request("clienti?select=id,ragione_sociale,classificazione,aziende_collaborate&order=ragione_sociale.asc"),
-        request("fatturato_commerciale?select=*&order=anno.desc,periodo.desc"),
-        request("portafoglio_ordini?select=*&order=data_rilevazione.desc")
-      ]);
-      setAziende(a||[]);setClienti(c||[]);setFatturati(f||[]);setPortafogli(p||[]);
-      setAziendaId(old => (a||[]).some(x=>x.id===old)?old:((a||[])[0]?.id||""));
-    } catch(e){setError(e.message);} finally {setLoading(false);}
-  };
-  useEffect(()=>{load();},[session.access_token]);
-  const azienda=aziende.find(a=>a.id===aziendaId);
-  const clientiAmmessi=clienti.filter(c=>(tipoDestinatario==="tutti"||(tipoDestinatario==="architetti"?c.classificazione==="Architetto":c.classificazione!=="Architetto"))&&(!ricercaEconomica.trim()||c.ragione_sociale.toLowerCase().includes(ricercaEconomica.toLowerCase().trim())));
-  const nomeCliente=id=>clienti.find(c=>c.id===id)?.ragione_sociale||"Cliente non trovato";
-  const euro=n=>Number(n||0).toLocaleString("it-IT",{style:"currency",currency:"EUR"});
-  const fAnno=fatturati.filter(f=>f.azienda_id===aziendaId&&f.anno===Number(anno));
-  const fTotale=fAnno.reduce((sum,f)=>sum+Number(f.importo||0),0);
-  const ultime=new Map();
-  portafogli.filter(p=>p.azienda_id===aziendaId&&p.data_rilevazione<=dataOggi).forEach(p=>{
-    const prev=ultime.get(p.cliente_id);
-    if(!prev||p.data_rilevazione>prev.data_rilevazione) ultime.set(p.cliente_id,p);
-  });
-  const pTotale=Array.from(ultime.values()).reduce((sum,p)=>sum+Number(p.importo||0),0);
-  const righe=tab==="fatturato"?fAnno:[...portafogli.filter(p=>p.azienda_id===aziendaId)].sort((a,b)=>b.data_rilevazione.localeCompare(a.data_rilevazione));
-  const cercaRighe=arr=>arr.filter(r=>(tipoDestinatario==="tutti"||(tipoDestinatario==="architetti"?clienti.find(c=>c.id===r.cliente_id)?.classificazione==="Architetto":clienti.find(c=>c.id===r.cliente_id)?.classificazione!=="Architetto"))&&(!ricercaEconomica.trim()||nomeCliente(r.cliente_id).toLowerCase().includes(ricercaEconomica.toLowerCase().trim())));
-  const nuovo=(tipo=tab)=>{setTab(tipo);setEditing(null);setError("");setSuccess("");setForm({...vuoto,anno:String(anno)});};
-  const modifica=(r,tipo)=>{setTab(tipo);setEditing(r.id);setForm({cliente_id:r.cliente_id,periodicita:r.periodicita||"mensile",periodo:String(r.periodo||1),anno:String(r.anno||anno),importo:String(r.importo),data_rilevazione:r.data_rilevazione||dataOggi,note:r.note||""});setError("");setSuccess("");};
-  const salva=async()=>{
-    setError("");setSuccess("");
-    if(!aziendaId||!form.cliente_id){setError("Seleziona un'azienda e un cliente.");return;}
-    if(!clientiAmmessi.some(c=>c.id===form.cliente_id)){setError("Il cliente non risulta associato alla mandante.");return;}
-    if(form.importo.trim()===""||!Number.isFinite(Number(form.importo))||Number(form.importo)<0){setError("Inserisci un importo valido, anche zero.");return;}
-    if(tab==="fatturato"&&(!Number.isInteger(Number(form.anno))||Number(form.anno)<2000||Number(form.anno)>2100)){setError("Anno non valido.");return;}
-    if(tab==="portafoglio"&&(!form.data_rilevazione||form.data_rilevazione>dataOggi)){setError("Inserisci una data di rilevazione valida, non futura.");return;}
-    const table=tab==="fatturato"?"fatturato_commerciale":"portafoglio_ordini";
-    const body=tab==="fatturato"?{cliente_id:form.cliente_id,azienda_id:aziendaId,anno:Number(form.anno),periodicita:form.periodicita,periodo:Number(form.periodo),importo:Number(form.importo),note:form.note||null}:{cliente_id:form.cliente_id,azienda_id:aziendaId,data_rilevazione:form.data_rilevazione,importo:Number(form.importo),note:form.note||null};
-    if(tab==="fatturato" && !editing && registraPortafoglioInsieme) {
-      if(importoPortafoglioInsieme.trim()==="" || !Number.isFinite(Number(importoPortafoglioInsieme)) || Number(importoPortafoglioInsieme)<0){setError("Inserisci un importo valido per il portafoglio, anche zero.");return;}
-      if(!dataPortafoglioInsieme || dataPortafoglioInsieme>dataOggi){setError("La data del portafoglio non può essere futura.");return;}
-      if(portafogli.some(p=>p.azienda_id===aziendaId && p.cliente_id===form.cliente_id && p.data_rilevazione===dataPortafoglioInsieme)){setError("Esiste già una rilevazione di portafoglio per questo cliente, azienda e data: modificala dalla scheda Portafoglio.");return;}
-    }
-    setSaving(true);
-    try {
-      await request(table+(editing?"?id=eq."+editing:""),{method:editing?"PATCH":"POST",body:JSON.stringify(body)});
-      if(tab==="fatturato" && !editing && registraPortafoglioInsieme){
-        try {
-          await request("portafoglio_ordini",{method:"POST",body:JSON.stringify({cliente_id:form.cliente_id,azienda_id:aziendaId,data_rilevazione:dataPortafoglioInsieme,importo:Number(importoPortafoglioInsieme),note:form.note||null})});
-        } catch(err) {
-          await load();
-          setRegistraPortafoglioInsieme(false);
-          setError("FATTURATO SALVATO, ma PORTAFOGLIO NON SALVATO: "+err.message+". Correggi soltanto il portafoglio, NON reinserire il fatturato.");
-          return;
-        }
-      }
-      await load();setEditing(null);setForm({...vuoto,anno:String(anno)});setRegistraPortafoglioInsieme(false);setImportoPortafoglioInsieme("");setSuccess("Registrazione salvata correttamente.");
-    } catch(e) {setError(e.message.includes("registrazione_unica")||e.message.includes("rilevazione_unica")?"Esiste già una registrazione per questo cliente e periodo/data.":e.message);}
-    finally {setSaving(false);}
-
-  };
-  const elimina=async(r,tipo)=>{
-    if(!window.confirm("Eliminare definitivamente questa registrazione?"))return;
-    setError("");setSuccess("");
-    try {await request((tipo==="fatturato"?"fatturato_commerciale":"portafoglio_ordini")+"?id=eq."+r.id,{method:"DELETE"});await load();if(editing===r.id)nuovo(tipo);setSuccess("Registrazione eliminata.");}catch(e){setError(e.message);}
-  };
-  const box={background:"#fff",border:"1px solid #e5eaf3",borderRadius:14,padding:18};
-  const input={width:"100%",padding:"10px 11px",border:"1px solid #dbe3ee",borderRadius:9,background:"#fff",color:"#26344d",fontSize:13};
-  const label={display:"block",fontSize:12,fontWeight:650,color:"#58677e",marginBottom:5};
-  const btn={border:0,borderRadius:9,padding:"10px 15px",background:"#3479ee",color:"#fff",fontWeight:700,cursor:"pointer"};
-  return <div style={{display:"grid",gap:16}}>
-    <div><h2 style={{margin:"0 0 5px",fontSize:23,color:"#15243c"}}>Controllo Commerciale</h2><p style={{margin:0,color:"#8490a3",fontSize:12}}>Fatturato e portafoglio ordini: registrazione singola o combinata · IVA esclusa</p></div>
-    <div style={{...box,display:"flex",gap:12,flexWrap:"wrap",alignItems:"end"}}>
-      <div style={{flex:"1 1 220px"}}><label style={label}>Azienda mandante</label><select style={input} value={aziendaId} onChange={e=>{setAziendaId(e.target.value);setEditing(null);setForm({...vuoto,anno:String(anno)});}}><option value="">Seleziona azienda</option>{aziende.map(a=><option key={a.id} value={a.id}>{a.nome}</option>)}</select></div>
-      <div style={{width:125}}><label style={label}>Anno fatturato</label><select style={input} value={anno} onChange={e=>{setAnno(Number(e.target.value));setEditing(null);setForm({...vuoto,anno:e.target.value});}}>{Array.from({length:8},(_,i)=>annoCorrente+1-i).map(y=><option key={y} value={y}>{y}</option>)}</select></div>
-    </div>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(185px,1fr))",gap:12}}>
-      {[{titolo:"Fatturato nell'anno",valore:fTotale,sub:"Somma dei periodi registrati"},{titolo:"Portafoglio attuale",valore:pTotale,sub:"Ultima rilevazione per cliente"},{titolo:"Volume commerciale",valore:fTotale+pTotale,sub:"Fatturato + portafoglio attuale"},{titolo:"Clienti associati",valore:clientiAmmessi.length,sub:"Presenti in anagrafica",numero:true}].map(x=><div key={x.titolo} style={box}><div style={{color:"#7b879a",fontSize:12}}>{x.titolo}</div><strong style={{display:"block",fontSize:23,margin:"9px 0",color:"#1c2d4b"}}>{x.numero?x.valore:euro(x.valore)}</strong><span style={{fontSize:11,color:"#96a0af"}}>{x.sub}</span></div>)}
-    </div>
-    <div style={{...box,display:'flex',gap:12,flexWrap:'wrap',alignItems:'end'}}><label style={{flex:'1 1 180px',fontSize:12}}>Tipo nominativo<select style={input} value={tipoDestinatario} onChange={e=>setTipoDestinatario(e.target.value)}><option value='tutti'>Tutti</option><option value='clienti'>Clienti e rivenditori</option><option value='architetti'>Architetti e studi</option></select></label><label style={{flex:'2 1 230px',fontSize:12}}>Cerca cliente o studio<input style={input} placeholder='Scrivi il nome...' value={ricercaEconomica} onChange={e=>setRicercaEconomica(e.target.value)}/></label></div>
-    {loading?<div style={box}>Caricamento dati…</div>:<>
-      {aziende.length===0&&<div style={box}>Inserisci prima un'azienda mandante nella sezione Mandanti.</div>}
-      {azienda&&clientiAmmessi.length===0&&<div style={{...box,color:"#8a641b",background:"#fffaf0"}}>Nessun cliente associato a {azienda.nome}. Crea un cliente di prova e seleziona questa mandante nella sua scheda.</div>}
-      <div style={{...box,display:"grid",gap:13}}>
-        <h3 style={{margin:0,fontSize:17,color:"#20334b"}}>Fatturato e portafoglio ordini</h3>
-        <p style={{fontSize:12,color:"#64748b",margin:0}}>Un’unica scheda per inserimenti e modifiche: le due registrazioni restano distinte.</p>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button type="button" onClick={()=>nuovo("fatturato")} style={{...btn,background:tab==="fatturato"?"#3479ee":"#eef3fb",color:tab==="fatturato"?"#fff":"#40526e"}}>+ Fatturato</button><button type="button" onClick={()=>nuovo("portafoglio")} style={{...btn,background:tab==="portafoglio"?"#3479ee":"#eef3fb",color:tab==="portafoglio"?"#fff":"#40526e"}}>+ Portafoglio ordini</button></div>
-        <h3 style={{margin:0,fontSize:15}}>{editing?"Modifica registrazione":"Nuova registrazione"} · {tab==="fatturato"?"Fatturato":"Portafoglio ordini"}</h3>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:12}}>
-          <div><label style={label}>Cliente *</label><select style={input} value={form.cliente_id} onChange={e=>setForm(f=>({...f,cliente_id:e.target.value}))}><option value="">Seleziona cliente</option>{clientiAmmessi.map(c=><option key={c.id} value={c.id}>{c.ragione_sociale}</option>)}</select></div>
-          {tab==="fatturato"?<>
-            <div><label style={label}>Periodicità</label><select style={input} value={form.periodicita} onChange={e=>setForm(f=>({...f,periodicita:e.target.value,periodo:"1"}))}><option value="mensile">Mensile</option><option value="trimestrale">Trimestrale</option></select></div>
-            <div><label style={label}>Anno</label><input style={input} type="number" min="2000" max="2100" value={form.anno} onChange={e=>setForm(f=>({...f,anno:e.target.value}))}/></div>
-            <div><label style={label}>{form.periodicita==="mensile"?"Mese":"Trimestre"}</label><select style={input} value={form.periodo} onChange={e=>setForm(f=>({...f,periodo:e.target.value}))}>{(form.periodicita==="mensile"?MESI:["1° trimestre","2° trimestre","3° trimestre","4° trimestre"]).map((m,i)=><option key={i} value={i+1}>{m}</option>)}</select></div>
-          </>:<div><label style={label}>Data rilevazione *</label><input style={input} type="date" max={dataOggi} value={form.data_rilevazione} onChange={e=>setForm(f=>({...f,data_rilevazione:e.target.value}))}/></div>}
-          <div><label style={label}>Importo netto (€) *</label><input style={input} type="number" min="0" step="0.01" placeholder="0,00" value={form.importo} onChange={e=>setForm(f=>({...f,importo:e.target.value}))}/></div>
-        </div>
-        {tab==="fatturato" && !editing && <div style={{border:"1px solid #dbe5f3",background:"#f8fbff",borderRadius:12,padding:14,display:"grid",gap:10}}>
-          <label style={{display:"flex",alignItems:"center",gap:9,fontWeight:650,fontSize:13,color:"#29466b"}}><input type="checkbox" checked={registraPortafoglioInsieme} onChange={e=>setRegistraPortafoglioInsieme(e.target.checked)}/> Registrare anche il portafoglio ordini comunicato dalla mandante?</label>
-          {registraPortafoglioInsieme && <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12}}>
-            <div><label style={label}>Saldo portafoglio (€) *</label><input style={input} type="number" min="0" step="0.01" value={importoPortafoglioInsieme} onChange={e=>setImportoPortafoglioInsieme(e.target.value)}/></div>
-            <div><label style={label}>Data rilevazione *</label><input style={input} type="date" max={dataOggi} value={dataPortafoglioInsieme} onChange={e=>setDataPortafoglioInsieme(e.target.value)}/></div>
-          </div>}
-          <span style={{fontSize:11,color:"#667b98"}}>Il portafoglio è una fotografia alla data indicata, distinta dal fatturato. In caso di errore nel secondo salvataggio il CRM ti avviserà esplicitamente.</span>
-        </div>}
-        <div><label style={label}>Note (facoltative)</label><textarea style={{...input,minHeight:60}} value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} placeholder="Dettagli della rilevazione"/></div>
-        {error&&<div style={{color:"#b42318",fontSize:12}}>{error}</div>}{success&&<div style={{color:"#147d52",fontSize:12}}>{success}</div>}
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button style={btn} onClick={salva} disabled={saving||!aziendaId||clientiAmmessi.length===0}>{saving?"Salvataggio…":editing?"Salva modifiche":"Registra importo"}</button>{editing&&<button style={{...btn,background:"#edf1f7",color:"#475569"}} onClick={()=>nuovo(tab)}>Annulla modifica</button>}</div>
-        <p style={{fontSize:11,color:"#8995a8",margin:0}}>{tab==="fatturato"?"Non è possibile inserire un trimestre se esistono già mesi dello stesso trimestre (e viceversa).":"Il portafoglio è una fotografia: i valori di date diverse non vengono sommati tra loro."}</p>
-      </div>
-      {[{tipo:"fatturato",titolo:"Fatturato",records:fAnno},{tipo:"portafoglio",titolo:"Portafoglio ordini",records:portafogli.filter(p=>p.azienda_id===aziendaId).sort((a,b)=>String(b.data_rilevazione).localeCompare(String(a.data_rilevazione)))}].map(section=><div key={section.tipo} style={box}>
-        <h3 style={{margin:"0 0 13px",fontSize:16,color:"#20334b"}}>{section.titolo} · storico e modifiche</h3>
-        <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:570}}><thead><tr style={{background:"#f5f7fb",textAlign:"left"}}><th style={{padding:10}}>Cliente / studio</th><th style={{padding:10}}>Periodo / data</th><th style={{padding:10,textAlign:"right"}}>Importo</th><th style={{padding:10}}>Note</th><th style={{padding:10}}>Azioni</th></tr></thead><tbody>{cercaRighe(section.records).map(r=><tr key={r.id} style={{borderBottom:"1px solid #eef1f6"}}><td style={{padding:10}}>{nomeCliente(r.cliente_id)}</td><td style={{padding:10}}>{section.tipo==="fatturato"?(r.periodicita==="mensile"?MESI[r.periodo-1]:"T"+r.periodo)+" "+r.anno:String(r.data_rilevazione||"").split("-").reverse().join("/")}</td><td style={{padding:10,textAlign:"right",fontWeight:700}}>{euro(r.importo)}</td><td style={{padding:10,color:"#78869b"}}>{r.note||"—"}</td><td style={{padding:10,whiteSpace:"nowrap"}}><button onClick={()=>modifica(r,section.tipo)} style={{border:0,background:"transparent",color:"#2c70e2",cursor:"pointer",marginRight:8}}>Modifica</button><button onClick={()=>elimina(r,section.tipo)} style={{border:0,background:"transparent",color:"#bd3e3e",cursor:"pointer"}}>Elimina</button></td></tr>)}</tbody></table>{section.records.length===0&&<p style={{fontSize:12,color:"#8895a8"}}>Nessuna registrazione per questa selezione.</p>}</div>
-      </div>)}
+function RilevazioniEObiettiviCRM({session, mode="rilevazioni"}) {
+  const today = new Date().toLocaleDateString('en-CA');
+  const yearNow = Number(today.slice(0,4));
+  const [aziende,setAziende]=useState([]),[clienti,setClienti]=useState([]),[righe,setRighe]=useState([]),[targets,setTargets]=useState([]);
+  const [agency,setAgency]=useState(''),[year,setYear]=useState(yearNow),[search,setSearch]=useState(''),[tipo,setTipo]=useState('tutti');
+  const [client,setClient]=useState(''),[date,setDate]=useState(today),[fatt,setFatt]=useState(''),[port,setPort]=useState(''),[note,setNote]=useState('');
+  const [editing,setEditing]=useState(''),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[success,setSuccess]=useState('');
+  const [targetYear,setTargetYear]=useState(yearNow+1),[targetAgency,setTargetAgency]=useState(''),[targetClient,setTargetClient]=useState(''),[targetAmount,setTargetAmount]=useState('');
+  const hdr=()=>({apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+session.access_token,'Content-Type':'application/json'});
+  async function api(path,opts={}) {if(opts.method==='POST'&&(path.startsWith('crm_rilevazioni_commerciali')||path.startsWith('crm_obiettivi_commerciali'))){const ag=await crmFetch(SUPABASE_URL+'/rest/v1/crm_agenzie?select=id&limit=2',{headers:hdr()});const agencies=await ag.json();if(!ag.ok||!Array.isArray(agencies)||agencies.length!==1)throw Error('È necessaria una sola agenzia di proprietà per salvare.');opts={...opts,body:JSON.stringify({...JSON.parse(opts.body),agenzia_id:agencies[0].id})};}const r=await crmFetch(SUPABASE_URL+'/rest/v1/'+path,{...opts,headers:{...hdr(),...(opts.headers||{})}});const txt=await r.text();let d;try{d=txt?JSON.parse(txt):null}catch{d=txt};if(!r.ok)throw Error(d?.message||d?.details||String(d)||'Errore Supabase');return d;}
+  async function reload(){setLoading(true);setError('');try{const [a,c,r,t]=await Promise.all([api('aziende_mandanti?select=id,nome&order=nome.asc'),api('clienti?select=id,ragione_sociale,classificazione&order=ragione_sociale.asc'),api('crm_rilevazioni_commerciali?select=*&order=data_rilevazione.desc,created_at.desc'),api('crm_obiettivi_commerciali?select=*')]);setAziende(a||[]);setClienti(c||[]);setRighe(r||[]);setTargets(t||[]);setAgency(old=>(a||[]).some(x=>x.id===old)?old:(a?.[0]?.id||''));}catch(e){setError(e.message)}finally{setLoading(false)}}
+  useEffect(()=>{reload()},[session.access_token]);
+  const euro=n=>Number(n||0).toLocaleString('it-IT',{style:'currency',currency:'EUR'});
+  const name=id=>clienti.find(x=>x.id===id)?.ragione_sociale||'Cliente non trovato';
+  const available=clienti.filter(c=>(tipo==='tutti'||(tipo==='architetti'?c.classificazione==='Architetto':c.classificazione!=='Architetto'))&&(!search||c.ragione_sociale.toLowerCase().includes(search.trim().toLowerCase())));
+  // A parita di data prevale l'ultimo inserimento; la data rilevazione, non la creazione, governa lo storico.
+  const ordered=[...righe].sort((a,b)=>String(b.data_rilevazione).localeCompare(String(a.data_rilevazione))||String(b.created_at).localeCompare(String(a.created_at))||String(b.id).localeCompare(String(a.id)));
+  const perYear=(id,yr)=>ordered.find(r=>r.azienda_id===agency&&r.cliente_id===id&&Number(String(r.data_rilevazione).slice(0,4))===Number(yr));
+  const current=new Map();ordered.filter(r=>r.azienda_id===agency&&Number(String(r.data_rilevazione).slice(0,4))===Number(year)).forEach(r=>{if(!current.has(r.cliente_id))current.set(r.cliente_id,r)});
+  const currentRows=[...current.values()];const sumF=currentRows.reduce((s,r)=>s+Number(r.fatturato||0),0),sumP=currentRows.reduce((s,r)=>s+Number(r.portafoglio||0),0);
+  const rows=ordered.filter(r=>r.azienda_id===agency&&Number(String(r.data_rilevazione).slice(0,4))===Number(year)&&available.some(c=>c.id===r.cliente_id));
+  const input={width:'100%',minWidth:0,padding:'10px 11px',border:'1px solid #d7e0e9',borderRadius:9,background:'#fff',fontSize:13,color:'#1f2937'};
+  const panel={background:'#fff',border:'1px solid #e1e8ee',borderRadius:14,padding:18,display:'grid',gap:13};
+  const btn={border:0,borderRadius:9,padding:'10px 15px',background:'#246143',color:'#fff',fontWeight:700,cursor:'pointer'};
+  const label=(title,control)=><label style={{display:'grid',gap:5,fontSize:12,fontWeight:650,color:'#536477'}}>{title}{control}</label>;
+  const optClient=<select style={input} value={client} onChange={e=>{setClient(e.target.value);if(!editing){const prev=ordered.find(r=>r.azienda_id===agency&&r.cliente_id===e.target.value);setFatt(prev?String(prev.fatturato):'');setPort(prev?String(prev.portafoglio):'');}}}><option value=''>Seleziona nominativo</option>{available.map(c=><option key={c.id} value={c.id}>{c.ragione_sociale}</option>)}</select>;
+  function reset(){setEditing('');setClient('');setDate(today);setFatt('');setPort('');setNote('');setError('');setSuccess('')}
+  function edit(r){setEditing(r.id);setAgency(r.azienda_id);setClient(r.cliente_id);setDate(r.data_rilevazione);setFatt(String(r.fatturato));setPort(String(r.portafoglio));setNote(r.note||'');setSuccess('');window.scrollTo?.({top:0,behavior:'smooth'})}
+  async function save(){setError('');setSuccess('');if(!agency||!client||!date){setError('Seleziona mandante, cliente e data.');return}if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){setError('Data non valida.');return}if([fatt,port].some(x=>x===''||!Number.isFinite(Number(x))||Number(x)<0)){setError('Indica entrambi gli importi, anche zero.');return}setBusy(true);try{await api('crm_rilevazioni_commerciali'+(editing?'?id=eq.'+editing:''),{method:editing?'PATCH':'POST',body:JSON.stringify({azienda_id:agency,cliente_id:client,data_rilevazione:date,fatturato:Number(fatt),portafoglio:Number(port),note:note||null})});await reload();reset();setSuccess('Rilevazione salvata. Le rilevazioni precedenti restano nello storico.')}catch(e){setError(e.message)}finally{setBusy(false)}}
+  async function erase(r){if(!window.confirm('Eliminare questa rilevazione dallo storico?'))return;try{await api('crm_rilevazioni_commerciali?id=eq.'+r.id,{method:'DELETE'});await reload();if(editing===r.id)reset()}catch(e){setError(e.message)}}
+  const targetFor=(yr,clientId)=>targets.find(t=>t.azienda_id===agency&&t.anno===Number(yr)&&String(t.cliente_id||'')===String(clientId||''));
+  async function saveTarget(){setError('');setSuccess('');if(!agency||!targetYear||targetAmount===''||!Number.isFinite(Number(targetAmount))||Number(targetAmount)<0){setError('Inserisci un obiettivo valido.');return}setBusy(true);try{const prev=targetFor(targetYear,targetClient);const payload={azienda_id:agency,anno:Number(targetYear),cliente_id:targetClient||null,importo_obiettivo:Number(targetAmount)};await api('crm_obiettivi_commerciali'+(prev?'?id=eq.'+prev.id:''),{method:prev?'PATCH':'POST',body:JSON.stringify(payload)});await reload();setSuccess('Obiettivo salvato correttamente.')}catch(e){setError(e.message)}finally{setBusy(false)}}
+  const years=Array.from({length:8},(_,i)=>yearNow+1-i), chosenClient=clienti.filter(c=>c.id===client)[0];
+  const yearlyIds=[...new Set(ordered.filter(r=>r.azienda_id===agency).map(r=>r.cliente_id))].filter(id=>available.some(c=>c.id===id));
+  const actualTargetYear=yearlyIds.reduce((sum,id)=>sum+Number(perYear(id,targetYear)?.fatturato||0),0);
+  const totalTarget=targetFor(targetYear,'');const percent=(n,d)=>Number(d)>0?Math.round(Number(n||0)/Number(d)*100):null;
+  return <div style={{display:'grid',gap:16,maxWidth:1250,margin:'0 auto',padding:'12px 4px 35px',color:'#203047'}}>
+    <header><h2 style={{margin:'0 0 5px'}}>{mode==='rilevazioni'?'Fatturato e portafoglio ordini':mode==='storico'?'Storico fatturato clienti':'Obiettivi commerciali'}</h2><p style={{margin:0,color:'#718096',fontSize:12}}>Ogni rilevazione è una fotografia autonoma, non viene sommata alle precedenti. IVA esclusa.</p></header>
+    <section style={{...panel,gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))'}}>{label('Azienda mandante',<select style={input} value={agency} onChange={e=>{setAgency(e.target.value);reset()}}><option value=''>Seleziona</option>{aziende.map(a=><option key={a.id} value={a.id}>{a.nome}</option>)}</select>)}{label('Tipo nominativo',<select style={input} value={tipo} onChange={e=>setTipo(e.target.value)}><option value='tutti'>Tutti</option><option value='clienti'>Clienti</option><option value='architetti'>Architetti</option></select>)}{label('Cerca cliente o architetto',<input style={input} value={search} onChange={e=>setSearch(e.target.value)} placeholder='Nome o studio'/>)}{mode!=='obiettivi'&&label('Anno',<select style={input} value={year} onChange={e=>setYear(Number(e.target.value))}>{years.map(y=><option key={y}>{y}</option>)}</select>)}</section>
+    {error&&<div role='alert' style={{color:'#b42318',background:'#fff0ed',padding:12,borderRadius:10}}>{error}</div>}{success&&<div style={{color:'#147b4b',background:'#edf8f1',padding:12,borderRadius:10}}>{success}</div>}{loading&&<div>Caricamento…</div>}
+    {!loading&&mode==='rilevazioni'&&<>
+      <section style={{...panel,gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))'}}>{[['Fatturato attuale',sumF],['Portafoglio attuale',sumP],['Totale commerciale',sumF+sumP]].map(([n,v])=><div key={n}><span style={{fontSize:12,color:'#65768a'}}>{n}</span><strong style={{display:'block',fontSize:22,marginTop:7,color:n==='Totale commerciale'?'#246143':'#1d2c40'}}>{euro(v)}</strong></div>)}</section>
+      <section style={panel}><h3 style={{margin:0}}>Una sola rilevazione: fatturato + portafoglio</h3><p style={{margin:0,fontSize:12,color:'#728296'}}>Scegli il cliente: vengono proposti gli importi dell'ultima rilevazione, modificabili. Ogni salvataggio conserva lo storico, anche nello stesso giorno.</p><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:12}}>{label('Cliente / architetto',optClient)}{label('Data della rilevazione',<input style={input} type='date' value={date} onChange={e=>setDate(e.target.value)}/>)}</div><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:12}}>{label('Fatturato cumulativo (€)',<input style={input} type='number' min='0' step='0.01' value={fatt} onChange={e=>setFatt(e.target.value)}/>)}{label('Portafoglio ordini (€)',<input style={input} type='number' min='0' step='0.01' value={port} onChange={e=>setPort(e.target.value)}/>)}</div><div style={{padding:12,background:'#f1f7f3',borderRadius:10,fontWeight:750}}>Totale commerciale della rilevazione: {euro(Number(fatt||0)+Number(port||0))}</div>{label('Note',<textarea style={{...input,minHeight:54}} value={note} onChange={e=>setNote(e.target.value)}/>)}<div style={{display:'flex',gap:8,flexWrap:'wrap'}}><button style={btn} disabled={busy} onClick={save}>{busy?'Salvataggio…':editing?'Salva correzione storica':'Salva nuova rilevazione'}</button>{editing&&<button style={{...btn,background:'#edf2f6',color:'#354358'}} onClick={reset}>Annulla modifica</button>}</div></section>
+      <section style={panel}><h3 style={{margin:0}}>Cronologia rilevazioni · {year}</h3><div style={{overflowX:'auto'}}><table style={{borderCollapse:'collapse',width:'100%',minWidth:680,fontSize:12}}><thead><tr>{['Data','Cliente / architetto','Fatturato','Portafoglio','Totale','Azioni'].map(x=><th key={x} style={{textAlign:'left',padding:9,background:'#f2f5f8'}}>{x}</th>)}</tr></thead><tbody>{rows.map(r=><tr key={r.id} style={{borderBottom:'1px solid #e9eef2'}}><td style={{padding:9}}>{r.data_rilevazione}</td><td style={{padding:9}}>{name(r.cliente_id)}{current.get(r.cliente_id)?.id===r.id&&<span style={{color:'#167850',marginLeft:6}}>● Attuale</span>}</td><td style={{padding:9}}>{euro(r.fatturato)}</td><td style={{padding:9}}>{euro(r.portafoglio)}</td><td style={{padding:9,fontWeight:700}}>{euro(Number(r.fatturato)+Number(r.portafoglio))}</td><td style={{padding:9,whiteSpace:'nowrap'}}><button onClick={()=>edit(r)} style={{border:0,color:'#246143',background:'transparent',cursor:'pointer'}}>Modifica</button><button onClick={()=>erase(r)} style={{border:0,color:'#bc3f43',background:'transparent',cursor:'pointer'}}>Elimina</button></td></tr>)}</tbody></table>{!rows.length&&<p style={{fontSize:13,color:'#7b8ba0'}}>Nessuna rilevazione in questo anno. I dati del vecchio modulo non sono stati cancellati.</p>}</div></section>
     </>}
+    {!loading&&mode==='storico'&&<section style={panel}><h3 style={{margin:0}}>Confronto fatturato per cliente e anno</h3><p style={{fontSize:12,color:'#708096',margin:0}}>Per ogni anno viene usata soltanto l'ultima rilevazione cronologica, non la somma delle fotografie.</p><div style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:650,borderCollapse:'collapse',fontSize:13}}><thead><tr>{['Cliente / architetto',year-2,year-1,year,'Var. ultimo anno'].map(x=><th key={x} style={{textAlign:'left',padding:9,background:'#f2f5f8'}}>{x}</th>)}</tr></thead><tbody>{yearlyIds.map(id=>{const old=perYear(id,year-1)?.fatturato,now=perYear(id,year)?.fatturato;const change=old>0&&now!=null?((now-old)/old*100):null;return <tr key={id} style={{borderBottom:'1px solid #e7edf3'}}><td style={{padding:10}}>{name(id)}</td>{[year-2,year-1,year].map(y=><td key={y} style={{padding:10}}>{perYear(id,y)?euro(perYear(id,y).fatturato):'—'}</td>)}<td style={{padding:10,color:change==null?'#64748b':change>=0?'#167a52':'#b42336'}}>{change===null?'—':(change>=0?'↑ +':'↓ ')+change.toFixed(1)+'%'}</td></tr>})}</tbody></table>{yearlyIds.length===0&&<p>Nessuna rilevazione registrata per la mandante.</p>}</div></section>}
+    {!loading&&mode==='obiettivi'&&<><section style={panel}><h3 style={{margin:0}}>Imposta obiettivo annuale</h3><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:12}}>{label('Anno obiettivo',<input style={input} type='number' min='2000' max='2100' value={targetYear} onChange={e=>{setTargetYear(Number(e.target.value));setTargetAmount('')}}/>)}{label('Destinatario',<select style={input} value={targetClient} onChange={e=>{setTargetClient(e.target.value);setTargetAmount('')}}><option value=''>Intera azienda mandante</option>{available.map(c=><option key={c.id} value={c.id}>{c.ragione_sociale}</option>)}</select>)}{label('Obiettivo fatturato (€)',<input style={input} type='number' min='0' step='0.01' value={targetAmount} onChange={e=>setTargetAmount(e.target.value)} placeholder={String(targetFor(targetYear,targetClient)?.importo_obiettivo||0)}/>)}</div><button style={{...btn,justifySelf:'start'}} onClick={saveTarget} disabled={busy}>{busy?'Salvataggio…':'Salva obiettivo'}</button></section><section style={panel}><h3 style={{margin:0}}>Avanzamento obiettivi {targetYear}</h3>{[['Mandante',null],...available.filter(c=>targetFor(targetYear,c.id)).map(c=>[c.ragione_sociale,c.id])].map(([label,id])=>{const goal=targetFor(targetYear,id||'');if(!goal)return null;const actual=id?Number(perYear(id,targetYear)?.fatturato||0):actualTargetYear;const pct=percent(actual,goal.importo_obiettivo);return <div key={id||'mandante'} style={{borderBottom:'1px solid #e7edf2',padding:'12px 0'}}><div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap'}}><strong>{label}</strong><span>{euro(actual)} / {euro(goal.importo_obiettivo)} · {pct===null?'—':pct+'%'}</span></div><div style={{background:'#e7edef',height:9,borderRadius:10,marginTop:8,overflow:'hidden'}}><div style={{width:Math.min(pct||0,100)+'%',height:'100%',background:'#246143'}}/></div></div>})}<p style={{fontSize:12,color:'#708096'}}>L'avanzamento riguarda solo il fatturato, non il portafoglio. Il totale mandante usa una rilevazione per cliente.</p></section></>}
+    <div style={{color:'#738395',fontSize:11}}>I vecchi dati mensili e trimestrali restano nelle tabelle originali; non vengono importati automaticamente per evitare doppi conteggi.</div>
   </div>;
 }
 
+function ControlloCommerciale({session}) {return <RilevazioniEObiettiviCRM session={session} mode="rilevazioni"/>;}
 
 const FASI_PIPELINE = [
   {id:"primo_contatto",nome:"Bozza",colore:"#94a3b8",prob:20},
@@ -4179,7 +4080,7 @@ function ReportDirezionaleCRM({session, goTo}) {
   const carica=async()=>{
     setLoading(true);setErrore('');
     const h={apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+session.access_token};
-    const paths={aziende:'aziende_mandanti?select=id,nome&order=nome.asc',clienti:'clienti?select=id,ragione_sociale',fatturato:'fatturato_commerciale?select=azienda_id,cliente_id,anno,importo',opportunita:'opportunita_commerciali?select=id,titolo,cliente_id,azienda_id,fase,valore_stimato,probabilita,data_prossima_azione',provvigioni:'crm_provvigioni_ordini?select=id,azienda_id,cliente_id,importo_maturato,data_ordine',liquidazioni:'crm_liquidazioni_provvigioni?select=provvigione_id,importo',attivita:'crm_attivita?select=id,azienda_id,cliente_id,titolo,scadenza,stato'};
+    const paths={aziende:'aziende_mandanti?select=id,nome&order=nome.asc',clienti:'clienti?select=id,ragione_sociale',fatturato:'crm_rilevazioni_commerciali?select=azienda_id,cliente_id,data_rilevazione,created_at,fatturato',opportunita:'opportunita_commerciali?select=id,titolo,cliente_id,azienda_id,fase,valore_stimato,probabilita,data_prossima_azione',provvigioni:'crm_provvigioni_ordini?select=id,azienda_id,cliente_id,importo_maturato,data_ordine',liquidazioni:'crm_liquidazioni_provvigioni?select=provvigione_id,importo',attivita:'crm_attivita?select=id,azienda_id,cliente_id,titolo,scadenza,stato'};
     try{
       const entries=await Promise.all(Object.entries(paths).map(async([key,path])=>{
         const r=await crmFetch(SUPABASE_URL+'/rest/v1/'+path,{headers:h});
@@ -4192,8 +4093,10 @@ function ReportDirezionaleCRM({session, goTo}) {
   };
   useEffect(()=>{carica()},[session.access_token]);
   const filtrati=(arr)=>arr.filter(x=>!mandante||x.azienda_id===mandante);
-  const f=filtrati(righe.fatturato).filter(x=>Number(x.anno)===Number(anno));
-  const totaleFatturato=f.reduce((a,x)=>a+Number(x.importo||0),0);
+  const rilevazioniAnno=filtrati(righe.fatturato).filter(x=>String(x.data_rilevazione||'').slice(0,4)===String(anno)).sort((a,b)=>String(b.data_rilevazione).localeCompare(String(a.data_rilevazione))||String(b.created_at).localeCompare(String(a.created_at)));
+  const latestByClientAgency=new Map();rilevazioniAnno.forEach(x=>{const k=x.azienda_id+':'+x.cliente_id;if(!latestByClientAgency.has(k))latestByClientAgency.set(k,x)});
+  const f=[...latestByClientAgency.values()];
+  const totaleFatturato=f.reduce((a,x)=>a+Number(x.fatturato||0),0);
   const opportunita=filtrati(righe.opportunita).filter(x=>!['vinta','persa','chiusa','annullata'].includes(String(x.fase||'').toLowerCase()));
   const valorePipeline=opportunita.reduce((a,x)=>a+Number(x.valore_stimato||0),0);
   const ponderata=opportunita.reduce((a,x)=>a+Number(x.valore_stimato||0)*Number(x.probabilita||0)/100,0);
@@ -4206,9 +4109,9 @@ function ReportDirezionaleCRM({session, goTo}) {
   const nome=(id)=>righe.aziende.find(x=>x.id===id)?.nome||'Non assegnata';
   const euro=n=>Number(n||0).toLocaleString('it-IT',{style:'currency',currency:'EUR'});
   const card={padding:18,borderRadius:15,background:'#fff',border:'1px solid #dce4f0',boxShadow:'0 4px 12px rgba(25,48,90,.035)'};
-  const mandanti=righe.aziende.map(a=>({...a,fatturato:f.filter(x=>x.azienda_id===a.id).reduce((n,x)=>n+Number(x.importo||0),0),pipeline:opportunita.filter(x=>x.azienda_id===a.id).reduce((n,x)=>n+Number(x.valore_stimato||0),0)})).sort((a,b)=>b.fatturato-a.fatturato);
+  const mandanti=righe.aziende.map(a=>({...a,fatturato:f.filter(x=>x.azienda_id===a.id).reduce((n,x)=>n+Number(x.fatturato||0),0),pipeline:opportunita.filter(x=>x.azienda_id===a.id).reduce((n,x)=>n+Number(x.valore_stimato||0),0)})).sort((a,b)=>b.fatturato-a.fatturato);
   return <section style={{maxWidth:1250,margin:'0 auto',padding:'20px 10px 35px',color:'#1d3150'}}>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:12,marginBottom:18}}><div><h2 style={{margin:'0 0 5px'}}>Report direzionale</h2><p style={{margin:0,color:'#6a7a90',fontSize:13}}>Consuntivo, trattative, provvigioni e attività: dati reali, senza sommare preventivi al fatturato.</p></div><button onClick={carica} style={{padding:'10px 14px',border:'1px solid #c9d7ea',borderRadius:9,background:'#fff',cursor:'pointer'}}>Aggiorna dati</button></div>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:12,marginBottom:18}}><div><h2 style={{margin:'0 0 5px'}}>Report direzionale</h2><p style={{margin:0,color:'#6a7a90',fontSize:13}}>Rilevazioni cumulative, trattative, provvigioni e attività. Una sola fotografia per cliente e anno; nessuna somma storica.</p></div><button onClick={carica} style={{padding:'10px 14px',border:'1px solid #c9d7ea',borderRadius:9,background:'#fff',cursor:'pointer'}}>Aggiorna dati</button></div>
     <div style={{display:'flex',gap:12,flexWrap:'wrap',marginBottom:16}}><label>Anno <select value={anno} onChange={e=>setAnno(Number(e.target.value))} style={{marginLeft:7,padding:9,borderRadius:8,border:'1px solid #cbd7e7'}}>{Array.from({length:6},(_,i)=>new Date().getFullYear()-i).map(y=><option key={y} value={y}>{y}</option>)}</select></label><label>Mandante <select value={mandante} onChange={e=>setMandante(e.target.value)} style={{marginLeft:7,padding:9,borderRadius:8,border:'1px solid #cbd7e7'}}><option value=''>Tutte le aziende</option>{righe.aziende.map(a=><option key={a.id} value={a.id}>{a.nome}</option>)}</select></label></div>
     {loading&&<p>Caricamento report…</p>}{errore&&<p role='alert' style={{color:'#ad2929'}}>Impossibile completare il report: {errore}</p>}
     {!loading&&!errore&&<>
@@ -4252,7 +4155,7 @@ function AppShell({ session, onLogout }) {
     {id:"opportunita",nome:"Preventivi e offerte",icon:Target,items:[{key:"preventivi",label:"Creazione preventivi e offerte",icon:FileText},{key:"pipeline",label:"Pipeline",icon:Target},{key:"ordini",label:"Ordini confermati",icon:ClipboardList}]},
     {id:"agenda",nome:"Agenda",icon:CalendarDays,items:[{key:"agenda",label:"Pannello agenda",icon:CalendarDays},{key:"visite",label:"Calendario e appuntamenti",icon:CalendarDays},{key:"attivita",label:"Attività e follow-up",icon:ClipboardList},{key:"storico_visite",label:"Storico visite",icon:ClipboardList}]},
     {id:"report",nome:"Analisi e fatturato",icon:BarChart3,items:[{key:"direzionale",label:"Report direzionale",icon:BarChart3},{key:"centro",label:"Da fare e priorità",icon:Target},{key:"controllo",label:"Fatturato e portafoglio ordini",icon:Wallet},{key:"fatturato",label:"Fatturato (ordini CRM)",icon:Wallet},{key:"statistiche",label:"Statistiche",icon:TrendingUp}]},
-    {id:"mandanti",nome:"Mandanti",icon:Building2,items:[{key:"aziende",label:"Aziende mandanti",icon:Building2},{key:"provvigioni",label:"Gestore provvigioni",icon:Wallet},{key:"listini_import",label:"Importa listini Excel",icon:FileText}]},
+    {id:"mandanti",nome:"Mandanti",icon:Building2,items:[{key:"aziende",label:"Aziende mandanti",icon:Building2},{key:"provvigioni",label:"Gestore provvigioni",icon:Wallet},{key:"listini_import",label:"Importa listini Excel",icon:FileText},{key:"storico_fatturato_mandanti",label:"Storico fatturato clienti",icon:TrendingUp},{key:"obiettivi_mandanti",label:"Obiettivi commerciali",icon:Target}]},
     
   ];  const scegli = key => { setPage(key); if(window.innerWidth<768)setMenuOpen(false); };
   useEffect(()=>{const handle=e=>scegli(e.detail);window.addEventListener('crm-navigation',handle);return()=>window.removeEventListener('crm-navigation',handle);},[]);
@@ -4319,6 +4222,8 @@ function AppShell({ session, onLogout }) {
         {page==="statistiche"&&<Statistiche session={session}/>}
         {page==="fatturato"&&<Fatturato session={session}/>}
         {page==="controllo"&&<ControlloCommerciale session={session}/>}
+        {page==="storico_fatturato_mandanti"&&<RilevazioniEObiettiviCRM session={session} mode="storico"/>}
+        {page==="obiettivi_mandanti"&&<RilevazioniEObiettiviCRM session={session} mode="obiettivi"/>}
         {page==="ordini"&&<RegistroOrdini session={session} apriPreventivo={apriPreventivoCliente}/>}
         {page==="portafoglio"&&<PortafoglioOrdini session={session}/>}
         {page==="gruppi"&&<GruppiAcquisto session={session} gruppoIniziale={gruppoAprireId} onGruppoAperto={()=>setGruppoAprireId(null)}/>}
