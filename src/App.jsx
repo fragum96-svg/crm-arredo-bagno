@@ -377,8 +377,8 @@ async function stampaPreventivo(preventivo, clienti, aziende, session, onAntepri
       catch (err) { console.warn("Immagine non disponibile nel PDF", err); return null; }
     }));
     const haImmagini = righe.some((r, i) => Boolean(r.immagine_url && immagini[i]));
-    // Palette neutra dedicata al PDF; non modifica i colori del CRM.
-    const navy = [65, 69, 74];
+    // Verde istituzionale PDF, indipendente dalla palette dell’interfaccia CRM.
+    const navy = [36, 97, 67];
     const muted = [111, 115, 121];
     const drawHeader = () => {
       doc.setTextColor(...navy);
@@ -1054,7 +1054,7 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
   const opportunitaAperte=opportunitaCliente.filter(o=>!["confermata","persa"].includes(o.fase));
   const valoreOpportunita=opportunitaAperte.reduce((t,o)=>t+Number(o.valore_stimato||0),0);
   const righeEconomiche=aziendeOptions.filter(a=>fatturatoAnno.some(f=>f.azienda_id===a.id)||ultimeFotografie.has(a.id)||opportunitaCliente.some(o=>o.azienda_id===a.id));
-  const fasiNomi={primo_contatto:"Primo contatto",trattativa:"Trattativa",offerta_inviata:"Offerta inviata",confermata:"Confermata",persa:"Persa",sospesa:"Sospesa"};
+  const fasiNomi={primo_contatto:"Bozza",trattativa:"Trattativa",offerta_inviata:"Offerta inviata",confermata:"Confermata",persa:"Persa",sospesa:"Sospesa"};
   const kpiStyle={background:"#f6f9ff",border:"1px solid #e1e9f5",borderRadius:12,padding:16,minWidth:150,flex:1};
   const nomeAzienda = (id) => { const a = aziendeOptions.find((x) => x.id === id); return a ? a.nome : "—"; };
   const inputStyle = { width: "100%", padding: "8px 10px", marginBottom: 10, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 13, boxSizing: "border-box" };
@@ -1080,6 +1080,7 @@ function SchedaCliente({ clienteId, session, aziendeOptions, onBack, onApriPreve
         {cliente.classificazione && <span style={{ fontSize: 12, color: COLORS.muted, background: COLORS.bg, padding: "3px 10px", borderRadius: 12 }}>{cliente.classificazione}</span>}
       </div>
       {error && <div style={{ color: COLORS.danger, fontSize: 12, marginBottom: 14 }}>{error}</div>}
+      {cliente.classificazione==='Architetto'&&cliente.architetto_profilo&&sezione('Profilo studio · Dati importati',<div style={{display:'flex',flexDirection:'column',gap:9,fontSize:13}}><div><strong>Categoria:</strong> {cliente.architetto_profilo.categoria||'—'} · <strong>Priorità:</strong> {cliente.architetto_profilo.priorita??'—'} · <strong>Importanza:</strong> {cliente.architetto_profilo.importanza??'—'}</div><div><strong>Località:</strong> {[cliente.architetto_profilo.citta,cliente.architetto_profilo.provincia].filter(Boolean).join(' · ')||'—'}</div><div><strong>Lavora con:</strong> {cliente.architetto_profilo.lavora_con||'—'}</div><div><strong>Marchi di interesse:</strong> {(cliente.architetto_profilo.marchi_interesse||[]).join(', ')||'—'}</div><small style={{color:COLORS.muted}}>Marchi di interesse e collaborazioni effettive sono informazioni distinte.</small></div>)}
 
       {sezione("Panoramica commerciale", (
         <div>
@@ -1252,6 +1253,9 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [filtroClassificazione, setFiltroClassificazione] = useState("");
+  const [filtroCategoriaStudio,setFiltroCategoriaStudio]=useState('');
+  const [filtroPrioritaStudio,setFiltroPrioritaStudio]=useState('');
+  const [filtroMarchioStudio,setFiltroMarchioStudio]=useState('');
   const [ricercaAnagrafica, setRicercaAnagrafica] = useState("");
   const [filtroStatoUI, setFiltroStatoUI] = useState("tutti");
   const [mostraFormAnagrafica, setMostraFormAnagrafica] = useState(false);
@@ -1374,10 +1378,11 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
 
   const inputStyle = { width: "100%", padding: "12px 13px", marginBottom: 12, border: "1px solid #dce7f1", borderRadius: 11, fontSize: 14, boxSizing: "border-box", background: "#fbfdff", color: "#18354e" };
   const elencoSezione = list.filter(c => soloArchitetti ? c.classificazione === "Architetto" : c.classificazione !== "Architetto");
-  const filteredList = elencoSezione.filter(c => (!filtroClassificazione || c.classificazione === filtroClassificazione) && (filtroStatoUI !== "preferiti" || preferitiAnagrafica.includes(c.id)) && (!ricercaAnagrafica.trim() || [c.ragione_sociale, c.indirizzo, c.telefono, c.email, c.classificazione].some(v => String(v || "").toLocaleLowerCase("it").includes(ricercaAnagrafica.trim().toLocaleLowerCase("it")))));
+  const filteredList = elencoSezione.filter(c => (!soloArchitetti || ((!filtroCategoriaStudio || String(c.architetto_profilo?.categoria||'')===filtroCategoriaStudio) && (!filtroPrioritaStudio || String(c.architetto_profilo?.priorita??'')===filtroPrioritaStudio) && (!filtroMarchioStudio || (c.architetto_profilo?.marchi_interesse||[]).includes(filtroMarchioStudio)))) && (!filtroClassificazione || c.classificazione === filtroClassificazione) && (filtroStatoUI !== "preferiti" || preferitiAnagrafica.includes(c.id)) && (!ricercaAnagrafica.trim() || [c.ragione_sociale, c.indirizzo, c.telefono, c.email, c.classificazione].some(v => String(v || "").toLocaleLowerCase("it").includes(ricercaAnagrafica.trim().toLocaleLowerCase("it")))));
 
   if (clienteApertoId) {
-    return (
+    const filtriStudi=soloArchitetti?<div style={{display:'flex',gap:8,flexWrap:'wrap',margin:'12px 0'}}><select aria-label='Categoria studio' value={filtroCategoriaStudio} onChange={e=>setFiltroCategoriaStudio(e.target.value)}><option value=''>Tutte le categorie</option>{['A','B','C'].map(x=><option key={x} value={x}>Categoria {x}</option>)}</select><select aria-label='Priorità studio' value={filtroPrioritaStudio} onChange={e=>setFiltroPrioritaStudio(e.target.value)}><option value=''>Tutte le priorità</option>{['1','2','3'].map(x=><option key={x} value={x}>Priorità {x}</option>)}</select><select aria-label='Marchio interesse' value={filtroMarchioStudio} onChange={e=>setFiltroMarchioStudio(e.target.value)}><option value=''>Tutti i marchi</option>{['Quadro Design','Ceramica Galassia','CP Parquet','Rexa Design','AISI Design','Wall&decò'].map(x=><option key={x}>{x}</option>)}</select></div>:null;
+  return (
       <SchedaCliente clienteId={clienteApertoId} session={session} aziendeOptions={aziendeOptions} onApriPreventivo={apriPreventivo} onApriGruppo={apriGruppo}
         onBack={() => { setClienteApertoId(null); load(); }} />
     );
@@ -1462,6 +1467,7 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
           <div className="crm-ref-tools"><div className="crm-ref-search"><Search size={17}/><input aria-label="Cerca anagrafica" placeholder={soloArchitetti ? "Cerca architetto..." : "Cerca cliente..."} value={ricercaAnagrafica} onChange={e => setRicercaAnagrafica(e.target.value)}/></div>
             {!soloArchitetti && <select aria-label="Filtra tipologia" value={filtroClassificazione} onChange={e => setFiltroClassificazione(e.target.value)}><option value="">Filtri · Tutte le tipologie</option>{CLASSIFICAZIONI_ELENCO.filter(c => c !== "Architetto").map(c => <option key={c} value={c}>{c}</option>)}</select>}
           </div>
+          {filtriStudi}
           <div className="crm-ref-tabs"><button className={filtroStatoUI === "tutti" ? "active" : ""} onClick={() => setFiltroStatoUI("tutti")}>Tutti ({elencoSezione.length})</button><button className={filtroStatoUI === "preferiti" ? "active" : ""} onClick={() => setFiltroStatoUI("preferiti")}>★ Preferiti ({elencoSezione.filter(c => preferitiAnagrafica.includes(c.id)).length})</button></div>
           {loading ? <p className="crm-ref-empty">Caricamento...</p> : filteredList.length === 0 ? <p className="crm-ref-empty">Nessun risultato.</p> : <>
             <div className="crm-ref-desktop"><table><thead><tr><th>{soloArchitetti ? "Architetto" : "Cliente"}</th><th>Tipologia</th><th>Località</th><th>Contatto</th><th>Preferiti</th><th>Azioni</th></tr></thead><tbody>
@@ -2032,12 +2038,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
               <option value="solo_netto">Solo prezzi netti (unitario e totale)</option>
             </select>
           </div>
-          <div style={{ marginTop: 4 }}>
-            <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 6 }}>Stato preventivo</label>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {STATI_PREVENTIVO.map((s) => (<button key={s.valore} onClick={() => setHeader({ ...header, stato: s.valore })} style={{ padding: "6px 12px", borderRadius: 20, border: header.stato === s.valore ? "2px solid " + s.colore : "1px solid #e2edf5", background: header.stato === s.valore ? s.colore + "18" : "#fff", color: s.colore, fontSize: 12, fontWeight: header.stato === s.valore ? 700 : 500, cursor: "pointer" }}>● {s.label}</button>))}
-            </div>
-          </div>
+          <p style={{ margin: "8px 0 2px", fontSize: 12, color: "#68788a" }}>Il nuovo preventivo entra automaticamente nella pipeline come Bozza. Per modificarne lo stato, utilizza la pipeline commerciale.</p>
           <div style={{ marginTop: 12 }}>
             <label style={{ fontSize: 12, color: "#333", display: "block", marginBottom: 4 }}>Note</label>
             <textarea placeholder="Annotazioni aggiuntive sul preventivo" value={header.note} onChange={(e) => setHeader({ ...header, note: e.target.value })} style={{ ...fieldStyle, marginBottom: 0, maxWidth: isMobile ? "100%" : 500, minHeight: 60 }} />
@@ -2897,7 +2898,7 @@ function ControlloCommerciale({ session }) {
 
 
 const FASI_PIPELINE = [
-  {id:"primo_contatto",nome:"Primo contatto",colore:"#94a3b8",prob:20},
+  {id:"primo_contatto",nome:"Bozza",colore:"#94a3b8",prob:20},
   {id:"trattativa",nome:"Trattativa",colore:"#3b82f6",prob:45},
   {id:"offerta_inviata",nome:"Offerta inviata",colore:"#8b5cf6",prob:70},
   {id:"confermata",nome:"Confermata",colore:"#16a34a",prob:100},
@@ -3049,7 +3050,7 @@ function PipelineCommerciale({session, preventivoDaConvertire, onPreventivoRicev
     catch(e){setError(e.message);}
   }
   return <div className="crm-pipeline">
-    <div className="matrice-welcome"><div><h1>Pipeline commerciale</h1><p>Trattative per mandante, dal primo contatto alla conferma.</p></div><button className="crm-primary-btn" onClick={()=>apriNuova()}><Plus size={15}/> Nuova opportunità</button></div>
+    <div className="matrice-welcome"><div><h1>Pipeline commerciale</h1><p>Trattative per mandante, dalla bozza alla conferma.</p></div><button className="crm-primary-btn" onClick={()=>apriNuova()}><Plus size={15}/> Nuova opportunità</button></div>
     {error&&<div style={{background:"#fff0f0",color:"#a52121",padding:12,borderRadius:9,marginBottom:14}}>{error}</div>}
     <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>{[{id:"attivi",label:"Attivi (accettati 7 gg · rifiutati 30 gg)"},{id:"conclusi",label:"Archivio conclusi"},{id:"tutti",label:"Tutti"}].map(v=><button key={v.id} type="button" onClick={()=>setVistaArchivio(v.id)} style={{border:"1px solid #dae4ef",borderRadius:9,padding:"9px 12px",background:vistaArchivio===v.id?"#e7efff":"#fff",color:"#19385d",cursor:"pointer"}}>{v.label}</button>)}</div>
     <div className="crm-pipeline-filters"><label style={label}>Azienda mandante<select style={input} value={aziendaFiltro} onChange={e=>setAziendaFiltro(e.target.value)}><option value="">Tutte le mandanti</option>{aziende.map(a=><option key={a.id} value={a.id}>{a.nome}</option>)}</select></label><label style={label}>Cerca opportunità<input style={input} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Titolo o cliente"/></label><label style={label}>Priorità follow-up<select style={input} value={filtroAzioni} onChange={e=>setFiltroAzioni(e.target.value)}><option value="tutte">Tutte le opportunità</option><option value="scaduta">Scaduti</option><option value="oggi">Da contattare oggi</option><option value="futura">Programmato</option><option value="senza">Senza prossima azione completa</option></select></label></div>
@@ -3515,14 +3516,15 @@ function ClientiDaRiattivareCRM({session,naviga}) {
   const [visite,setVisite]=useState([]);
   const [contatti,setContatti]=useState([]);
   const [promemoria,setPromemoria]=useState([]);
+  const [appuntamentiFuturi,setAppuntamentiFuturi]=useState([]);
   const [errore,setErrore]=useState("");
   const [loading,setLoading]=useState(true);
   useEffect(()=>{
     let alive=true;
     const headers={apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+session.access_token};
-    Promise.all(["clienti?select=id,ragione_sociale,classificazione", "visite?select=cliente_id,data_visita", "attivita_cliente?select=cliente_id,data,tipo,descrizione", "crm_attivita?select=cliente_id,scadenza,stato"].map(async path=>{
+    Promise.all(["clienti?select=id,ragione_sociale,classificazione", "visite?select=cliente_id,data_visita", "attivita_cliente?select=cliente_id,data,tipo,descrizione", "crm_attivita?select=cliente_id,scadenza,stato", "appuntamenti?select=cliente_id,inizio,stato,tipo"].map(async path=>{
       const r=await crmFetch(SUPABASE_URL+"/rest/v1/"+path,{headers});const d=await r.json();if(!r.ok)throw Error(d.message||"Impossibile caricare i contatti");return d;
-    })).then(([c,v,a,p])=>{if(alive){setClienti(c);setVisite(v);setContatti(a);setPromemoria(p);setLoading(false);}}).catch(e=>{if(alive){setErrore(e.message);setLoading(false);}});
+    })).then(([c,v,a,p,e])=>{if(alive){setClienti(c);setVisite(v);setContatti(a);setPromemoria(p);setAppuntamentiFuturi(e);setLoading(false);}}).catch(e=>{if(alive){setErrore(e.message);setLoading(false);}});
     return ()=>{alive=false};
   },[session.access_token]);
   const now=Date.now();
@@ -3530,7 +3532,7 @@ function ClientiDaRiattivareCRM({session,naviga}) {
   const elenco=clienti.filter(c=>c.classificazione!=="Architetto").map(c=>{
     const date=[...visite.filter(v=>v.cliente_id===c.id).map(v=>v.data_visita),...contattiReali.filter(a=>a.cliente_id===c.id).map(a=>a.data)].filter(Boolean).map(x=>new Date(x).getTime()).filter(t=>Number.isFinite(t)&&t<=now);
     const ultima=date.length?Math.max(...date):null;
-    const pianificato=promemoria.some(p=>p.cliente_id===c.id&&p.stato!=="completata"&&p.scadenza&&new Date(p.scadenza).getTime()>=now);
+    const pianificato=promemoria.some(p=>p.cliente_id===c.id&&!['completata','annullata','annullato'].includes(String(p.stato||'').toLowerCase())&&p.scadenza&&new Date(p.scadenza).getTime()>=now) || appuntamentiFuturi.some(e=>e.cliente_id===c.id&&['programmato','confermato','pianificato'].includes(String(e.stato||'programmato').toLowerCase())&&e.inizio&&new Date(e.inizio).getTime()>=now);
     return {...c,ultima,trascorsi:ultima?Math.floor((now-ultima)/86400000):null,pianificato};
   }).filter(c=>c.trascorsi===null||c.trascorsi>=giorni).sort((a,b)=>(b.trascorsi??999999)-(a.trascorsi??999999));
   return <section className="crm-reactivation"><div className="matrice-section-head"><h3><Clock3 size={17}/> Clienti da riattivare</h3><button onClick={()=>naviga("clienti")}>Apri clienti</button></div><div className="crm-reactivation-filters">{[30,60,90].map(n=><button key={n} className={giorni===n?"active":""} onClick={()=>setGiorni(n)}>{n} giorni</button>)}</div>{loading?<p>Caricamento...</p>:errore?<p style={{color:"#b42318"}}>{errore}</p>:<><p className="crm-reactivation-sub">{elenco.length} clienti senza contatti registrati negli ultimi {giorni} giorni. Le anagrafiche senza storico sono indicate separatamente.</p>{elenco.slice(0,8).map(c=><div className="crm-reactivation-row" key={c.id}><span><strong>{c.ragione_sociale}</strong><small>{c.trascorsi===null?"Nessun contatto registrato":"Ultimo contatto "+new Date(c.ultima).toLocaleDateString("it-IT")+" · "+c.trascorsi+" giorni fa"}{c.pianificato?" · Contatto già pianificato":""}</small></span><button onClick={()=>naviga("clienti")}>Apri</button></div>)}{elenco.length>8&&<small>Mostrati i primi 8 clienti. Puoi cambiare soglia con i filtri.</small>}{elenco.length===0&&<p>Nessun cliente da riattivare per questa soglia.</p>}</>}</section>;
@@ -3737,7 +3739,7 @@ function CRMOperativitaUnificata({session}) {
     try {
       const [a,c,m,p,v,f,t]=await Promise.all([
         api('crm_agenzie?select=id&proprietario_id=eq.'+session.user.id),
-        api('clienti?select=id,ragione_sociale,email,telefono,indirizzo,agenzia_id&order=ragione_sociale.asc'),
+        api('clienti?select=id,ragione_sociale,email,telefono,indirizzo,classificazione,architetto_profilo,agenzia_id&order=ragione_sociale.asc'),
         api('aziende_mandanti?select=id,nome&order=nome.asc'),
         api('preventivi?select=id,rif,data,cliente_id,azienda_id,tipo_proposta,approvazione_proposta,righe&tipo_proposta=in.(campionatura,esposizione)&order=data.desc'),
         api('appuntamenti?select=id,titolo,inizio,stato,cliente_id,azienda_id,luogo,note&tipo=eq.visita&order=inizio.asc'),
@@ -3765,7 +3767,56 @@ function CRMOperativitaUnificata({session}) {
       setVisita({cliente_id:'',azienda_id:'',titolo:'Visita commerciale',data:'',ora:'09:00',luogo:'',note:''});await carica();setMessaggio('Visita salvata nell’agenda Supabase.');
     }catch(e){setErrore(e.message)}finally{setBusy(false)}
   };
+  const [importaArchitetti,setImportaArchitetti]=useState(false);
+  const [fileArchitetti,setFileArchitetti]=useState(false);
+  const [filtroImport,setFiltroImport]=useState('tutti');
   const normalizza=x=>String(x??'').trim().toLocaleLowerCase('it').replace(/\s+/g,' ');
+
+  const chiaveStudio=x=>normalizza(x).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+  const colonneArchitetti=['STUDIO','Categoria','Priorità','IMPORTANZA','Città','Provincia','Indirizzo','Lavora con','Telefono','Quadro','Galassia','CP Parquet','Rexa','Aisi','WALL'];
+  const nomiMarchi={'Quadro':'Quadro Design','Galassia':'Ceramica Galassia','CP Parquet':'CP Parquet','Rexa':'Rexa Design','Aisi':'AISI Design','WALL':'Wall&decò'};
+  const leggiCampo=(r,k)=>r[Object.keys(r).find(x=>normalizza(x)===normalizza(k))]??'';
+  const veroExcel=v=>v===true||v===1||['vero','true','si','sì','yes','1','x'].includes(normalizza(v));
+  const creaStudio=r=>{
+    const nome=String(leggiCampo(r,'STUDIO')||'').trim();
+    const citta=String(leggiCampo(r,'Città')||'').trim();
+    const provincia=String(leggiCampo(r,'Provincia')||'').trim();
+    const via=String(leggiCampo(r,'Indirizzo')||'').trim();
+    const indirizzo=[via,[citta,provincia].filter(Boolean).join(' (' )+(provincia?')':'')].filter(Boolean).join(', ');
+    const marchi=Object.keys(nomiMarchi).filter(k=>veroExcel(leggiCampo(r,k))).map(k=>nomiMarchi[k]);
+    const numero=v=>v!==''&&v!==null&&Number.isFinite(Number(v))?Number(v):null;
+    return {nome,indirizzo,telefono:String(leggiCampo(r,'Telefono')||'').trim(),profilo:{categoria:String(leggiCampo(r,'Categoria')||'').trim()||null,priorita:numero(leggiCampo(r,'Priorità')),importanza:numero(leggiCampo(r,'IMPORTANZA')),citta:citta||null,provincia:provincia||null,indirizzo_originale:via||null,lavora_con:String(leggiCampo(r,'Lavora con')||'').trim()||null,marchi_interesse:marchi,origine:'Architetti social 210206'}};
+  };
+  const anteprimaStudi=fileArchitetti?fileRighe.map((r,i)=>({...creaStudio(r),i})):[];
+  const studiEsistenti=new Map(clienti.map(c=>[chiaveStudio(c.ragione_sociale),c]));
+  const emailEsistenti=new Map(clienti.filter(c=>c.email).map(c=>[normalizza(c.email),c]));
+  const valutazioneStudi=anteprimaStudi.map(r=>{
+    const simile=studiEsistenti.get(chiaveStudio(r.nome));
+    const trovati=clienti.filter(c=>c.ragione_sociale&&r.nome&&(chiaveStudio(c.ragione_sociale).includes(chiaveStudio(r.nome))||chiaveStudio(r.nome).includes(chiaveStudio(c.ragione_sociale)))&&c.ragione_sociale!==r.nome);
+    return {...r,duplicato:simile||null,simili:trovati.slice(0,3)};
+  });
+  const nuoviStudi=valutazioneStudi.filter(r=>r.nome&&!r.duplicato&&!r.simili.length&&selezione.includes(r.i));
+  const importaStudi=async()=>{
+    if(!agenzia||!nuoviStudi.length)return;
+    if(!window.confirm('Importare '+nuoviStudi.length+' nuovi studi? I possibili duplicati sono esclusi e non saranno sovrascritti.'))return;
+    setBusy(true);setErrore('');let ok=0;let failed=[];
+    try{
+      // Ricarica dal server per evitare duplicati creati da altri dispositivi dopo l’anteprima.
+      const recenti=await api('clienti?select=id,ragione_sociale,agenzia_id');
+      const nomiPresenti=new Set(recenti.map(c=>chiaveStudio(c.ragione_sociale)));
+      for(const r of nuoviStudi){
+        const key=chiaveStudio(r.nome);
+        if(nomiPresenti.has(key)){failed.push(r.nome+': già presente');continue;}
+        try{
+          await api('clienti','POST',{agenzia_id:agenzia,ragione_sociale:r.nome,telefono:r.telefono||null,indirizzo:r.indirizzo||null,classificazione:'Architetto',architetto_profilo:r.profilo});
+          nomiPresenti.add(key);ok++;
+        }catch(e){failed.push(r.nome+': '+e.message)}
+      }
+      setEsitoImport({ok,failed});await carica();setSelezione([]);setMessaggio(ok+' studi architettura importati; nessuna scheda esistente sovrascritta.');
+      if(failed.length)setErrore(failed.length+' righe non importate: '+failed.slice(0,4).join(' | '));
+    }catch(e){setErrore('Importazione interrotta: '+e.message)}finally{setBusy(false)}
+  };
+
   const importaFile=async(file)=>{
     setErrore('');setEsitoImport(null);if(!file)return;
     try{
@@ -3773,6 +3824,9 @@ function CRMOperativitaUnificata({session}) {
       const rows=XLSX.utils.sheet_to_json(sheet,{defval:'',raw:false}).slice(0,1000);
       if(!rows.length)throw Error('Nessuna riga da importare.');
       const keys=Object.keys(rows[0]);setFileRighe(rows);setColonne(keys);setSelezione(rows.map((_,i)=>i));
+      const schemaArch=['STUDIO','Categoria','Priorità','IMPORTANZA','Città','Provincia','Quadro','Galassia','CP Parquet','Rexa','Aisi','WALL'];
+      const riconosciuto=schemaArch.every(k=>keys.some(h=>normalizza(h)===normalizza(k)));
+      setFileArchitetti(riconosciuto);if(riconosciuto){setImportaArchitetti(true);setMessaggio('Formato Architetti riconosciuto: dati commerciali e marchi saranno conservati.');}
       const find=(names)=>keys.find(k=>names.some(n=>normalizza(k).includes(n)))||'';
       setMappa({nome:find(['ragione sociale','cliente','nominativo','studio','nome']),email:find(['email','e-mail']),telefono:find(['telefono','cellulare','phone']),indirizzo:find(['indirizzo','address','comune']),classificazione:find(['classificazione','tipologia','categoria'])});
     }catch(e){setErrore('File non leggibile: '+e.message)}
@@ -3788,7 +3842,7 @@ function CRMOperativitaUnificata({session}) {
     if(!window.confirm('Importare '+pronti.length+' nuove anagrafiche in Supabase? Le righe duplicate verranno escluse.'))return;
     setBusy(true);setErrore('');setMessaggio('');let ok=0;let failed=[];
     for(const r of pronti){
-      try{await api('clienti','POST',{agenzia_id:agenzia,ragione_sociale:r.nome,email:r.email||null,telefono:r.telefono||null,indirizzo:r.indirizzo||null,classificazione:r.classificazione||null});ok++}
+      try{await api('clienti','POST',{agenzia_id:agenzia,ragione_sociale:r.nome,email:r.email||null,telefono:r.telefono||null,indirizzo:r.indirizzo||null,classificazione:importaArchitetti?'Architetto':(r.classificazione||null)});ok++}
       catch(e){failed.push(r.nome+': '+e.message)}
     }
     setEsitoImport({ok,failed});setBusy(false);await carica();
@@ -3820,7 +3874,7 @@ function CRMOperativitaUnificata({session}) {
       {field('Luogo',<input style={inp} value={visita.luogo} onChange={e=>setVisita(v=>({...v,luogo:e.target.value}))}/>)}
       {field('Note',<input style={inp} value={visita.note} onChange={e=>setVisita(v=>({...v,note:e.target.value}))}/>)}
       </div><button disabled={busy} style={btn} onClick={salvaVisita}>Salva visita in agenda</button><h3>Visite programmate</h3>{visite.map(v=><div key={v.id} style={{borderBottom:'1px solid #e2e9e4',padding:9,fontSize:13}}><strong>{new Date(v.inizio).toLocaleString('it-IT')}</strong> · {nome(v.cliente_id)} · {v.titolo} · {v.stato}</div>)}{!visite.length&&<p>Nessuna visita programmata.</p>}</>}
-    {tab==='import'&&<><p style={{fontSize:13}}>Carica un file, associa le colonne e controlla l'anteprima. Il CRM esclude i nomi già presenti e i duplicati nel file. Nessun salvataggio finché non confermi.</p><input type='file' accept='.xlsx,.xls,.csv' onChange={e=>importaFile(e.target.files?.[0])}/>{fileRighe.length>0&&<><p><strong>{fileRighe.length}</strong> righe lette · <strong>{pronti.length}</strong> nuove anagrafiche selezionate · <strong>{valutati.filter(r=>r.duplicato).length}</strong> duplicati per ragione sociale</p><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:9}}>{[['nome','Ragione sociale *'],['email','Email'],['telefono','Telefono'],['indirizzo','Indirizzo / Comune'],['classificazione','Classificazione']].map(([k,label])=>field(label,<select style={inp} value={mappa[k]} onChange={e=>setMappa(old=>({...old,[k]:e.target.value}))}><option value=''>Non importare</option>{colonne.map(c=><option key={c} value={c}>{c}</option>)}</select>))}</div><div style={{overflowX:'auto',maxHeight:350,marginTop:15}}><table style={{width:'100%',fontSize:12,borderCollapse:'collapse'}}><thead><tr>{['Includi','Nome','Email','Telefono','Esito'].map(k=><th key={k} style={{textAlign:'left',padding:8,background:'#eef3ef'}}>{k}</th>)}</tr></thead><tbody>{valutati.slice(0,100).map(r=><tr key={r.i} style={{borderBottom:'1px solid #e3e9e4'}}><td style={{padding:7}}><input type='checkbox' disabled={r.duplicato||!r.nome} checked={selezionati.has(r.i)&&!r.duplicato} onChange={e=>setSelezione(a=>e.target.checked?[...a,r.i]:a.filter(i=>i!==r.i))}/></td><td>{r.nome}</td><td>{r.email}</td><td>{r.telefono}</td><td>{r.duplicato?'Duplicato':!r.nome?'Nome mancante':'Nuovo'}</td></tr>)}</tbody></table></div><p style={{fontSize:12,color:'#64716b'}}>Anteprima: prime 100 righe. Il controllo duplicati confronta il nome normalizzato, non partita IVA o altri identificativi; controlla attentamente prima di importare.</p><button style={btn} disabled={busy||!mappa.nome||!pronti.length} onClick={salvaImport}>{busy?'Importazione...':'Importa '+pronti.length+' clienti in Supabase'}</button>{esitoImport&&<p>{esitoImport.ok} importati; {esitoImport.failed.length} errori.</p>}</>}</>}
+    {tab==='import'&&<><p style={{fontSize:13}}>Carica un file, associa le colonne e controlla l'anteprima. Il CRM esclude i nomi già presenti e i duplicati nel file. Nessun salvataggio finché non confermi.</p><label style={{display:'flex',alignItems:'center',gap:8,fontWeight:650,marginBottom:12,fontSize:13}}><input type='checkbox' checked={importaArchitetti} onChange={e=>setImportaArchitetti(e.target.checked)}/> Importa come architetti (anagrafica esistente)</label><input type='file' accept='.xlsx,.xls,.csv' onChange={e=>importaFile(e.target.files?.[0])}/>{fileRighe.length>0&&fileArchitetti&&<div style={{marginTop:14}}><h3>Anteprima importazione studi di architettura</h3><p style={{fontSize:13}}><strong>{valutazioneStudi.length}</strong> righe · <strong>{nuoviStudi.length}</strong> nuove selezionate · <strong>{valutazioneStudi.filter(r=>r.duplicato).length}</strong> già presenti · <strong>{valutazioneStudi.filter(r=>r.simili.length&&!r.duplicato).length}</strong> da verificare manualmente. I duplicati non vengono aggiornati o sovrascritti.</p><p style={{fontSize:12,color:'#64716b'}}>Categoria, priorità, importanza, città, provincia, collaborazioni dichiarate e marchi d’interesse vengono conservati. I marchi NON sono associati automaticamente alle mandanti.</p><div style={{overflowX:'auto',maxHeight:410}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}><thead><tr>{['Importa','Studio','Categoria','Priorità','Importanza','Marchi di interesse','Esito'].map(x=><th key={x} style={{padding:8,textAlign:'left',background:'#eff4f0'}}>{x}</th>)}</tr></thead><tbody>{valutazioneStudi.map(r=><tr key={r.i} style={{borderBottom:'1px solid #e2e8e4'}}><td><input type='checkbox' disabled={!r.nome||!!r.duplicato||!!r.simili.length} checked={selezione.includes(r.i)&&!!r.nome&&!r.duplicato&&!r.simili.length} onChange={e=>setSelezione(s=>e.target.checked?[...s,r.i]:s.filter(i=>i!==r.i))}/></td><td style={{padding:7}}>{r.nome||'—'}</td><td>{r.profilo.categoria||'—'}</td><td>{r.profilo.priorita??'—'}</td><td>{r.profilo.importanza??'—'}</td><td>{r.profilo.marchi_interesse.join(', ')||'—'}</td><td>{r.duplicato?'Già presente: '+r.duplicato.ragione_sociale:r.simili.length?'Verificare: '+r.simili.map(c=>c.ragione_sociale).join('; '):!r.nome?'Nome mancante':'Nuovo'}</td></tr>)}</tbody></table></div><button style={{...btn,marginTop:12}} disabled={busy||!nuoviStudi.length} onClick={importaStudi}>{busy?'Importazione...':'Importa '+nuoviStudi.length+' nuovi studi'}</button></div>}{fileRighe.length>0&&!fileArchitetti&&<><p><strong>{fileRighe.length}</strong> righe lette · <strong>{pronti.length}</strong> nuove anagrafiche selezionate · <strong>{valutati.filter(r=>r.duplicato).length}</strong> duplicati per ragione sociale</p><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:9}}>{[['nome','Ragione sociale *'],['email','Email'],['telefono','Telefono'],['indirizzo','Indirizzo / Comune'],['classificazione','Classificazione']].map(([k,label])=>field(label,<select style={inp} value={mappa[k]} onChange={e=>setMappa(old=>({...old,[k]:e.target.value}))}><option value=''>Non importare</option>{colonne.map(c=><option key={c} value={c}>{c}</option>)}</select>))}</div><div style={{overflowX:'auto',maxHeight:350,marginTop:15}}><table style={{width:'100%',fontSize:12,borderCollapse:'collapse'}}><thead><tr>{['Includi','Nome','Email','Telefono','Esito'].map(k=><th key={k} style={{textAlign:'left',padding:8,background:'#eef3ef'}}>{k}</th>)}</tr></thead><tbody>{valutati.slice(0,100).map(r=><tr key={r.i} style={{borderBottom:'1px solid #e3e9e4'}}><td style={{padding:7}}><input type='checkbox' disabled={r.duplicato||!r.nome} checked={selezionati.has(r.i)&&!r.duplicato} onChange={e=>setSelezione(a=>e.target.checked?[...a,r.i]:a.filter(i=>i!==r.i))}/></td><td>{r.nome}</td><td>{r.email}</td><td>{r.telefono}</td><td>{r.duplicato?'Duplicato':!r.nome?'Nome mancante':'Nuovo'}</td></tr>)}</tbody></table></div><p style={{fontSize:12,color:'#64716b'}}>Anteprima: prime 100 righe. Il controllo duplicati confronta il nome normalizzato, non partita IVA o altri identificativi; controlla attentamente prima di importare.</p><button style={btn} disabled={busy||!mappa.nome||!pronti.length} onClick={salvaImport}>{busy?'Importazione...':'Importa '+pronti.length+(importaArchitetti?' architetti':' clienti')+' in Supabase'}</button>{esitoImport&&<p>{esitoImport.ok} importati; {esitoImport.failed.length} errori.</p>}</>}</>}
   </section>;
 }
 
