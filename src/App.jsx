@@ -3377,6 +3377,59 @@ function StileModuliPremiumCRM() { return <style>{`
 
 
 // Centro operativo: letture in sola consultazione, nessuna nuova tabella o policy richiesta.
+
+// Pianificazione commerciale: riepilogo in sola lettura, nessuna nuova tabella.
+function PianificazioneSettimanaleCRM({session, goTo}) {
+  const [data,setData]=useState({clienti:[],visite:[],preventivi:[],aziende:[],rilevazioni:[]});
+  const [loading,setLoading]=useState(true),[error,setError]=useState('');
+  const [query,setQuery]=useState(''),[tipo,setTipo]=useState('tutti'),[mandante,setMandante]=useState('');
+  const [giorniVisite,setGiorniVisite]=useState(60),[giorniPreventivi,setGiorniPreventivi]=useState(14);
+  const [onlyPending,setOnlyPending]=useState(true);
+  useEffect(()=>{
+    let active=true;
+    const head={apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+session.access_token};
+    const paths={clienti:'clienti?select=id,ragione_sociale,classificazione,cliente_importanza,architetto_profilo',visite:'visite?select=cliente_id,data_visita',preventivi:'preventivi?select=id,rif,cliente_id,azienda_id,stato,created_at',aziende:'aziende_mandanti?select=id,nome',rilevazioni:'crm_rilevazioni_commerciali?select=azienda_id,cliente_id,data_rilevazione,created_at,fatturato,portafoglio'};
+    Promise.all(Object.entries(paths).map(async ([key,path])=>{
+      const r=await crmFetch(SUPABASE_URL+'/rest/v1/'+path,{headers:head});
+      const val=await r.json();if(!r.ok||!Array.isArray(val))throw Error(key+': '+(val?.message||'Errore lettura'));return [key,val];
+    })).then(results=>{if(active){setData(Object.fromEntries(results));setError('')}}).catch(e=>{if(active)setError(e.message)}).finally(()=>{if(active)setLoading(false)});
+    return ()=>{active=false};
+  },[session.access_token]);
+  const now=new Date(),dayMs=86400000;
+  const age=date=>date?Math.floor((now-new Date(date))/dayMs):null;
+  const lastVisit=new Map();data.visite.forEach(v=>{if(!v.cliente_id||!v.data_visita)return;const d=String(v.data_visita).slice(0,10);if(d<=now.toISOString().slice(0,10)&&(!lastVisit.has(v.cliente_id)||d>lastVisit.get(v.cliente_id)))lastVisit.set(v.cliente_id,d)});
+  const latest=new Map();[...data.rilevazioni].sort((a,b)=>String(b.data_rilevazione).localeCompare(String(a.data_rilevazione))||String(b.created_at).localeCompare(String(a.created_at))).forEach(r=>{const key=r.azienda_id+'|'+r.cliente_id;if(!latest.has(key))latest.set(key,r)});
+  const pending=data.preventivi.filter(p=>String(p.stato||'').toLowerCase()==='inviato'&&age(p.created_at)>=giorniPreventivi);
+  const people=data.clienti.filter(c=>(tipo==='tutti'||(tipo==='architetti'?c.classificazione==='Architetto':c.classificazione!=='Architetto'))&&(!query||String(c.ragione_sociale||'').toLowerCase().includes(query.toLowerCase())));
+  const alerts=people.map(c=>{const visits=lastVisit.get(c.id),days=age(visits);const quotes=pending.filter(p=>p.cliente_id===c.id&&(!mandante||p.azienda_id===mandante));const importance=Number(c.classificazione==='Architetto'?c.architetto_profilo?.importanza:c.cliente_importanza)||0;const needVisit=days!==null&&days>=giorniVisite;return {c,days,quotes,importance,needVisit,priority:quotes.length*100+(needVisit?50:0)+importance/2}}).filter(x=>!onlyPending||x.quotes.length||x.needVisit).sort((a,b)=>b.priority-a.priority||String(a.c.ragione_sociale).localeCompare(String(b.c.ragione_sociale)));
+  const exportCsv=()=>{
+    const header=['Nominativo','Tipo','Importanza','Giorni ultima visita','Preventivi da sollecitare','Priorita'];
+    const quote=v=>'"'+String(v??'').replaceAll('"','""')+'"';
+    const dataRows=alerts.map(a=>[a.c.ragione_sociale,a.c.classificazione,a.importance,a.days??'',a.quotes.length,a.priority]);
+    const csv='\uFEFF'+[header,...dataRows].map(r=>r.map(quote).join(';')).join('\r\n');
+    const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),el=document.createElement('a');el.href=url;el.download='pianificazione-commerciale.csv';document.body.appendChild(el);el.click();el.remove();URL.revokeObjectURL(url);
+  };
+  const input={padding:'9px 11px',border:'1px solid #d7e0e9',borderRadius:9,background:'#fff',maxWidth:'100%',color:'#1f2937'};
+  return <div style={{display:'grid',gap:16,maxWidth:1200,margin:'0 auto'}}>
+    <div><h2 style={{margin:'0 0 5px'}}>Pianificazione commerciale</h2><p style={{margin:0,color:'#64748b'}}>Priorità per le prossime visite e i solleciti. Le segnalazioni sono indicative e non modificano i dati.</p></div>
+    {error&&<div role='alert' style={{padding:12,background:'#fff1f0',color:'#a52720',borderRadius:10}}>{error}</div>}
+    <section style={{display:'flex',gap:12,flexWrap:'wrap',alignItems:'end',padding:16,border:'1px solid #e3eaf0',borderRadius:14,background:'#fff'}}>
+      <label style={{display:'grid',gap:5}}>Nominativo<input style={input} placeholder='Cerca cliente o architetto' value={query} onChange={e=>setQuery(e.target.value)}/></label>
+      <label style={{display:'grid',gap:5}}>Tipologia<select style={input} value={tipo} onChange={e=>setTipo(e.target.value)}><option value='tutti'>Tutti</option><option value='clienti'>Clienti</option><option value='architetti'>Architetti</option></select></label>
+      <label style={{display:'grid',gap:5}}>Mandante (solleciti)<select style={input} value={mandante} onChange={e=>setMandante(e.target.value)}><option value=''>Tutte</option>{data.aziende.map(a=><option key={a.id} value={a.id}>{a.nome}</option>)}</select></label>
+      <label style={{display:'grid',gap:5}}>Giorni senza visita<input type='number' min='1' max='730' style={{...input,width:100}} value={giorniVisite} onChange={e=>setGiorniVisite(Math.max(1,Number(e.target.value)||1))}/></label>
+      <label style={{display:'grid',gap:5}}>Giorni preventivo inviato<input type='number' min='1' max='365' style={{...input,width:100}} value={giorniPreventivi} onChange={e=>setGiorniPreventivi(Math.max(1,Number(e.target.value)||1))}/></label>
+      <label style={{display:'flex',alignItems:'center',gap:6,paddingBottom:10}}><input type='checkbox' checked={onlyPending} onChange={e=>setOnlyPending(e.target.checked)}/> Solo da seguire</label>
+      <button type='button' onClick={exportCsv} disabled={loading||!!error} style={{padding:'10px 14px',background:'#246143',color:'#fff',border:0,borderRadius:9,cursor:'pointer'}}>Esporta CSV</button>
+    </section>
+    <section style={{background:'#fff',border:'1px solid #e3eaf0',borderRadius:14,padding:16}}>
+      <h3 style={{margin:'0 0 12px'}}>Da contattare · {loading?'caricamento':alerts.length} nominativi</h3>
+      {loading?<p>Caricamento...</p>:<div style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:640,borderCollapse:'collapse',fontSize:13}}><thead><tr>{['Nominativo','Tipo','Importanza','Ultima visita','Solleciti','Azione'].map(h=><th key={h} style={{textAlign:'left',borderBottom:'1px solid #dce4ec',padding:10}}>{h}</th>)}</tr></thead><tbody>{alerts.map(a=><tr key={a.c.id}><td style={{padding:10,borderBottom:'1px solid #edf0f5'}}>{a.c.ragione_sociale}</td><td>{a.c.classificazione==='Architetto'?'Architetto':'Cliente'}</td><td>{a.importance}/100</td><td>{a.days===null?'Mai registrata':a.days+' giorni fa'}</td><td>{a.quotes.length}</td><td><button type='button' onClick={()=>goTo?.(a.quotes.length?'preventivi':'clienti')} style={{border:'1px solid #cbd8e3',background:'#fff',padding:'7px 10px',borderRadius:8,cursor:'pointer'}}>Apri sezione</button></td></tr>)}</tbody></table>{!alerts.length&&<p style={{color:'#64748b'}}>Nessun nominativo corrisponde ai filtri.</p>}</div>}
+      <p style={{color:'#64748b',fontSize:12,marginBottom:0}}>I preventivi sono calcolati dalla data di creazione, perché manca una data di invio affidabile. Le priorità non sono appuntamenti fissati.</p>
+    </section>
+  </div>;
+}
+
 function CentroOperativoCRM({ session, goTo }) {
   const [dati, setDati] = useState({ aziende: [], clienti: [], opportunita: [], attivita: [], fatturato: [], preventivi: [], visite: [] });
   const [caricamento, setCaricamento] = useState(true);
@@ -4230,7 +4283,7 @@ function AppShell({ session, onLogout }) {
     {id:"architetti",nome:"Architetti",icon:Users2,items:[{key:"architetti",label:"Studi e architetti",icon:Users2},{key:"import_architetti",label:"Importa studi Excel",icon:FileText}]},
     {id:"opportunita",nome:"Preventivi e offerte",icon:Target,items:[{key:"preventivi",label:"Creazione preventivi e offerte",icon:FileText},{key:"pipeline",label:"Pipeline",icon:Target},{key:"ordini",label:"Ordini confermati",icon:ClipboardList}]},
     {id:"agenda",nome:"Agenda",icon:CalendarDays,items:[{key:"agenda",label:"Pannello agenda",icon:CalendarDays},{key:"visite",label:"Calendario e appuntamenti",icon:CalendarDays},{key:"attivita",label:"Attività e follow-up",icon:ClipboardList},{key:"storico_visite",label:"Storico visite",icon:ClipboardList}]},
-    {id:"report",nome:"Analisi e fatturato",icon:BarChart3,items:[{key:"direzionale",label:"Report direzionale",icon:BarChart3},{key:"centro",label:"Da fare e priorità",icon:Target},{key:"controllo",label:"Fatturato e portafoglio ordini",icon:Wallet},{key:"fatturato",label:"Fatturato (ordini CRM)",icon:Wallet},{key:"statistiche",label:"Statistiche",icon:TrendingUp}]},
+    {id:"report",nome:"Analisi e fatturato",icon:BarChart3,items:[{key:"direzionale",label:"Report direzionale",icon:BarChart3},{key:"centro",label:"Da fare e priorità",icon:Target},{key:"pianificazione",label:"Pianificazione commerciale",icon:CalendarDays},{key:"controllo",label:"Fatturato e portafoglio ordini",icon:Wallet},{key:"fatturato",label:"Fatturato (ordini CRM)",icon:Wallet},{key:"statistiche",label:"Statistiche",icon:TrendingUp}]},
     {id:"mandanti",nome:"Mandanti",icon:Building2,items:[{key:"aziende",label:"Aziende mandanti",icon:Building2},{key:"provvigioni",label:"Gestore provvigioni",icon:Wallet},{key:"listini_import",label:"Importa listini Excel",icon:FileText},{key:"storico_fatturato_mandanti",label:"Storico fatturato clienti",icon:TrendingUp},{key:"obiettivi_mandanti",label:"Obiettivi commerciali",icon:Target}]},
     
   ];  const scegli = key => { setPage(key); if(window.innerWidth<768)setMenuOpen(false); };
@@ -4278,7 +4331,8 @@ function AppShell({ session, onLogout }) {
         {page==="dashboard"&&<Dashboard session={session} goTo={scegli}/>}
         {page==="dashboard"&&<ClientiDaRiattivareCRM session={session} naviga={scegli}/>}
         {page==="direzionale"&&<ReportDirezionaleCRM session={session} goTo={scegli}/>}
-        {page==="centro"&&<CentroOperativoCRM session={session} goTo={scegli}/>} 
+        {page==="centro"&&<CentroOperativoCRM session={session} goTo={scegli}/>}
+        {page==="pianificazione"&&<PianificazioneSettimanaleCRM session={session} goTo={scegli}/>}  
         {page==="admin"&&role==="admin"&&<AdminPanel session={session}/>}
         {page==="aziende"&&<AziendeMandanti session={session}/>}
         {page==="agenda"&&<PannelloAgendaCRM session={session} goTo={scegli}/>}
