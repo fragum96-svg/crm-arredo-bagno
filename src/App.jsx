@@ -8,7 +8,7 @@ import {
 } from "recharts";
 import {
   Users, Building2, CalendarDays, FileText, LogOut, Menu as MenuIcon, LayoutDashboard, ShieldCheck,
-  Printer, Map as MapIcon, Upload, TrendingUp, Wallet, ClipboardList, Briefcase, Users2, ChevronDown, ChevronRight, Search, Bell, Plus, Clock3, Target, ArrowUpRight, StickyNote, Settings, BarChart3, CheckSquare, Check,
+  Printer, Map as MapIcon, Upload, Download, DatabaseBackup, Archive, TrendingUp, Wallet, ClipboardList, Briefcase, Users2, ChevronDown, ChevronRight, Search, Bell, Plus, Clock3, Target, ArrowUpRight, StickyNote, Settings, BarChart3, CheckSquare, Check,
 } from "lucide-react";
 
 
@@ -1416,7 +1416,7 @@ function ClientiAnagrafica({ session, apriPreventivo, apriGruppo, soloArchitetti
 
   return (
     <div className="crm-anagrafiche-premium crm-ref-page">
-      <div className="crm-ref-heading"><h2>{soloArchitetti ? "Architetti" : "Clienti"}</h2><button type="button" className="crm-ref-primary" onClick={()=>window.dispatchEvent(new CustomEvent('crm-navigation',{detail:soloArchitetti?'import_architetti':'import_clienti'}))}>Importa Excel</button><button className="crm-ref-primary" type="button" onClick={() => { if (mostraFormAnagrafica) resetForm(); else { resetForm(); setMostraFormAnagrafica(true); } }}>{mostraFormAnagrafica ? "Chiudi" : soloArchitetti ? "+ Nuovo architetto" : "+ Nuovo cliente"}</button></div>
+      <div className="crm-ref-heading"><h2>{soloArchitetti ? "Architetti" : "Clienti"}</h2><button className="crm-ref-primary" type="button" onClick={() => { if (mostraFormAnagrafica) resetForm(); else { resetForm(); setMostraFormAnagrafica(true); } }}>{mostraFormAnagrafica ? "Chiudi" : soloArchitetti ? "+ Nuovo architetto" : "+ Nuovo cliente"}</button></div>
       <div className="crm-ref-layout">
         {mostraFormAnagrafica && (
         <div className="crm-ref-form" style={{ flex: "1 1 300px", background: COLORS.card, border: "1px solid " + COLORS.border, borderRadius: 14, boxShadow: "0 4px 14px rgba(20,40,60,0.05)", padding: 22, maxWidth: 440 }}>
@@ -4289,6 +4289,106 @@ function ReportDirezionaleCRM({session, goTo}) {
 }
 
 
+// Backup commerciali: esportazione in sola lettura con paginazione completa.
+// Le importazioni con scrittura restano disabilitate fino al collaudo dedicato.
+const BACKUP_CRM_DATASETS = [
+  {key:'clienti',label:'Clienti',table:'clienti',filter:'clienti'},
+  {key:'architetti',label:'Studi di architettura',table:'clienti',filter:'architetti'},
+  {key:'mandanti',label:'Mandanti',table:'aziende_mandanti'},
+  {key:'fatturati',label:'Fatturati e rilevazioni',table:'crm_rilevazioni_commerciali'},
+  {key:'portafoglio',label:'Portafoglio ordini',table:'portafoglio_ordini'},
+  {key:'storico',label:'Storico fatturato annuale manuale',table:'crm_fatturati_annuali_manuali'},
+  {key:'obiettivi',label:'Obiettivi commerciali',table:'crm_obiettivi_commerciali'},
+  {key:'attivita',label:'Pianificazione e attività',table:'crm_attivita'},
+  {key:'visite',label:'Visite',table:'visite'},
+  {key:'preventivi',label:'Preventivi',table:'preventivi'},
+  {key:'ordini',label:'Ordini confermati',table:'ordini_confermati'},
+  {key:'relazioni',label:'Relazioni clienti-mandanti',table:'crm_relazioni_mandanti'},
+];
+function BackupGestioneDatiCRM({session,page,naviga}) {
+  const [busy,setBusy]=useState('');
+  const [error,setError]=useState('');
+  const [message,setMessage]=useState('');
+  const reminderKey='crm-backup-preferenze-v1-'+session.user.id;
+  const [settings,setSettings]=useState(()=>{
+    try {return JSON.parse(localStorage.getItem(reminderKey)||'null')||{days:0,last:''};}
+    catch {return {days:0,last:''};}
+  });
+  const saveSettings=(next)=>{setSettings(next);try{localStorage.setItem(reminderKey,JSON.stringify(next));}catch{}};
+  const days=Math.max(0,Math.floor(Number(settings.days)||0));
+  const lastMs=settings.last?new Date(settings.last).getTime():0;
+  const due=days>0&&(!lastMs||Date.now()-lastMs>days*86400000);
+  const token=session.access_token;
+  const hdr={apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+token};
+  const readAll=async(ds)=>{
+    const rows=[];const chunk=500;
+    for(let offset=0;offset<100000;offset+=chunk){
+      const url=SUPABASE_URL+'/rest/v1/'+ds.table+'?select=*&order=id.asc&limit='+chunk+'&offset='+offset;
+      const r=await fetch(url,{headers:hdr});
+      const raw=await r.text();let data;try{data=raw?JSON.parse(raw):[]}catch{throw Error('Risposta non valida da '+ds.table)}
+      if(!r.ok)throw Error(ds.label+': '+(data.message||r.status));
+      if(!Array.isArray(data))throw Error(ds.label+': formato non valido.');
+      rows.push(...data);
+      if(data.length<chunk)return rows;
+    }
+    throw Error(ds.label+': troppi record; esportazione interrotta per evitare un backup parziale.');
+  };
+  const safeCell=(value)=>{
+    if(value==null)return '';
+    if(typeof value==='object')return JSON.stringify(value);
+    if(typeof value==='string'&&/^[\s]*[=+@\-]/.test(value))return "'"+value;
+    return value;
+  };
+  const filtered=async(ds)=>{
+    const records=await readAll(ds);
+    if(ds.filter==='clienti')return records.filter(r=>String(r.classificazione||'').toLowerCase()!=='architetto');
+    if(ds.filter==='architetti')return records.filter(r=>String(r.classificazione||'').toLowerCase()==='architetto');
+    return records;
+  };
+  const sheetFor=(rows)=>{
+    const columns=[...new Set(rows.flatMap(r=>Object.keys(r)))];
+    const safe=rows.map(r=>Object.fromEntries(columns.map(c=>[c,safeCell(r[c])])));
+    return XLSX.utils.json_to_sheet(safe,{header:columns});
+  };
+  const write=async(items,combined=false)=>{
+    setBusy(combined?'all':items[0].key);setError('');setMessage('');
+    try{
+      const wb=XLSX.utils.book_new();const summary=[];
+      for(const ds of items){
+        const rows=await filtered(ds);
+        summary.push({Categoria:ds.label,Record:rows.length,Tabella:ds.table});
+        const sheet=sheetFor(rows);
+        XLSX.utils.book_append_sheet(wb,sheet,ds.key.slice(0,31));
+      }
+      if(combined){
+        const info=XLSX.utils.json_to_sheet([{Data:new Date().toISOString(),Versione:'CRM-dati-v1',Nota:'Backup dei dati esportabili; non include schema SQL, RLS, Storage o file esterni.'}]);
+        XLSX.utils.book_append_sheet(wb,info,'Informazioni');
+        XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(summary),'Indice');
+      }
+      const filename='CRM_'+(combined?'Backup_Dati_Completo':items[0].key)+'_'+new Date().toISOString().slice(0,10)+'.xlsx';
+      XLSX.writeFile(wb,filename);
+      setMessage('File Excel generato: '+filename+'. Verifica che sia presente nei Download e conservalo in un luogo sicuro.');
+      // Non registriamo automaticamente un backup riuscito: il browser non può confermare che il file sia stato conservato.
+    }catch(e){setError('Esportazione non completata: '+e.message)}finally{setBusy('')}
+  };
+  const card={background:'#fff',border:'1px solid #dce5f2',borderRadius:14,padding:17,marginBottom:12};
+  const button={background:'#2568d6',color:'#fff',border:0,borderRadius:9,padding:'9px 13px',fontWeight:650,cursor:'pointer'};
+  const tabs=[['backup_export','Esporta dati Excel'],['backup_import','Importa dati Excel'],['backup_completo','Backup completo'],['backup_ripristina','Ripristina da backup'],['backup_promemoria','Promemoria backup']];
+  const rows=<>{BACKUP_CRM_DATASETS.map(ds=><div key={ds.key} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,padding:'12px 0',borderBottom:'1px solid #e7edf5',flexWrap:'wrap'}}><div><strong style={{fontSize:14}}>{ds.label}</strong><div style={{fontSize:12,color:'#74849a'}}>{ds.table}</div></div><button disabled={!!busy} type='button' style={{...button,opacity:busy?0.6:1}} onClick={()=>write([ds])}>{busy===ds.key?'Esportazione...':'Esporta Excel'}</button></div>)}</>;
+  return <section style={{maxWidth:1120,margin:'0 auto',padding:'20px 10px 35px',color:'#203651'}}>
+    <header style={{marginBottom:18}}><h2 style={{margin:'0 0 4px'}}>Backup e gestione dati</h2><p style={{margin:0,color:'#71829c',fontSize:13}}>Esportazioni indipendenti e promemoria personalizzabile. I file Excel contengono dati commerciali riservati.</p></header>
+    <div style={{display:'flex',flexWrap:'wrap',gap:7,marginBottom:17}}>{tabs.map(([key,title])=><button key={key} onClick={()=>naviga(key)} style={{...button,background:page===key?'#2568d6':'#edf2fa',color:page===key?'#fff':'#304966'}}>{title}</button>)}</div>
+    {due&&<div style={{...card,borderColor:'#e9c980',background:'#fff9ee'}}><strong>Promemoria backup</strong><div>È arrivato il momento di esportare i dati. Puoi gestire la frequenza nella sezione Promemoria backup.</div></div>}
+    {error&&<p role='alert' style={{color:'#a12626',background:'#fff1f1',padding:12,borderRadius:8}}>{error}</p>}
+    {message&&<p role='status' style={{color:'#176b43',background:'#effaf4',padding:12,borderRadius:8}}>{message}</p>}
+    {page==='backup_export'&&<div style={card}><h3 style={{marginTop:0}}>Esporta dati Excel</h3><p style={{fontSize:13,color:'#62748c'}}>Ogni pulsante scarica esclusivamente la categoria selezionata. Sono inclusi gli identificativi necessari per eventuali ripristini futuri.</p>{rows}</div>}
+    {page==='backup_import'&&<div style={card}><h3 style={{marginTop:0}}>Importa dati Excel</h3><p style={{fontSize:13,color:'#62748c'}}>Le importazioni già collaudate rimangono disponibili qui. Le altre categorie saranno abilitate solo dopo i test anti-duplicazione.</p>{BACKUP_CRM_DATASETS.map(ds=><div key={ds.key} style={{display:'flex',gap:12,justifyContent:'space-between',alignItems:'center',padding:'12px 0',borderBottom:'1px solid #e7edf5',flexWrap:'wrap'}}><strong>{ds.label}</strong>{ds.key==='clienti'||ds.key==='architetti'?<button type='button' style={button} onClick={()=>naviga(ds.key==='clienti'?'backup_import_clienti':'backup_import_architetti')}>Importa Excel</button>:<span style={{fontSize:12,color:'#7b899a'}}>Da sviluppare e collaudare</span>}</div>)}</div>}
+    {page==='backup_completo'&&<div style={card}><h3 style={{marginTop:0}}>Backup completo dei dati esportabili</h3><p>Genera un <strong>unico file Excel con fogli separati</strong> per tutte le categorie, incluso un indice dei record. Non occorrono programmi aggiuntivi sul PC.</p><button type='button' style={button} disabled={!!busy} onClick={()=>write(BACKUP_CRM_DATASETS,true)}>{busy==='all'?'Preparazione...':'Scarica backup completo Excel'}</button><p style={{fontSize:12,color:'#74849a'}}>Non è un backup tecnico completo di Supabase: non contiene tabelle SQL, policy, funzioni, file Storage o impostazioni di autenticazione.</p></div>}
+    {page==='backup_ripristina'&&<div style={card}><h3 style={{marginTop:0}}>Ripristina da backup</h3><p>Il ripristino automatico non è ancora attivo: prima bisogna verificare i collegamenti fra record e collaudare i controlli sui duplicati. Nessun file caricato può modificare il database da questa schermata.</p><button style={button} onClick={()=>naviga('backup_import')}>Vai alle importazioni disponibili</button></div>}
+    {page==='backup_promemoria'&&<div style={card}><h3 style={{marginTop:0}}>Promemoria backup</h3><p style={{fontSize:13,color:'#62748c'}}>La notifica appare soltanto quando apri il CRM. Puoi disattivarla o scegliere liberamente l'intervallo.</p><label style={{display:'grid',gap:6,maxWidth:320}}>Frequenza<select value={[0,30,60,90].includes(days)?String(days):'custom'} onChange={e=>saveSettings({...settings,days:e.target.value==='custom'?45:Number(e.target.value)})} style={{padding:10,border:'1px solid #cbd7e6',borderRadius:8}}><option value='0'>Manuale, nessun promemoria</option><option value='30'>Ogni 30 giorni</option><option value='60'>Ogni 60 giorni</option><option value='90'>Ogni 90 giorni</option><option value='custom'>Personalizzato</option></select></label>{![0,30,60,90].includes(days)&&<label style={{display:'grid',gap:6,maxWidth:170,marginTop:12}}>Intervallo in giorni<input type='number' min='1' max='3650' value={days} onChange={e=>saveSettings({...settings,days:Math.min(3650,Math.max(1,Number(e.target.value)||1))})} style={{padding:10,border:'1px solid #cbd7e6',borderRadius:8}}/></label>}<p style={{fontSize:13}}>Ultimo backup confermato: <strong>{settings.last?new Date(settings.last).toLocaleString('it-IT'):'Nessuno'}</strong></p><button style={button} type='button' onClick={()=>{if(window.confirm('Confermi di aver scaricato e conservato il file del backup in un luogo sicuro?'))saveSettings({...settings,last:new Date().toISOString()})}}>Ho conservato il backup</button><p style={{fontSize:12,color:'#74849a'}}>L'impostazione è salvata su questo browser e dispositivo; non è una notifica email e non avvia esportazioni automatiche.</p></div>}
+  </section>;
+}
+
 function ImportazioneListiniMandante({session}) {
   const [mandanti,setMandanti]=useState([]),[azienda,setAzienda]=useState(''),[nomeListino,setNomeListino]=useState(''),[righe,setRighe]=useState([]),[stato,setStato]=useState(''),[errore,setErrore]=useState(''),[busy,setBusy]=useState(false);
   const [colonne,setColonne]=useState({codice:'',descrizione:'',prezzo:''});
@@ -4315,12 +4415,13 @@ function AppShell({ session, onLogout }) {
   const apriGruppoCliente = id => { setGruppoAprireId(id); setPage("gruppi"); };
   useEffect(() => { (async () => { try { const r=await crmFetch(SUPABASE_URL+"/rest/v1/profiles?id=eq."+session.user.id+"&select=role",{headers:{apikey:SUPABASE_ANON_KEY,Authorization:"Bearer "+session.access_token}}); const d=await r.json(); if(d&&d[0])setRole(d[0].role); } catch(e){} })(); },[session]);
   const sezioni = [
-    {id:"clienti",nome:"Clienti",icon:Users,items:[{key:"clienti",label:"Anagrafica clienti",icon:Users},{key:"import_clienti",label:"Importa clienti Excel",icon:FileText},{key:"gruppi",label:"Gruppi d'acquisto",icon:Users2},{key:"mappa",label:"Mappa clienti",icon:MapIcon}]},
-    {id:"architetti",nome:"Architetti",icon:Users2,items:[{key:"architetti",label:"Studi e architetti",icon:Users2},{key:"import_architetti",label:"Importa studi Excel",icon:FileText}]},
+    {id:"clienti",nome:"Clienti",icon:Users,items:[{key:"clienti",label:"Anagrafica clienti",icon:Users},{key:"gruppi",label:"Gruppi d'acquisto",icon:Users2},{key:"mappa",label:"Mappa clienti",icon:MapIcon}]},
+    {id:"architetti",nome:"Architetti",icon:Users2,items:[{key:"architetti",label:"Studi e architetti",icon:Users2}]},
     {id:"opportunita",nome:"Preventivi e offerte",icon:Target,items:[{key:"preventivi",label:"Creazione preventivi e offerte",icon:FileText},{key:"pipeline",label:"Pipeline",icon:Target},{key:"ordini",label:"Ordini confermati",icon:ClipboardList}]},
     {id:"agenda",nome:"Agenda",icon:CalendarDays,items:[{key:"agenda",label:"Pannello agenda",icon:CalendarDays},{key:"visite",label:"Calendario e appuntamenti",icon:CalendarDays},{key:"attivita",label:"Attività e follow-up",icon:ClipboardList},{key:"storico_visite",label:"Storico visite",icon:ClipboardList}]},
     {id:"report",nome:"Analisi e fatturato",icon:BarChart3,items:[{key:"direzionale",label:"Report direzionale",icon:BarChart3},{key:"pianificazione",label:"Pianificazione commerciale",icon:CalendarDays},{key:"controllo",label:"Fatturato e portafoglio ordini",icon:Wallet},{key:"statistiche",label:"Statistiche",icon:TrendingUp}]},
     {id:"mandanti",nome:"Mandanti",icon:Building2,items:[{key:"aziende",label:"Aziende mandanti",icon:Building2},{key:"provvigioni",label:"Gestore provvigioni",icon:Wallet},{key:"listini_import",label:"Importa listini Excel",icon:FileText},{key:"storico_fatturato_mandanti",label:"Storico fatturato clienti",icon:TrendingUp},{key:"obiettivi_mandanti",label:"Obiettivi commerciali",icon:Target}]},
+    {id:"backup",nome:"Backup e gestione dati",icon:DatabaseBackup,items:[{key:"backup_export",label:"Esporta dati Excel",icon:Download},{key:"backup_import",label:"Importa dati Excel",icon:Upload},{key:"backup_completo",label:"Backup completo",icon:Archive},{key:"backup_ripristina",label:"Ripristina da backup",icon:DatabaseBackup},{key:"backup_promemoria",label:"Promemoria backup",icon:Bell}]},
     
   ];  const scegli = key => { setPage(key); if(window.innerWidth<768)setMenuOpen(false); };
   useEffect(()=>{const handle=e=>scegli(e.detail);window.addEventListener('crm-navigation',handle);return()=>window.removeEventListener('crm-navigation',handle);},[]);
@@ -4375,8 +4476,9 @@ function AppShell({ session, onLogout }) {
         {page==="clienti"&&<ClientiAnagrafica session={session} apriPreventivo={apriPreventivoCliente} apriGruppo={apriGruppoCliente}/>}
         {page==="architetti"&&<ClientiAnagrafica soloArchitetti session={session} apriPreventivo={apriPreventivoCliente} apriGruppo={apriGruppoCliente}/>}
         {page==="provvigioni"&&<RegistroProvvigioniSupabase session={session}/>}
-        {page==="import_architetti"&&<CRMOperativitaUnificata session={session} importOnly importArchitects/>}
-        {page==="import_clienti"&&<CRMOperativitaUnificata session={session} importOnly/>}
+        {(page==="import_architetti"||page==="backup_import_architetti")&&<CRMOperativitaUnificata session={session} importOnly importArchitects/>}
+        {(page==="import_clienti"||page==="backup_import_clienti")&&<CRMOperativitaUnificata session={session} importOnly/>}
+        {page.startsWith("backup_")&&!page.startsWith("backup_import_clienti")&&!page.startsWith("backup_import_architetti")&&<BackupGestioneDatiCRM session={session} page={page} naviga={scegli}/>} 
         {page==="listini_import"&&<ImportazioneListiniMandante session={session}/>}
         {page==="visite"&&<CalendarioVisite session={session}/>} 
         {page==="storico_visite"&&<StoricoVisiteCRM session={session}/>}
