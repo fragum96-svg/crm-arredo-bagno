@@ -3430,6 +3430,17 @@ function PianificazioneSettimanaleCRM({session, goTo}) {
   </div>;
 }
 
+// Unico ingresso per promemoria e pianificazione. Le vecchie viste sono conservate
+// come componenti per non alterare le logiche operative già collaudate.
+function PianificazioneUnificataCRM({session,goTo}) {
+  const [vista,setVista]=useState('oggi');
+  const btn=(id,label)=> <button type="button" onClick={()=>setVista(id)} aria-pressed={vista===id} style={{padding:'10px 14px',border:'1px solid '+(vista===id?'#246143':'#d5e1db'),background:vista===id?'#246143':'#fff',color:vista===id?'#fff':'#233a32',borderRadius:10,fontWeight:700,cursor:'pointer'}}>{label}</button>;
+  return <section style={{display:'grid',gap:15,maxWidth:1200,margin:'0 auto'}}>
+    <header style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap'}}><div><h1 style={{margin:0,color:'#17233b'}}>Pianificazione commerciale</h1><p style={{margin:'5px 0 0',fontSize:13,color:'#64748b'}}>Un unico punto per attività, solleciti e clienti da ricontattare.</p></div><div style={{display:'flex',gap:8,flexWrap:'wrap'}}>{btn('oggi','Da fare e priorità')}{btn('settimana','Pianifica e filtra')}</div></header>
+    {vista==='oggi'?<CentroOperativoCRM session={session} goTo={goTo}/>:<PianificazioneSettimanaleCRM session={session} goTo={goTo}/>}
+  </section>;
+}
+
 function CentroOperativoCRM({ session, goTo }) {
   const [dati, setDati] = useState({ aziende: [], clienti: [], opportunita: [], attivita: [], fatturato: [], preventivi: [], visite: [] });
   const [caricamento, setCaricamento] = useState(true);
@@ -4283,7 +4294,7 @@ function AppShell({ session, onLogout }) {
     {id:"architetti",nome:"Architetti",icon:Users2,items:[{key:"architetti",label:"Studi e architetti",icon:Users2},{key:"import_architetti",label:"Importa studi Excel",icon:FileText}]},
     {id:"opportunita",nome:"Preventivi e offerte",icon:Target,items:[{key:"preventivi",label:"Creazione preventivi e offerte",icon:FileText},{key:"pipeline",label:"Pipeline",icon:Target},{key:"ordini",label:"Ordini confermati",icon:ClipboardList}]},
     {id:"agenda",nome:"Agenda",icon:CalendarDays,items:[{key:"agenda",label:"Pannello agenda",icon:CalendarDays},{key:"visite",label:"Calendario e appuntamenti",icon:CalendarDays},{key:"attivita",label:"Attività e follow-up",icon:ClipboardList},{key:"storico_visite",label:"Storico visite",icon:ClipboardList}]},
-    {id:"report",nome:"Analisi e fatturato",icon:BarChart3,items:[{key:"direzionale",label:"Report direzionale",icon:BarChart3},{key:"centro",label:"Da fare e priorità",icon:Target},{key:"pianificazione",label:"Pianificazione commerciale",icon:CalendarDays},{key:"controllo",label:"Fatturato e portafoglio ordini",icon:Wallet},{key:"fatturato",label:"Fatturato (ordini CRM)",icon:Wallet},{key:"statistiche",label:"Statistiche",icon:TrendingUp}]},
+    {id:"report",nome:"Analisi e fatturato",icon:BarChart3,items:[{key:"direzionale",label:"Report direzionale",icon:BarChart3},{key:"pianificazione",label:"Pianificazione commerciale",icon:CalendarDays},{key:"controllo",label:"Fatturato e portafoglio ordini",icon:Wallet},{key:"statistiche",label:"Statistiche",icon:TrendingUp}]},
     {id:"mandanti",nome:"Mandanti",icon:Building2,items:[{key:"aziende",label:"Aziende mandanti",icon:Building2},{key:"provvigioni",label:"Gestore provvigioni",icon:Wallet},{key:"listini_import",label:"Importa listini Excel",icon:FileText},{key:"storico_fatturato_mandanti",label:"Storico fatturato clienti",icon:TrendingUp},{key:"obiettivi_mandanti",label:"Obiettivi commerciali",icon:Target}]},
     
   ];  const scegli = key => { setPage(key); if(window.innerWidth<768)setMenuOpen(false); };
@@ -4331,8 +4342,7 @@ function AppShell({ session, onLogout }) {
         {page==="dashboard"&&<Dashboard session={session} goTo={scegli}/>}
         {page==="dashboard"&&<ClientiDaRiattivareCRM session={session} naviga={scegli}/>}
         {page==="direzionale"&&<ReportDirezionaleCRM session={session} goTo={scegli}/>}
-        {page==="centro"&&<CentroOperativoCRM session={session} goTo={scegli}/>}
-        {page==="pianificazione"&&<PianificazioneSettimanaleCRM session={session} goTo={scegli}/>}  
+        {(page==="centro"||page==="pianificazione")&&<PianificazioneUnificataCRM session={session} goTo={scegli}/>}  
         {page==="admin"&&role==="admin"&&<AdminPanel session={session}/>}
         {page==="aziende"&&<AziendeMandanti session={session}/>}
         {page==="agenda"&&<PannelloAgendaCRM session={session} goTo={scegli}/>}
@@ -4363,7 +4373,7 @@ function AppShell({ session, onLogout }) {
     {azioniRapideAperte&&<AzioniRapideCRM session={session} chiudi={()=>setAzioniRapideAperte(false)} naviga={scegli}/>}
     <button className="crm-mobile-fab" aria-label="Aggiungi rapidamente" title="Aggiungi" onClick={()=>setAzioniRapideAperte(true)}><Plus size={27}/></button>
     <nav className="crm-mobile-bottom-nav" aria-label="Navigazione rapida">
-      {[{key:"dashboard",label:"Home",Icon:LayoutDashboard},{key:"centro",label:"Operativo",Icon:Target},{key:"clienti",label:"Clienti",Icon:Users},{key:"agenda",label:"Agenda",Icon:CalendarDays},{key:"pipeline",label:"Pipeline",Icon:Target}].map(item=><button key={item.key} type="button" className={page===item.key?"active":""} onClick={()=>scegli(item.key)}><item.Icon size={20}/><span>{item.label}</span></button>)}
+      {[{key:"dashboard",label:"Home",Icon:LayoutDashboard},{key:"pianificazione",label:"Pianifica",Icon:Target},{key:"clienti",label:"Clienti",Icon:Users},{key:"agenda",label:"Agenda",Icon:CalendarDays},{key:"pipeline",label:"Pipeline",Icon:Target}].map(item=><button key={item.key} type="button" className={page===item.key?"active":""} onClick={()=>scegli(item.key)}><item.Icon size={20}/><span>{item.label}</span></button>)}
       <button type="button" className={menuOpen?"active":""} onClick={()=>setMenuOpen(true)}><MenuIcon size={20}/><span>Menu</span></button>
     </nav>
   </div>;
