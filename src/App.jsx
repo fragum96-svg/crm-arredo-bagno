@@ -223,10 +223,26 @@ function getWeekDays(date) {
 
 function nuovaRiga() {
   return {
-    id: Math.random().toString(36).slice(2), articolo: "", descrizione: "", finitura: "",
+    id: globalThis.crypto?.randomUUID?.() || (Date.now().toString(36) + "-" + Math.random().toString(36).slice(2)), articolo: "", descrizione: "", finitura: "",
     quantita: 1, unita_misura: "PZ", prezzo_unitario: 0, sconto1: "", sconto2: "", sconto3: "",
     prezzo_netto_manuale: "", immagine_url: "",
   };
+}
+// L'ordine dell'array è l'ordine del preventivo, anche nel salvataggio e nel PDF.
+function inserisciRigaPreventivo(righe, id, nuova, dopo) {
+  const indice = righe.findIndex(r => r.id === id);
+  if (indice < 0) return righe;
+  const posizione = indice + (dopo ? 1 : 0);
+  return [...righe.slice(0, posizione), nuova, ...righe.slice(posizione)];
+}
+function spostaRigaPreventivo(righe, id, destinazioneId) {
+  const da = righe.findIndex(r => r.id === id);
+  const a = righe.findIndex(r => r.id === destinazioneId);
+  if (da < 0 || a < 0 || da === a) return righe;
+  const copia = [...righe];
+  const [riga] = copia.splice(da, 1);
+  copia.splice(a, 0, riga);
+  return copia;
 }
 const UNITA_MISURA_PREVENTIVO = ["PZ", "MQ", "ML", "NR", "KG", "ALTRO"];
 function SelettoreUnitaPreventivo({ value, onChange, style }) {
@@ -1795,6 +1811,8 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
   };
   const [header, setHeader] = useState(emptyHeader);
   const [righe, setRighe] = useState([nuovaRiga()]);
+  const rigaTrascinata = useRef(null);
+  const [rigaDestinazione, setRigaDestinazione] = useState(null);
   const headers = () => ({ "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + session.access_token });
 
   const load = async () => {
@@ -1816,9 +1834,50 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
   };
   useEffect(() => { load(); }, []);
 
-  const resetForm = () => { setTipoIntestatarioPreventivo("clienti"); setRicercaIntestatarioPreventivo(""); setHeader(emptyHeader); setRighe([nuovaRiga()]); setEditingId(null); };
+  const resetForm = () => { setTipoIntestatarioPreventivo("clienti"); setRicercaIntestatarioPreventivo(""); setHeader(emptyHeader); setRighe([nuovaRiga()]); setEditingId(null); rigaTrascinata.current = null; setRigaDestinazione(null); };
   const intestatariFiltrati=clienti.filter(c=>(tipoIntestatarioPreventivo==="architetti"?c.classificazione==="Architetto":c.classificazione!=="Architetto")&&(!ricercaIntestatarioPreventivo.trim()||String(c.ragione_sociale||"").toLowerCase().includes(ricercaIntestatarioPreventivo.trim().toLowerCase())));
-  const aggiungiRiga = () => setRighe((r) => [...r, nuovaRiga()]);
+  const aggiungiRiga = () => {
+    const nuova = nuovaRiga();
+    setRighe(r => [...r, nuova]);
+  };
+  const inserisciRiga = (id, dopo = true) => {
+    const nuova = nuovaRiga();
+    setRighe(r => inserisciRigaPreventivo(r, id, nuova, dopo));
+  };
+  const duplicaRiga = (id) => {
+    const nuovoId = nuovaRiga().id;
+    setRighe(r => {
+      const origine = r.find(x => x.id === id);
+      return origine ? inserisciRigaPreventivo(r, id, { ...origine, id: nuovoId }, true) : r;
+    });
+  };
+  const spostaRiga = (id, direzione) => setRighe(r => {
+    const i = r.findIndex(x => x.id === id);
+    const destinazione = r[i + direzione];
+    return i < 0 || !destinazione ? r : spostaRigaPreventivo(r, id, destinazione.id);
+  });
+  const terminaTrascinamento = () => {
+    rigaTrascinata.current = null;
+    setRigaDestinazione(null);
+  };
+  const iniziaTrascinamento = (e, id) => {
+    rigaTrascinata.current = id;
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", String(id));
+  };
+  const passaSuRiga = (e, id) => {
+    if (rigaTrascinata.current === null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setRigaDestinazione(rigaTrascinata.current === id ? null : id);
+  };
+  const rilasciaRiga = (e, id) => {
+    const origine = rigaTrascinata.current;
+    if (origine === null) return;
+    e.preventDefault();
+    setRighe(r => spostaRigaPreventivo(r, origine, id));
+    terminaTrascinamento();
+  };
   const rimuoviRiga = (id) => setRighe((r) => r.filter((x) => x.id !== id));
   const aggiornaRiga = (id, campo, valore) => setRighe((r) => r.map((x) => (x.id === id ? { ...x, [campo]: valore } : x)));
 
@@ -1875,6 +1934,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
   };
 
   const modifica = (p) => {
+    rigaTrascinata.current = null; setRigaDestinazione(null);
     setTipoIntestatarioPreventivo(clienti.find(c=>c.id===p.cliente_id)?.classificazione==="Architetto"?"architetti":"clienti"); setRicercaIntestatarioPreventivo("");
     setEditingId(p.id);
     setHeader({
@@ -1885,7 +1945,14 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
       modalita_pagamento: p.modalita_pagamento || "", modalita_prezzi_pdf: p.modalita_prezzi_pdf || "dettagliato",
       stato: p.stato || "bozza", note: p.note || "", tipo_proposta: p.tipo_proposta === "esposizione" ? "campionatura" : (p.tipo_proposta || "commerciale"), approvazione_proposta: p.approvazione_proposta || "in_attesa",
     });
-    setRighe(p.righe && p.righe.length ? p.righe : [nuovaRiga()]);
+    const viste = new Set();
+    const caricate = Array.isArray(p.righe) ? p.righe : [];
+    setRighe(caricate.length ? caricate.map(r => {
+      let id = r.id;
+      if (id == null || id === "" || viste.has(id)) id = nuovaRiga().id;
+      viste.add(id);
+      return { ...r, id };
+    }) : [nuovaRiga()]);
   };
 
   useEffect(() => {
@@ -1930,6 +1997,27 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
 
   const campoMobile = { width: "100%", padding: "10px", marginBottom: 8, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 14, boxSizing: "border-box" };
   const rigaLabel = { fontSize: 11, color: COLORS.muted, marginBottom: 3, display: "block" };
+  const azioniRiga = (riga, idx, mobile) => {
+    const stile = { border: "1px solid " + COLORS.border, background: "#fff", color: COLORS.text, borderRadius: 6, padding: mobile ? "8px 10px" : "4px 5px", minHeight: mobile ? 40 : 27, minWidth: mobile ? 40 : 27, fontSize: 12, lineHeight: 1.1, cursor: "pointer" };
+    const pulsante = (label, simbolo, azione, disabilitato = false, danger = false) => (
+      <button type="button" title={label} aria-label={label + " (riga " + (idx + 1) + ")"} disabled={disabilitato} onClick={azione} style={{ ...stile, opacity: disabilitato ? 0.38 : 1, cursor: disabilitato ? "default" : "pointer", color: danger ? COLORS.danger : COLORS.text }}>
+        {mobile ? label : simbolo}
+      </button>
+    );
+    return <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: mobile ? "stretch" : "flex-start" }}>
+      <div style={{ display: "flex", gap: 3, alignItems: "center", flexWrap: "wrap" }}>
+        {!mobile && <span draggable onDragStart={e => iniziaTrascinamento(e, riga.id)} onDragEnd={terminaTrascinamento} title="Trascina per cambiare posizione" style={{ ...stile, display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "grab", boxSizing: "border-box", userSelect: "none" }}>⋮⋮</span>}
+        {pulsante("Sposta su", "↑", () => spostaRiga(riga.id, -1), idx === 0)}
+        {pulsante("Sposta giù", "↓", () => spostaRiga(riga.id, 1), idx === righe.length - 1)}
+      </div>
+      <div style={{ display: "flex", gap: 3, alignItems: "center", flexWrap: "wrap" }}>
+        {pulsante("Inserisci sopra", "+↑", () => inserisciRiga(riga.id, false))}
+        {pulsante("Inserisci sotto", "+↓", () => inserisciRiga(riga.id, true))}
+        {pulsante("Duplica", "⧉", () => duplicaRiga(riga.id))}
+        {pulsante("Elimina", "✕", () => rimuoviRiga(riga.id), false, true)}
+      </div>
+    </div>;
+  };
 
   return (
     <div className="crm-preventivi-premium" style={{ fontFamily: "inherit", overflowX: "hidden", width: "100%" }}> 
@@ -1971,6 +2059,7 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
           {header.tipo_proposta!=="commerciale"&&<label style={{fontSize:12,fontWeight:650}}>Approvazione <select style={fieldStyle} value={header.approvazione_proposta} onChange={e=>setHeader({...header,approvazione_proposta:e.target.value})}><option value="in_attesa">In attesa di approvazione</option><option value="approvata">Approvata</option><option value="non_approvata">Non approvata</option></select></label>}
           {header.tipo_proposta!=="commerciale"&&<span style={{fontSize:11,color:"#64748b"}}>Articoli, sconti e omaggi si compilano normalmente nelle righe del preventivo.</span>}
         </div>
+        <p style={{ fontSize: 12, color: COLORS.muted, margin: "4px 0 10px" }}>{isMobile ? "Usa le azioni di ogni articolo per inserire, duplicare o spostare le righe." : "Trascina le righe con ⋮⋮ oppure usa ↑ e ↓. +↑ e +↓ inseriscono sopra o sotto; ⧉ duplica; ✕ elimina."}</p>
         {isMobile ? (
           <div style={{ marginBottom: 12 }}>
             {righe.map((riga, idx) => {
@@ -1979,8 +2068,8 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
                 <div key={riga.id} style={{ border: "1px solid " + COLORS.border, borderRadius: 12, padding: 12, marginBottom: 10, background: COLORS.bg }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <span style={{ fontSize: 12, fontWeight: 700, color: COLORS.primary }}>Articolo {idx + 1}</span>
-                    <button onClick={() => rimuoviRiga(riga.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 12 }}>✕ Rimuovi</button>
                   </div>
+                  <div style={{ marginBottom: 12 }}>{azioniRiga(riga, idx, true)}</div>
                   <label style={rigaLabel}>Articolo</label>
                   <div style={{ position: "relative" }}>
                     <input value={riga.articolo} onChange={(e) => { aggiornaRiga(riga.id, "articolo", e.target.value); cercaSuggerimenti(riga.id, e.target.value); }} onBlur={() => setTimeout(() => setSuggerimenti((s) => ({ ...s, [riga.id]: [] })), 150)} style={campoMobile} autoComplete="off" />
@@ -2024,17 +2113,18 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
             })}
           </div>
         ) : (
+          <div style={{ overflowX: "auto", paddingBottom: Object.values(suggerimenti).some(v => v && v.length) ? 165 : 4 }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 12 }} className="tabella-righe-preventivo">
             <thead><tr style={{ textAlign: "left", borderBottom: "2px solid " + COLORS.border }}>
               <th style={{ padding: 6 }}>Art.</th><th style={{ padding: 6 }}>Descrizione</th><th style={{ padding: 6 }}>Finitura</th><th style={{ padding: 6 }}>Qtà</th><th style={{ padding: 6 }}>U.M.</th>
               <th style={{ padding: 6 }}>Prezzo un.</th><th style={{ padding: 6 }}>Sc.1 %</th><th style={{ padding: 6 }}>Sc.2 %</th><th style={{ padding: 6 }}>Sc.3 %</th><th style={{ padding: 6 }}>Netto un. manuale</th><th style={{ padding: 6 }}>Immagine</th>
-              <th style={{ padding: 6 }}>Netto</th><th style={{ padding: 6 }}></th>
+              <th style={{ padding: 6 }}>Netto</th><th style={{ padding: 6 }}>Azioni</th>
             </tr></thead>
             <tbody>
-              {righe.map((riga) => {
+              {righe.map((riga, idx) => {
                 const { netto } = calcolaRigaNetto(riga);
                 return (
-                  <tr key={riga.id} style={{ borderBottom: "1px solid #f0f5f9" }}>
+                  <tr key={riga.id} onDragOver={e => passaSuRiga(e, riga.id)} onDrop={e => rilasciaRiga(e, riga.id)} style={{ borderBottom: "1px solid #f0f5f9", background: rigaDestinazione === riga.id ? "#e8f1ff" : undefined, outline: rigaDestinazione === riga.id ? "2px solid " + COLORS.primary : undefined, outlineOffset: -2 }}>
                     <td style={{ padding: 4, position: "relative" }} data-label="Articolo">
                       <input value={riga.articolo} onChange={(e) => { aggiornaRiga(riga.id, "articolo", e.target.value); cercaSuggerimenti(riga.id, e.target.value); }} onBlur={() => setTimeout(() => setSuggerimenti((s) => ({ ...s, [riga.id]: [] })), 150)} style={{ ...inputStyle, width: 70 }} autoComplete="off" />
                       {suggerimenti[riga.id] && suggerimenti[riga.id].length > 0 && (
@@ -2066,12 +2156,13 @@ function PreventiviOfferte({ session, preventivoIniziale, onPreventivoAperto, va
                       )}
                     </td>
                     <td style={{ padding: 4, fontWeight: 600 }} data-label="Netto">{formattaEuro(netto)}</td>
-                    <td style={{ padding: 4 }} data-label=""><button onClick={() => rimuoviRiga(riga.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 14 }}>✕ Rimuovi riga</button></td>
+                    <td style={{ padding: 4 }} data-label="Azioni">{azioniRiga(riga, idx, false)}</td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
+          </div>
         )}
         <p style={{ fontSize: 11, color: COLORS.muted, marginTop: -6, marginBottom: 16 }}>Compila "Netto manuale" per fissare direttamente il prezzo netto di una riga.</p>
         <button onClick={aggiungiRiga} style={{ padding: "6px 12px", background: "#fff", color: COLORS.primary, border: "1px solid " + COLORS.border, borderRadius: 8, fontSize: 12, cursor: "pointer", marginBottom: 20 }}>+ Aggiungi riga</button>
